@@ -1,0 +1,30 @@
+#pragma once
+#include <string>
+#include <pqxx/pqxx>
+#include <memory>
+#include <thread>
+#include <chrono>
+#include "MyConfigParser.hpp"
+#include "MyExcepts.hpp"
+
+class MyPostgres
+{
+	private:
+		static bool isRunning;
+
+		static std::unique_ptr<pqxx::connection> db_c;
+		std::unique_ptr<pqxx::work> db_w;
+	public:
+		static void Open();
+		static void Close();
+		static bool isOpened();
+	public:
+		MyPostgres();
+		MyPostgres(MyPostgres&&);
+		MyPostgres& operator=(MyPostgres&&);
+		~MyPostgres();
+		void abort();
+		void commit();
+		pqxx::result exec(const std::string& query);
+		pqxx::row exec1(const std::string& query);
+};

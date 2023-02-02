@@ -1,0 +1,36 @@
+SET ( TARGET battle )
+SET ( LIBS
+	MyBattle
+	MyGame
+)
+
+FOREACH ( LIB IN LISTS LIBS )
+	ADD_LIBRARY ( ${LIB} ${LIB}.cpp ${LIB}.hpp )
+ENDFOREACH()
+
+ADD_EXECUTABLE ( ${TARGET} main.cpp )
+SET_TARGET_PROPERTIES ( ${TARGET} PROPERTIES OUTPUT_NAME ${PROJECT_NAME}-${TARGET} )
+
+TARGET_LINK_LIBRARIES ( MyGame PUBLIC
+	#MyCodes
+	MyPostgres
+	MyClientSocket
+)
+
+TARGET_LINK_LIBRARIES ( MyBattle PUBLIC
+	MyServer
+	MyGame
+	#MyCodes
+	#MyDeMap
+	MyConnectee
+	Pool
+	Thread
+)
+
+TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE
+	MyMain
+	MyBattle
+)
+
+UNSET ( TARGET )
+UNSET ( LIBS )

@@ -1,0 +1,17 @@
+{
+	"cmake.cmakePath": "cmake",
+	"cmake.sourceDirectory": "${workspaceFolder}/source",
+	"cmake.buildDirectory": "${workspaceFolder}/source/build",
+	"files.associations": {
+		"*.txt": "plaintext",
+		"CMakeLists.txt": "cmake",
+		"*.hpp": "cpp",
+		"*.cpp": "cpp"
+	},
+	"editor.wordWrap": "on",
+	"diffEditor.wordWrap": "on",
+	"editor.insertSpaces": false,
+	"editor.detectIndentation": false,
+	"editor.tabSize": 4,
+	"cmake.configureOnOpen": true
+}

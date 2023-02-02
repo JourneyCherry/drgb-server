@@ -1,0 +1,26 @@
+SET ( TARGET auth )
+SET ( LIBS 
+	MyAuth
+)
+
+FOREACH ( LIB IN LISTS LIBS )
+	ADD_LIBRARY ( ${LIB} ${LIB}.cpp ${LIB}.hpp )
+ENDFOREACH()
+
+ADD_EXECUTABLE ( ${TARGET} main.cpp )
+SET_TARGET_PROPERTIES ( ${TARGET} PROPERTIES OUTPUT_NAME ${PROJECT_NAME}-${TARGET} )
+
+TARGET_LINK_LIBRARIES ( MyAuth PUBLIC
+	MyConfigParser
+	MyServer
+	MyPostgres
+	MyBase64
+	MyConnector
+	#MyCodes	#Header-Only
+	MyCrypto
+)
+
+TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE MyAuth MyMain)
+
+UNSET ( TARGET )
+UNSET ( LIBS )

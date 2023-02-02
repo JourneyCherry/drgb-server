@@ -1,0 +1,71 @@
+version: '3.0'
+
+name: "drgb-server"
+services:
+  web:
+    container_name: ClientWeb
+    build:
+      context: .
+      dockerfile: Dockerfile-web
+    image: drgb-clientweb
+    ports:
+      #TODO : 사용자들이 접속 할 포트로 변경 필요.(http : 80, httpd : 443)
+      - 51324:80
+    volumes:
+      - ./ClientBuild:/usr/local/apache2/htdocs
+  auth:
+    container_name: auth
+    depends_on: #DB가 먼저 올라오고 나서 실행되어야 함.
+      - db
+    image: drgb-auth
+    build:
+      context: ../
+      dockerfile: ./docker/Dockerfile
+      args:
+        TARGET: "auth"
+    tty: true
+    stdin_open: true
+    privileged: true
+    ports:
+      - "54321:54321" #web
+      - "54322:54322" #tcp
+  match:
+    container_name: match
+    image: drgb-match
+    build:
+      context: ../
+      dockerfile: ./docker/Dockerfile
+      args:
+        TARGET: "match"
+    tty: true
+    stdin_open: true
+    privileged: true
+    ports:
+      - "54323:54323" #web
+      - "54324:54324" #tcp
+  battle:
+    container_name: battle
+    image: drgb-battle
+    build:
+      context: ../
+      dockerfile: ./docker/Dockerfile
+      args:
+        TARGET: "battle"
+    tty: true
+    stdin_open: true
+    privileged: true
+    ports:
+      - "54325:54325" #web
+      - "54326:54326" #tcp
+  db:
+    container_name: db
+    image: postgres
+    environment:
+      - POSTGRES_USER=drgb_user
+      - POSTGRES_DB=drgb_db
+      - POSTGRES_PASSWORD=drgbpassword
+      - TZ=Asia/Seoul
+    volumes:
+      - ./initdb.sql:/docker-entrypoint-initdb.d/initdb.sql
+      - ./initdb.sh:/docker-entrypoint-initdb.d/initdb.sh
+      #- ./Data:/var/lib/postgresql/data  #linux 환경 docker에서는 마운트할 경우, 해당 디렉토리의 접근권한이 컨테이너 내 마운트폴더의 설정을 따라가므로, docker 디렉토리 외 다른 곳의 디렉토리로 설정해야 서비스 올릴 때 에러가 발생하지 않음.

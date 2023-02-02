@@ -1,0 +1,56 @@
+FROM httpd:alpine
+
+ARG configfile=/usr/local/apache2/conf/httpd.conf
+
+#필요한 모듈 열기
+RUN sed -i 's%#LoadModule deflate_module modules/mod_deflate.so%LoadModule deflate_module modules/mod_deflate.so%g' ${configfile}
+RUN sed -i 's%#LoadModule headers_module modules/mod_headers.so%LoadModule headers_module modules/mod_headers.so%g' ${configfile}
+RUN sed -i 's%#LoadModule filter_module modules/mod_filter.so%LoadModule filter_module modules/mod_filter.so%g' ${configfile}
+	#이미 압축된 gzip파일을 위한 모듈
+RUN sed -i 's%#LoadModule dir_module modules/mod_dir.so%LoadModule dir_module modules/mod_dir.so%g' ${configfile}
+
+#mime_module에 확장자 Z, gz, tgz는 압축데이터임을 표시하도록 변경.
+#AddEncoding은 브라우저가 압축을 풀도록 옵션을 주는 것이고 AddType은 단순히 이런 파일형식이 있음을 알려주는 것이다.
+RUN sed -i 's%    #AddEncoding x-compress .Z%    AddEncoding x-compress .Z%g' ${configfile}
+RUN sed -i 's%    #AddEncoding x-gzip .gz .tgz%    AddEncoding x-gzip .gz .tgz%g' ${configfile}
+RUN sed -i 's%    AddType application/x-compress .Z%    #AddType application/x-compress .Z%g' ${configfile}
+RUN sed -i 's%    AddType application/x-gzip .gz .tgz%    #AddType application/x-gzip .gz .tgz%g' ${configfile}
+
+#압축이 되어있지 않은 파일들을 압축해서 전송할 수 있도록 압축대상 지정.
+RUN echo "<IfModule mod_deflate.c>" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE text/plain" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE text/html" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE text/xml" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE text/css" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE application/xml" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE application/xhtml+xml" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE application/rss+xml" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE application/javascript" >> ${configfile}
+RUN echo "AddOutputFilterByType DEFLATE application/x-javascript" >> ${configfile}
+
+#압축 수준 지정
+RUN echo "DeflateCompressionLevel 9" >> ${configfile}
+
+#특정 브라우저는 특정 파일형식만 압축하거나 아예 압축하지 않도록 설정
+RUN echo "BrowserMatch ^Mozilla/4 gzip-only-text/html" >> ${configfile}
+RUN echo "BrowserMatch ^Mozilla/4\\.0[678] no-gzip" >> ${configfile}
+RUN echo "BrowserMatch \\bMSIE !go-gzip !gzip-only-text/html" >> ${configfile}
+
+RUN echo "SetEnvIfNoCase Request_URI \\.(?:gif|jpe?g|png|bmp|zip|gz|rar|7z)$ no-gzip dont-vary" >> ${configfile}
+
+RUN echo "</IfModule>" >> ${configfile}
+
+#gz 확장자에 대해서는 강제로 content-encoding을 gzip으로 변경
+RUN echo "<Directory /~/>" >> ${configfile}
+RUN echo "Options Indexes MultiViews FollowSymLinks" >> ${configfile}
+RUN echo "AddEncoding gzip gz" >> ${configfile}
+RUN echo "<FilesMatch \"\\.gz$\">" >> ${configfile}
+RUN echo "ForceType text/plain" >> ${configfile}
+RUN echo "Header set Content-Encoding: gzip" >> ${configfile}
+RUN echo "</FilesMatch>" >> ${configfile}
+RUN echo "</Directory>" >> ${configfile}
+
+#WebAssembly 파일은 헤더의 Content-Type 옵션에 WebAssembly라고 표시할 수 있도록 mime_module에 등록
+RUN sed -i '437 i\    AddType application/wasm .wasm .wasm.gz .wasm.br' ${configfile}
+
+RUN rm /usr/local/apache2/htdocs/index.html

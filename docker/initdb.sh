@@ -1,0 +1,1 @@
+sed "s/listen_addresses = 'localhost'/listen_addresses = '*'/" -i /var/lib/postgresql/data/postgresql.conf
