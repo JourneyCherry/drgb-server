@@ -2,7 +2,7 @@
 #include <memory>
 #include <functional>
 #include "MyDaemoner.hpp"
-#include "MyGetOpt.hpp"
+#include "MyServerOpt.hpp"
 #include "MyLogger.hpp"
 #include "MyConfigParser.hpp"
 

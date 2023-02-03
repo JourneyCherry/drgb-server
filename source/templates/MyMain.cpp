@@ -23,7 +23,7 @@ int MyMain::main(int argc, char *argv[])
 	int exit_code = 0;
 	try
 	{
-		MyCommon::MyGetOpt opts(argc, argv);
+		MyServerOpt opts(argc, argv);
 		MyLogger::OpenLog();
 		if(opts.daemon_flag)
 		{
