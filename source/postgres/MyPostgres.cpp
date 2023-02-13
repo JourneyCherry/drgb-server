@@ -88,6 +88,21 @@ void MyPostgres::commit()
 	db_w->commit();
 }
 
+std::string MyPostgres::quote(std::string str)
+{
+	return db_w->quote(str);
+}
+
+std::string MyPostgres::quote_name(std::string str)
+{
+	return db_w->quote_name(str);
+}
+
+std::string MyPostgres::quote_raw(const unsigned char *data, size_t len)
+{
+	return db_w->quote_raw(data, len);
+}
+
 pqxx::result MyPostgres::exec(const std::string& query)
 {
 	return db_w->exec(query);

@@ -25,6 +25,9 @@ class MyPostgres
 		~MyPostgres();
 		void abort();
 		void commit();
+		std::string quote(std::string);
+		std::string quote_name(std::string);
+		std::string quote_raw(const unsigned char*, size_t);
 		pqxx::result exec(const std::string& query);
 		pqxx::row exec1(const std::string& query);
 };

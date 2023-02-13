@@ -58,8 +58,6 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			if(header == REQ_CHPWD)
 				new_pwd_hash = recv->pop<Pwd_Hash_t>();
 			email = recv->popstr();
-
-			std::string search_query = "SELECT id FROM userlist WHERE email = \'" + email + "\' AND pwd_hash = \'" + Encoder::Encode(pwd_hash.data(), sizeof(Pwd_Hash_t)) + "\'";
 			
 			Account_ID_t account_id = 0;
 			try
@@ -67,15 +65,17 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				if(header == REQ_REGISTER)
 				{
 					dbsystem reg_db;
-					reg_db.exec("INSERT INTO userlist (email, pwd_hash) VALUES (\'" + email + "\', \'" + Encoder::Encode(pwd_hash.data(), sizeof(Pwd_Hash_t)) + "\')");
+					reg_db.exec("INSERT INTO userlist (email, pwd_hash) VALUES (\'" + reg_db.quote(email) + "\', \'" + reg_db.quote_raw(pwd_hash.data(), sizeof(Pwd_Hash_t)) + "\')");
 					reg_db.commit();
 				}
+
 				dbsystem db;
+				std::string search_query = "SELECT id FROM userlist WHERE email = \'" + db.quote(email) + "\' AND pwd_hash = \'" + db.quote_raw(pwd_hash.data(), sizeof(Pwd_Hash_t)) + "\'";
 				pqxx::row result = db.exec1(search_query);
 				account_id = result[0].as<Account_ID_t>();
 				if(header == REQ_CHPWD)
 				{
-					db.exec("UPDATE userlist SET pwd_hash = \'" + Encoder::Encode(new_pwd_hash.data(), sizeof(Pwd_Hash_t)) + ", access_time = now() WHERE id = \'" + std::to_string(account_id) + "\'");
+					db.exec("UPDATE userlist SET pwd_hash = \'" + db.quote_raw(new_pwd_hash.data(), sizeof(Pwd_Hash_t)) + ", access_time = now() WHERE id = \'" + std::to_string(account_id) + "\'");
 					db.commit();
 				}
 			}

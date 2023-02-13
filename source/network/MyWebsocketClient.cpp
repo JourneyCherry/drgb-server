@@ -56,7 +56,7 @@ MyExpected<int> MyWebsocketClient::Send(MyBytes bytes)
 	if(ws == nullptr || !ws->is_open())
 		return {-1, false};
 
-	MyBytes capsulated = MyMsg::encapsulate(bytes);
+	MyBytes capsulated = MyMsg::enpackage(bytes);
 	boost::asio::const_buffer buffer(capsulated.data(), capsulated.Size());
 	boost::beast::error_code ec;
 	size_t sendlen = ws->write(buffer, ec);
