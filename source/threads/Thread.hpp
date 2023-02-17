@@ -10,23 +10,16 @@ namespace mylib
 {
 	namespace threads
 	{
-		class Thread : MyThreadExceptInterface
+		class Thread : public MyThreadExceptInterface
 		{
 			private:
 				using tWorkerArg = std::shared_ptr<bool>;
-				struct dataset
-				{
-					std::shared_ptr<bool> runswitch;
-					std::shared_ptr<bool> killswitch;
-					std::shared_ptr<std::exception_ptr> exception;
-					std::shared_ptr<std::condition_variable> cv;
-					std::function<void(tWorkerArg)> function;
-				};
 
 				std::shared_ptr<bool> tc_isRunning;
 				std::shared_ptr<bool> tc_KillSwitch;
 				std::shared_ptr<std::condition_variable> tc_cv;
 				std::function<void(tWorkerArg)> tc_function;
+				std::shared_ptr<MyThreadExceptInterface> tc_tei;
 
 				std::shared_ptr<std::mutex> tc_mutex;
 				std::shared_ptr<std::thread> tc_thread;
@@ -36,7 +29,7 @@ namespace mylib
 					std::shared_ptr<bool>, 						// Kill Switch
 					std::shared_ptr<std::condition_variable>, 	// Condition Variable for Exit
 					std::function<void(tWorkerArg)>, 			// Work Function
-					MyThreadExceptInterface*					// Exception Pointer
+					std::shared_ptr<MyThreadExceptInterface>	// Exception Pointer
 				);
 
 				void memset_vars();
@@ -44,8 +37,7 @@ namespace mylib
 
 			public:
 				Thread();
-				Thread(std::function<void(tWorkerArg)>, MyThreadExceptInterface*, bool = true);
-				Thread(std::function<void(tWorkerArg)>, bool = true);
+				Thread(std::function<void(tWorkerArg)>, MyThreadExceptInterface* = nullptr, bool = true);
 				Thread(const Thread&) = delete;
 				Thread(Thread&&) noexcept;
 				~Thread();

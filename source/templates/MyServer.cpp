@@ -32,7 +32,13 @@ void MyServer::Start()
 void MyServer::Stop()
 {
 	isRunning = false;
+
+	for(auto &socket : sockets)
+		socket->Close();
 	cv_workers.notify_all();
+	for(auto &acceptor : acceptors)
+		acceptor.stop();
+		
 	Close();
 	GracefulWakeUp();
 }

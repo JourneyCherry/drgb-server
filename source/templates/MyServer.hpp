@@ -13,6 +13,7 @@ class MyServer : public MyThreadExceptInterface
 {
 	protected:
 		bool isRunning;
+		static constexpr int MAX_CLIENTS = 5;		//최대 수용 가능 클라이언트 수. //TODO : 추후 확장 필요.
 
 	private:
 		using Thread = mylib::threads::Thread;
@@ -22,7 +23,6 @@ class MyServer : public MyThreadExceptInterface
 		std::array<Thread, MAX_SOCKET> acceptors;
 
 		using ulock = std::unique_lock<std::mutex>;
-		static constexpr int MAX_CLIENTS = 5;		//최대 수용 가능 클라이언트 수. //TODO : 추후 확장 필요.
 		std::mutex m_accepts;
 		std::queue<std::shared_ptr<MyClientSocket>> q_accepts;
 		std::condition_variable cv_workers;

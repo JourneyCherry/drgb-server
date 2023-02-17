@@ -13,18 +13,7 @@ namespace mylib
 		Thread::Thread(std::function<void(tWorkerArg)> func, MyThreadExceptInterface* tei, bool justStart)
 		: MyThreadExceptInterface(tei)
 		{
-			Thread();
-
-			tc_function = func;
-
-			if(justStart)
-				start();
-		}
-
-		Thread::Thread(std::function<void(tWorkerArg)> func, bool justStart)
-		: MyThreadExceptInterface()
-		{
-			Thread();
+			memset_vars();
 
 			tc_function = func;
 
@@ -54,6 +43,8 @@ namespace mylib
 
 			tc_mutex = std::move(move.tc_mutex);
 			tc_thread = std::move(move.tc_thread);
+			tc_tei = std::move(move.tc_tei);
+			tc_tei->SetParent(this);
 
 			return *this;
 		}
@@ -63,13 +54,14 @@ namespace mylib
 			tc_isRunning = std::make_shared<bool>(false);
 			tc_KillSwitch = std::make_shared<bool>(false);
 			tc_cv = std::make_shared<std::condition_variable>();
+			tc_tei = std::make_shared<MyThreadExceptInterface>(this);
 
 			tc_mutex = std::make_shared<std::mutex>();
 		}
 
 		bool Thread::isMemSet()
 		{
-			return tc_isRunning && tc_KillSwitch && tc_mutex;
+			return tc_isRunning && tc_KillSwitch && tc_mutex && tc_tei && tc_cv;
 		}
 
 		bool Thread::start()
@@ -84,11 +76,11 @@ namespace mylib
 			(*tc_KillSwitch) = false;
 
 			tc_thread = std::make_shared<std::thread>(&Thread::Process, 
-				std::forward<std::shared_ptr<bool>>(tc_isRunning),
-				std::forward<std::shared_ptr<bool>>(tc_KillSwitch),
-				std::forward<std::shared_ptr<std::condition_variable>>(tc_cv),
-				std::forward<std::function<void(tWorkerArg)>>(tc_function),
-				std::forward<MyThreadExceptInterface*>(this)
+				tc_isRunning,
+				tc_KillSwitch,
+				tc_cv,
+				tc_function,
+				tc_tei
 			);
 
 			return true;
@@ -128,7 +120,7 @@ namespace mylib
 			std::shared_ptr<bool> killswitch,
 			std::shared_ptr<std::condition_variable> cv,
 			std::function<void(tWorkerArg)> function,
-			MyThreadExceptInterface* tei
+			std::shared_ptr<MyThreadExceptInterface> tei
 			)
 		{
 			std::exception_ptr exception;

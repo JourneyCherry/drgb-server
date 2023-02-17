@@ -155,12 +155,10 @@ void MyConnectee::ClientLoop(
 		if(!recvbuffer.isMsgIn())
 			continue;
 
-		bool isRequest = false;
 		MyBytes answer;
 		try
 		{
 			MyBytes data = recvbuffer.GetMsg();
-			byte answer_type = data.pop<byte>();
 			answer = process(data);
 		}
 		catch(const std::exception &e)
@@ -168,7 +166,7 @@ void MyConnectee::ClientLoop(
 			answer.Clear();
 			answer = MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION);
 		}
-		std::vector<byte> msg = MyMsg::encapsulate(answer);
+		std::vector<byte> msg = MyMsg::enpackage(answer);
 		int sendlen = send(*fd, msg.data(), msg.size(), 0);
 		if(sendlen <= 0)
 			throw MyExcepts("Cannot Send Packet to Client : " + std::to_string(errno), __STACKINFO__);

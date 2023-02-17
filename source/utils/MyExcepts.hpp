@@ -36,6 +36,7 @@ class MyThreadExceptInterface
 	public:
 		MyThreadExceptInterface() : parent(nullptr), isGracefullyStop(false) {}
 		MyThreadExceptInterface(MyThreadExceptInterface* p) : parent(p), isGracefullyStop(false) {}
+		void SetParent(MyThreadExceptInterface *p){parent = p;}
 		void ThrowThreadException();	//자식 Thread의 try catch문의 catch 내부에서 호출되어야 함
 		void ThrowThreadException(std::exception_ptr);
 		void ThrowThreadException(const std::exception &);

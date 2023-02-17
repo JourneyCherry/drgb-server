@@ -49,6 +49,11 @@ int MyMsg::split()
 	int size = recvbuffer.size();
 	for (int i = 0; i < size - 1; i++)
 	{
+		if(recvbuffer[i] == pattern && recvbuffer[i+1] == pattern)
+		{
+			i++;
+			continue;
+		}
 		if (recvbuffer[i] == pattern && recvbuffer[i + 1] == eof)
 			return i;
 	}
@@ -98,6 +103,7 @@ std::vector<byte> MyMsg::encapsulate(MyBytes data)
 std::vector<byte> MyMsg::encrypt(MyBytes data)
 {
 	// TODO : 암호화. 암호화 방식은 별도 const static 멤버변수를 통해 결정한다.
+	data.Reset();
 	return data.pops<byte>();
 }
 

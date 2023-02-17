@@ -32,7 +32,7 @@ MyExpected<int> MyTCPClient::Send(MyBytes bytes)
 {
 	if(socket_fd < 0)
 		return {-1, false};
-	MyBytes capsulated = MyMsg::encapsulate(bytes);
+	MyBytes capsulated = MyMsg::enpackage(bytes);
 	int sendlen = send(socket_fd, capsulated.data(), capsulated.Size(), 0);
 	if(sendlen <= 0)
 		return {sendlen == 0?0:errno, false};

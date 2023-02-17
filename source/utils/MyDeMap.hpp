@@ -21,7 +21,7 @@ class MyDeMap
 		{
 			ulock lk(mtx);
 
-			if(lrm.find(lkey) != lrm.end())
+			if(lrm.find(lkey) != lrm.end() || rlm.find(rkey) != rlm.end())
 				return false;
 
 			lrm.insert({lkey, rkey});

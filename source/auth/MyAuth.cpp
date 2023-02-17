@@ -65,17 +65,17 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				if(header == REQ_REGISTER)
 				{
 					dbsystem reg_db;
-					reg_db.exec("INSERT INTO userlist (email, pwd_hash) VALUES (\'" + reg_db.quote(email) + "\', \'" + reg_db.quote_raw(pwd_hash.data(), sizeof(Pwd_Hash_t)) + "\')");
+					reg_db.exec("INSERT INTO userlist (email, pwd_hash) VALUES (" + reg_db.quote(email) + ", " + reg_db.quote(MyCommon::Base64::Encode(pwd_hash.data(), sizeof(Pwd_Hash_t))) + ")");
 					reg_db.commit();
 				}
 
 				dbsystem db;
-				std::string search_query = "SELECT id FROM userlist WHERE email = \'" + db.quote(email) + "\' AND pwd_hash = \'" + db.quote_raw(pwd_hash.data(), sizeof(Pwd_Hash_t)) + "\'";
+				std::string search_query = "SELECT id FROM userlist WHERE email = " + db.quote(email) + " AND pwd_hash = " + db.quote(MyCommon::Base64::Encode(pwd_hash.data(), sizeof(Pwd_Hash_t)));
 				pqxx::row result = db.exec1(search_query);
 				account_id = result[0].as<Account_ID_t>();
 				if(header == REQ_CHPWD)
 				{
-					db.exec("UPDATE userlist SET pwd_hash = \'" + db.quote_raw(new_pwd_hash.data(), sizeof(Pwd_Hash_t)) + ", access_time = now() WHERE id = \'" + std::to_string(account_id) + "\'");
+					db.exec("UPDATE userlist SET pwd_hash = " + db.quote(MyCommon::Base64::Encode(new_pwd_hash.data(), sizeof(Pwd_Hash_t))) + ", access_time = now() WHERE id = " + std::to_string(account_id) + "");
 					db.commit();
 				}
 			}
@@ -89,31 +89,46 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				client->Send(MyBytes::Create<byte>(ERR_EXIST_ACCOUNT));
 				continue;
 			}
+			catch(const pqxx::pqxx_exception &e)
+			{
+				MyLogger::log("DB Error : " + std::string(e.base().what()), MyLogger::LogType::error);
+				client->Send(MyBytes::Create<byte>(ERR_DB_FAILED));
+				continue;
+			}
 
 			//match/battle 서버에 cookie 확인. battle 서버는 match서버가 확인해 줄 것임.
 			{
 				MyBytes query = MyBytes::Create<byte>(INQ_ACCOUNT_CHECK);
-				query.push<Account_ID_t>(account_id);
+				unsigned int match_id = 1;	//TODO : 추후, connector_match.Request()가 ERR_OUT_OF_CAPACITY를 반환했을 때, 다음 match서버로 넘기는 기능 추가 필요.
+				MyBytes account_byte = MyBytes::Create<Account_ID_t>(account_id);
+				MyBytes match_server_byte = MyBytes::Create<unsigned int>(match_id);
+				query += account_byte;
 				MyBytes answer = connector_match.Request(query);
 				byte query_header = answer.pop<byte>();
 				switch(query_header)
 				{
 					case ERR_NO_MATCH_ACCOUNT:
 						{
-							byte cookieheader = !SUCCESS;	//success만 아니면 된다.
-							while(cookieheader != SUCCESS)	//COOKIE_TRANSFER가 성공할 때 까지(즉, 중복 cookie가 없을때 까지) 반복
+							byte cookieheader = ERR_EXIST_ACCOUNT_MATCH;
+							MyBytes cookie;
+							while(cookieheader == ERR_EXIST_ACCOUNT_MATCH)	//COOKIE_TRANSFER가 성공할 때 까지(즉, 중복 cookie가 없을때 까지) 반복
 							{
-								MyBytes seed = MyBytes::Create<Account_ID_t>(account_id);
-								seed.push<std::chrono::time_point<std::chrono::system_clock>>(std::chrono::system_clock::now());
-								MyBytes cookie = MyBytes::Create<Hash_t>(MyCommon::Hash::sha256(seed));
-								MyBytes cookiereq = MyBytes::Create<byte>(INQ_COOKIE_TRANSFER) + cookie;
+								MyBytes seed = account_byte + MyBytes::Create<std::chrono::time_point<std::chrono::system_clock>>(std::chrono::system_clock::now());
+								cookie = MyBytes::Create<Hash_t>(MyCommon::Hash::sha256(seed));
+								MyBytes cookiereq = MyBytes::Create<byte>(INQ_COOKIE_TRANSFER) + account_byte + cookie;
 								auto cookieres = connector_match.Request(cookiereq);
-								byte cookieheader = cookieres.pop<byte>();
-								if(cookieheader == SUCCESS)
-								{
-									client->Send(MyBytes::Create<byte>(SUCCESS) + cookie);
+								cookieheader = cookieres.pop<byte>();
+							}
+							switch(cookieheader)
+							{
+								case SUCCESS:
+									client->Send(MyBytes::Create<byte>(SUCCESS) + cookie + match_server_byte);
 									exit_client = true;
-								}
+									break;
+								default:	//TODO : ERR_OUT_OF_CAPACITY가 오면 타 Match 서버로 연결해야 함.
+									client->Send(MyBytes::Create<byte>(cookieheader));
+									exit_client = true;
+									break;
 							}
 						}
 						break;

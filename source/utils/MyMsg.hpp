@@ -24,6 +24,9 @@ class MyMsg
 		MyBytes decapsulate(std::vector<byte>);
 		MyBytes decrypt(std::vector<byte>);
 		MyBytes depackage(std::vector<byte>);
+		static std::vector<byte> encapsulate(MyBytes);
+		static std::vector<byte> encrypt(MyBytes);
+		
 	public:
 		MyMsg();
 		~MyMsg();
@@ -35,7 +38,5 @@ class MyMsg
 		MyBytes GetMsg();
 		MyBytes JoinMsg();
 		void Clear();
-		static std::vector<byte> encapsulate(MyBytes);
-		static std::vector<byte> encrypt(MyBytes);
 		static std::vector<byte> enpackage(MyBytes);
 };

@@ -166,7 +166,7 @@ MyBytes MyConnector::Request(MyBytes data)
 	if (data.Size() <= 0)
 		throw MyExcepts("Request data is empty", __STACKINFO__);
 
-	std::vector<byte> msg = MyMsg::encapsulate(data);
+	std::vector<byte> msg = MyMsg::enpackage(data);
 
 	while (isRunning)
 	{

@@ -149,36 +149,50 @@ MyBytes MyMatch::MatchInquiry(MyBytes bytes)
 	switch(header)
 	{
 		case INQ_ACCOUNT_CHECK:
-			Account_ID_t account_id = bytes.pop<Account_ID_t>();
-
-			//저장된 세션(쿠키)가 있는지 확인.
 			{
-				auto cookie = sessions.FindLKey(account_id);
-				if(cookie)
-				{
-					MyBytes answer = MyBytes::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
-					answer.push<Hash_t>(cookie->first);
-					answer.push<unsigned int>(MACHINE_ID);
-					return answer;
-				}
-			}
+				Account_ID_t account_id = bytes.pop<Account_ID_t>();
 
-			//battle 서버에 요청하여 cookie 찾기.	//TODO : 추후, battle 서버가 늘어날 경우, 모든 battle서버에 요청하도록 변경 필요.
-			{
-				MyBytes query = MyBytes::Create<byte>(INQ_ACCOUNT_CHECK);
-				query.push<Account_ID_t>(account_id);
-				MyBytes answer = connector_battle.Request(query);
-				byte query_header = answer.pop<byte>();
-				switch(query_header)
+				//저장된 세션(쿠키)가 있는지 확인.
 				{
-					case ERR_NO_MATCH_ACCOUNT:
-						return MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT);
-					case ERR_EXIST_ACCOUNT_BATTLE:	//쿠키와 몇번 배틀서버인지(unsigned int)는 뒤에 붙어있다.
-					case ERR_OUT_OF_CAPACITY:		//서버 접속 불가. 단일 byte.
+					auto cookie = sessions.FindLKey(account_id);
+					if(cookie)
+					{
+						MyBytes answer = MyBytes::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
+						answer.push<Hash_t>(cookie->first);
+						answer.push<unsigned int>(MACHINE_ID);
 						return answer;
+					}
+				}
+
+				//battle 서버에 요청하여 cookie 찾기.	//TODO : 추후, battle 서버가 늘어날 경우, 모든 battle서버에 요청하도록 변경 필요.
+				{
+					MyBytes query = MyBytes::Create<byte>(INQ_ACCOUNT_CHECK);
+					query.push<Account_ID_t>(account_id);
+					MyBytes answer = connector_battle.Request(query);
+					byte query_header = answer.pop<byte>();
+					switch(query_header)
+					{
+						case ERR_NO_MATCH_ACCOUNT:
+							return MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT);
+						case ERR_EXIST_ACCOUNT_BATTLE:	//쿠키와 몇번 배틀서버인지(unsigned int)는 뒤에 붙어있다.
+						case ERR_OUT_OF_CAPACITY:		//서버 접속 불가. 단일 byte.
+							return answer;
+					}
 				}
 			}
 			break;
+		case INQ_COOKIE_TRANSFER:
+			{
+				Account_ID_t account_id = bytes.pop<Account_ID_t>();
+				Hash_t cookie = bytes.pop<Hash_t>();
+
+				if(sessions.Size() >= MAX_CLIENTS)
+					return MyBytes::Create<byte>(ERR_OUT_OF_CAPACITY);
+				
+				if(!sessions.Insert(account_id, cookie, nullptr))
+					return MyBytes::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
+			}
+			return MyBytes::Create<byte>(SUCCESS);
 	}
 
 	return MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION);

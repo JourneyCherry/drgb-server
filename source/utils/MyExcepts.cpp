@@ -57,7 +57,7 @@ void MyThreadExceptInterface::WaitForThreadException()
 {
 	std::unique_lock<std::mutex> lock(Exception_Mutex);
 	isGracefullyStop = false;
-	Exception_CV.wait(lock, [this]{ return !Exception_Exps.empty(); });
+	Exception_CV.wait(lock, [this]{ return (!Exception_Exps.empty() || isGracefullyStop); });
 	if(isGracefullyStop)
 	{
 		if(!Exception_Exps.empty())
