@@ -34,12 +34,13 @@ int MyGame::Connect(Account_ID_t id, std::shared_ptr<MyClientSocket> socket)
 	{
 		if(players[i].id == id)
 		{
-			if(socket != nullptr)
-			{
-				socket->Send(MyBytes::Create<byte>(ERR_DUPLICATED_ACCESS));
-				socket->Close();
-			}
+			auto existing = players[i].socket;
 			players[i].socket = socket;
+			if(existing != nullptr)
+			{
+				existing->Send(MyBytes::Create<byte>(ERR_DUPLICATED_ACCESS));
+				existing->Close();
+			}
 			cv.notify_all();
 			return i;
 		}
@@ -86,6 +87,9 @@ int MyGame::GetWinner()
 
 void MyGame::Work()
 {
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "GameWork");
+#endif
 	std::function<bool()> isAllIn = [&](){
 		for(int i = 0;i<MAX_PLAYER;i++)
 		{
@@ -106,8 +110,28 @@ void MyGame::Work()
 	for(int now_round = 0;now_round < MAX_ROUND && !isGameOver;now_round++)
 	{
 		ulock lk(mtx);
-		bool isTimeOver = cv.wait_for(lk, Round_Time, isAllIn);
-		if(isTimeOver)
+		bool isSomeoneOut = cv.wait_for(lk, Round_Time, [&](){return !isAllIn();});	//cv.wait_for()는 시간이 다된&Notify된 시점의 Predicate값을 return 한다.
+		if(isSomeoneOut)
+		{
+			SendAll(MyBytes::Create<byte>(GAME_PLAYER_DISCONNEDTED));
+			bool isAllConnected = cv.wait_for(lk, Dis_Time, isAllIn);
+			lk.unlock();
+			if(!isAllConnected)	//Disconnection Time이 지날떄까지 들어오지 못하면 해당 게임은 종료된다.
+			{
+				isGameOver = true;
+				if(now_round <= DODGE_ROUND || GetWinner() < 0)	//일정 라운드 이내거나 둘다 연결이 종료되면 무효. 그 외엔 나간 쪽이 loose
+				{
+					SendAll(MyBytes::Create<byte>(GAME_CRASHED));
+					return;
+				}
+			}
+			else
+			{
+				SendAll(MyBytes::Create<byte>(GAME_PLAYER_ALL_CONNECTED));	//사용자들에게 경기재개 패킷을 보낸 뒤
+				now_round--;		//해당 라운드를 무효 한다.
+			}
+		}
+		else
 		{
 			isGameOver = process();
 			//라운드 결과 전달하기.
@@ -121,26 +145,6 @@ void MyGame::Work()
 			}
 			lk.unlock();
 		}
-		else
-		{
-			SendAll(MyBytes::Create<byte>(GAME_PLAYER_DISCONNEDTED));
-			bool isAllConnected = cv.wait_for(lk, Dis_Time, isAllIn);
-			lk.unlock();
-			if(!isAllConnected)	//Disconnection Time이 지날떄까지 들어오지 못하면 해당 게임은 종료된다.
-			{
-				isGameOver = true;
-				if(now_round <= DODGE_ROUND || GetWinner() < 0)	//일정 라운드 이내거나 둘다 연결이 종료되면 무효. 그 외엔 나간 쪽이 loose
-				{
-					SendAll(MyBytes::Create<byte>(GAME_CRASHED), true);
-					return;
-				}
-			}
-			else
-			{
-				SendAll(MyBytes::Create<byte>(GAME_PLAYER_ALL_CONNECTED));	//사용자들에게 경기재개 패킷을 보낸 뒤
-				now_round--;		//해당 라운드를 무효 한다.
-			}
-		}
 	}
 
 	//DB에 경기결과 기록 및 사용자들에게 경기결과 전달 + 연결 종료.
@@ -148,7 +152,7 @@ void MyGame::Work()
 	try
 	{
 		MyPostgres db;
-		static std::string query = "SELECT (win_count, draw_count, loose_count) FROM userlist WHERE id=";
+		static std::string query = "SELECT win_count, draw_count, loose_count FROM userlist WHERE id=";
 		for(int i = 0;i<MAX_PLAYER;i++)
 		{
 			std::string idstr = std::to_string(players[i].id);
@@ -164,21 +168,31 @@ void MyGame::Work()
 			else
 				targetstr = "loose_count=" + std::to_string(loose+1);
 
-			db.exec("UPDATE " + targetstr + " FROM userlist WHERE id=" + idstr);
+			db.exec("UPDATE userlist SET " + targetstr + " WHERE id=" + idstr);
 		}
 		db.commit();
 	}
+	catch(const pqxx::pqxx_exception &e)
+	{
+		MyLogger::log("DB Error : " + std::string(e.base().what()), MyLogger::LogType::error);
+		SendAll(MyBytes::Create<byte>(ERR_DB_FAILED));
+		throw;
+	}
 	catch(const std::exception &e)
 	{
-		SendAll(MyBytes::Create<byte>(ERR_DB_FAILED), true);
+		MyLogger::log("Error : " + std::string(e.what()), MyLogger::LogType::error);
+		SendAll(MyBytes::Create<byte>(ERR_DB_FAILED));
 		throw;
 	}
 
 	//결과에 따라 승/패가 나뉘기 때문에 SendAll()로 보낼 수 없어, 따로 보냄.
+	ulock lock(mtx);
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
-		players[i].socket->Send(winner<0?GAME_FINISHED_DRAW:(winner==i?GAME_FINISHED_WIN:GAME_FINISHED_LOOSE));
-		players[i].socket->Close();	//여기서 연결을 종료하면 MyBattle::ClientProcess()에서 연결끊김을 감지하여 알아서 스레드를 종료하게 된다.
+		players[i].result = (winner<0)?GAME_FINISHED_DRAW:(winner==i?GAME_FINISHED_WIN:GAME_FINISHED_LOOSE);
+		//결과를 보낼 때, match server에 세션을 넘겨주면서 match server 정보도 넘겨야 하므로, 이것은 MyBattle::pool_manage에서 처리한다.
+		//if(players[i].socket->Send(MyBytes::Create<byte>(result)))
+		//	players[i].socket->Close();	//여기서 연결을 종료하면 MyBattle::ClientProcess()에서 연결끊김을 감지하여 알아서 스레드를 종료하게 된다.
 	}
 }
 
@@ -237,15 +251,13 @@ bool MyGame::CheckAction(int action)
 	return true;
 }
 
-void MyGame::SendAll(MyBytes byte, bool connectclose)
+void MyGame::SendAll(MyBytes byte)
 {
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
 		if(players[i].socket != nullptr)
 		{
 			players[i].socket->Send(byte);
-			if(connectclose)
-				players[i].socket->Close();
 		}
 	}
 }

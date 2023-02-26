@@ -54,6 +54,9 @@ void MyConnectee::Accept(std::string keyword, std::function<MyBytes(MyBytes)> pr
 
 void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
 {
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "ConnectAcceptor");
+#endif
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0)
 		throw MyExcepts("MyConnectee::Open()::socket() Failed : " + std::to_string(errno), __STACKINFO__);
@@ -120,6 +123,9 @@ void MyConnectee::ClientLoop(
 	std::shared_ptr<bool> killswitch
 )
 {
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), (std::string("ConnecteeLoop_") + keyword).c_str());
+#endif
 	MyMsg recvbuffer;
 	MyLogger::log("MyConnectee::AcceptLoop(" + keyword + ") waits for connect", MyLogger::LogType::debug);
 	while(isRunning)

@@ -35,7 +35,8 @@ MyExpected<MyBytes, int> MyWebsocketClient::Recv()
 	boost::beast::flat_buffer buffer;
 	while(!recvbuffer.isMsgIn())
 	{
-		size_t recvlen = ws->read(buffer, ec);
+		buffer.clear();
+		size_t recvlen = ws->read(buffer, ec);	//ws->read()는 buffer에 새 데이터를 append 한다.
 		if(ec || recvlen == 0)
 			return {ec.value()};
 
@@ -71,7 +72,14 @@ void MyWebsocketClient::Close()
 	if(ws != nullptr)
 	{
 		if(ws->is_open())
-			ws->close(boost::beast::websocket::close_code::normal);
+		{
+			boost::beast::error_code ec;
+			ws->close(boost::beast::websocket::close_code::normal, ec);
+			if(ec.failed() && ec != boost::beast::websocket::error::closed)
+			{
+				throw ec;
+			}
+		}
 		ws.reset();
 	}
 }

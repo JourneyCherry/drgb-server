@@ -13,7 +13,7 @@ typedef unsigned long long Account_ID_t;
 class queue_element
 {
 private:
-	static constexpr double Interpolate = 0.1f;
+	static constexpr double Interpolate = 0.1f;	//TODO : 이것을 Config로 처리하자.
 	Account_ID_t id;
 	int win;
 	int draw;

@@ -64,9 +64,17 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			{
 				if(header == REQ_REGISTER)
 				{
-					dbsystem reg_db;
-					reg_db.exec("INSERT INTO userlist (email, pwd_hash) VALUES (" + reg_db.quote(email) + ", " + reg_db.quote(MyCommon::Base64::Encode(pwd_hash.data(), sizeof(Pwd_Hash_t))) + ")");
-					reg_db.commit();
+					try
+					{
+						dbsystem reg_db;
+						reg_db.exec("INSERT INTO userlist (email, pwd_hash) VALUES (" + reg_db.quote(email) + ", " + reg_db.quote(MyCommon::Base64::Encode(pwd_hash.data(), sizeof(Pwd_Hash_t))) + ")");
+						reg_db.commit();
+					}
+					catch(const pqxx::unique_violation &e)
+					{
+						client->Send(MyBytes::Create<byte>(ERR_EXIST_ACCOUNT));
+						continue;
+					}
 				}
 
 				dbsystem db;
@@ -84,9 +92,9 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				client->Send(MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 				continue;
 			}
-			catch(const pqxx::unique_violation &e)
+			catch(const pqxx::unexpected_rows &e)
 			{
-				client->Send(MyBytes::Create<byte>(ERR_EXIST_ACCOUNT));
+				client->Send(MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 				continue;
 			}
 			catch(const pqxx::pqxx_exception &e)
@@ -99,9 +107,9 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			//match/battle 서버에 cookie 확인. battle 서버는 match서버가 확인해 줄 것임.
 			{
 				MyBytes query = MyBytes::Create<byte>(INQ_ACCOUNT_CHECK);
-				unsigned int match_id = 1;	//TODO : 추후, connector_match.Request()가 ERR_OUT_OF_CAPACITY를 반환했을 때, 다음 match서버로 넘기는 기능 추가 필요.
+				Seed_t match_id = 1;	//TODO : 추후, connector_match.Request()가 ERR_OUT_OF_CAPACITY를 반환했을 때, 다음 match서버로 넘기는 기능 추가 필요.
 				MyBytes account_byte = MyBytes::Create<Account_ID_t>(account_id);
-				MyBytes match_server_byte = MyBytes::Create<unsigned int>(match_id);
+				MyBytes match_server_byte = MyBytes::Create<Seed_t>(match_id);
 				query += account_byte;
 				MyBytes answer = connector_match.Request(query);
 				byte query_header = answer.pop<byte>();

@@ -22,6 +22,7 @@ TARGET_LINK_LIBRARIES ( MyBattle PUBLIC
 	MyGame
 	#MyCodes
 	#MyDeMap
+	MyConnector
 	MyConnectee
 	Pool
 	Thread

@@ -70,20 +70,40 @@ class MyDeMap
 
 			return true;
 		}
-		bool Erase(LKey key)
+		MyExpected<std::tuple<LKey, RKey, Value>> EraseLKey(LKey lkey)
 		{
 			ulock lk(mtx);
 
-			if(lrm.find(key) == lrm.end())
-				return false;
+			if(lrm.find(lkey) == lrm.end())
+				return {};
 			
-			RKey rkey = lrm[key];
-			lrm.erase(key);
-			rlm.erase(rkey);
-			kvm.erase(key);
+			RKey rkey = lrm[lkey];
+			Value value = kvm[lkey];
 
-			return true;
+			lrm.erase(lkey);
+			rlm.erase(rkey);
+			kvm.erase(lkey);
+
+			return {{lkey, rkey, value}, true};
 		}
+
+		MyExpected<std::tuple<LKey, RKey, Value>> EraseRKey(RKey rkey)
+		{
+			ulock lk(mtx);
+
+			if(rlm.find(rkey) == rlm.end())
+				return {};
+			
+			LKey  lkey = rlm[lkey];
+			Value value = kvm[lkey];
+
+			lrm.erase(lkey);
+			rlm.erase(rkey);
+			kvm.erase(lkey);
+
+			return {{lkey, rkey, value}, true};
+		}
+
 		void Clear()
 		{
 			ulock lk(mtx);

@@ -32,6 +32,9 @@ void MyConnector::Connect()
 
 void MyConnector::Connect_(std::shared_ptr<bool> killswitch)
 {
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "Connector");
+#endif
 	while(isRunning)
 	{
 		if(!isConnected.wait(false))
@@ -131,6 +134,9 @@ void MyConnector::Disconnect()
 
 void MyConnector::RecvLoop(std::shared_ptr<bool> killswitch)
 {
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "ConnectorReciver");
+#endif
 	while(isRunning)
 	{
 		if(!isConnected.wait(true))

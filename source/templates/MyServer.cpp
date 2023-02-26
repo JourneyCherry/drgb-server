@@ -61,6 +61,9 @@ void MyServer::Join()
 
 void MyServer::Accept(std::shared_ptr<bool> killswitch, std::shared_ptr<MyServerSocket> socket)
 {
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "ServerAcceptor");
+#endif
 	while(isRunning && !(*killswitch))
 	{
 		auto client = socket->Accept();
@@ -81,6 +84,9 @@ void MyServer::Accept(std::shared_ptr<bool> killswitch, std::shared_ptr<MyServer
 
 void MyServer::Work(std::shared_ptr<bool> killswitch)
 {
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "ServerWorker");
+#endif
 	while(isRunning && !(*killswitch))
 	{
 		ulock lk(m_accepts);

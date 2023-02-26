@@ -22,14 +22,17 @@ class MyGame : public mylib::threads::PoolElement
 		std::mutex mtx;
 		std::condition_variable cv;
 
+		static const std::chrono::seconds Round_Time;
+		static const std::chrono::seconds Dis_Time;	//디스 시간.
+		static const std::map<int, int> required_energy;
+
+
+	public:
 		static constexpr int MAX_PLAYER = 2;
 		static constexpr int MAX_HEALTH = 1;
 		static constexpr int MAX_ENERGY = 2;
 		static constexpr int MAX_ROUND = 10;
 		static constexpr int DODGE_ROUND = 3;
-		static const std::chrono::seconds Round_Time;
-		static const std::chrono::seconds Dis_Time;	//디스 시간.
-		static const std::map<int, int> required_energy;
 
 		struct player_info
 		{
@@ -39,9 +42,9 @@ class MyGame : public mylib::threads::PoolElement
 			int health;
 			int energy;
 			int target;
+			byte result;
 		} players[MAX_PLAYER];
 
-	public:
 		static constexpr int MEDITATE = 1 << 0;
 		static constexpr int GUARD = 1 << 1;
 		static constexpr int EVADE = 1 << 2;
@@ -59,6 +62,6 @@ class MyGame : public mylib::threads::PoolElement
 		void Work() override;
 		bool process();
 		bool CheckAction(int);
-		void SendAll(MyBytes, bool=false);	//같은 패킷 보낼때 씀.
+		void SendAll(MyBytes);	//같은 패킷 보낼때 씀.
 		MyBytes GetPlayerByte(const struct player_info&);
 };

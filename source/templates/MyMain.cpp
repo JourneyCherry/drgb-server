@@ -21,10 +21,15 @@ MyMain::MyMain(std::function<void()> p, std::function<void()> s)
 int MyMain::main(int argc, char *argv[])
 {
 	int exit_code = 0;
+
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "Base");
+#endif
+
 	try
 	{
 		MyServerOpt opts(argc, argv);
-		MyLogger::OpenLog();
+		MyLogger::OpenLog(opts.verbose_flag);
 		if(opts.daemon_flag)
 		{
 			if(!MyCommon::Daemonizer())

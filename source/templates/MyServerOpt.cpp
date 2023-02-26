@@ -6,6 +6,7 @@ struct option MyServerOpt::long_options[] =
 	{"pidfile", required_argument, 0, 'p'},	//세번째 인수가 null이면 getopt_long()에서 네번째 인수값을 리턴한다.
 	{"configfile", required_argument, 0, 'c'},
 	{"Log", required_argument, 0, 'L'},
+	{"verbose", no_argument, 0, 'v'},
 	{0, 0, 0, 0}
 };
 
@@ -21,6 +22,7 @@ void MyServerOpt::ClearOpt()
 	pid_flag = false;
 	pid_path = "";
 	conf_path = "";
+	verbose_flag = false;
 }
 
 void MyServerOpt::GetOpt(int argc, char *argv[])
@@ -51,6 +53,9 @@ void MyServerOpt::GetOpt(int argc, char *argv[])
 					int port = std::atoi(value.c_str());
 					MyLogger::ConfigPort(MyLogger::GetType(var), port);
 				}
+				break;
+			case 'v':
+				verbose_flag = true;
 				break;
 			case '?':
 				throw MyExcepts("Unknown Argument : " + std::string(argv[optind-1]), __STACKINFO__);

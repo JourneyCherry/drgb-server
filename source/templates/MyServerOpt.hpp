@@ -12,6 +12,8 @@ class MyServerOpt : public MyCommon::MyGetOpt
 		std::string pid_path;
 		
 		std::string conf_path;
+
+		bool verbose_flag;
 	public:
 		MyServerOpt(int argc, char** argv);
 		void ClearOpt() override;

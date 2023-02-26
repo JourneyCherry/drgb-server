@@ -31,7 +31,7 @@ MyLogger::~MyLogger()
 		closelog();
 }
 
-void MyLogger::OpenLog(){instance()->OpenLog_();}
+void MyLogger::OpenLog(bool _verbose){instance()->OpenLog_(_verbose);}
 void MyLogger::ConfigPort(LogType type, int port){instance()->ConfigPort_(type, port);}
 void MyLogger::log(std::string content, LogType type){instance()->log_(content, type);}
 void MyLogger::raise()
@@ -64,8 +64,10 @@ MyLogger::LogType MyLogger::GetType(std::string name)
 	return default_type;
 }
 
-void MyLogger::OpenLog_()
+void MyLogger::OpenLog_(bool _verbose)
 {
+	isVerbose = _verbose;
+
 	if(ports[auth] < 0)
 		ports[auth] = LOG_INFO | LOG_AUTH;
 
@@ -78,6 +80,7 @@ void MyLogger::OpenLog_()
 	MyLogger::ports[default_type] |= LOG_INFO;
 
 	openlog(service_name.c_str(), LOG_PID, ports[default_type]);
+	
 	isOpened = true;
 }
 
@@ -109,6 +112,18 @@ void MyLogger::ConfigPort_(LogType type, int port)
 
 void MyLogger::log_(std::string content, LogType type)
 {
+	if(isVerbose)
+	{
+		static std::map<LogType, std::string> type2str = {
+			{LogType::info, "INFO"},
+			{LogType::auth, "AUTH"},
+			{LogType::error, "ERROR"},
+			{LogType::debug, "DEBUG"},
+			{LogType::default_type, "DEFAULT"}
+		};
+		std::unique_lock<std::mutex> lk(verbose_mtx);
+		std::cout << "[" << type2str[type] << "] " << content << std::endl;
+	}
 	syslog(ports[type], "%s", content.c_str());
 }
 

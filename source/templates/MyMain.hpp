@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <functional>
+#include <pthread.h>
 #include "MyDaemoner.hpp"
 #include "MyServerOpt.hpp"
 #include "MyLogger.hpp"

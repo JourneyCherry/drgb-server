@@ -3,7 +3,7 @@
 MyMatch::MyMatch() : 
 	connectee(this), 
 	connector_battle(this, MyConfigParser::GetString("Battle1_Addr"), MyConfigParser::GetInt("Battle1_Port"), "match"),
-	t_matchmaker(std::bind(&MyMatch::MatchMake, this, std::placeholders::_1)),
+	t_matchmaker(std::bind(&MyMatch::MatchMake, this, std::placeholders::_1), this),
 	MyServer(MyConfigParser::GetInt("Match1_ClientPort_Web", 54321), MyConfigParser::GetInt("Match1_ClientPort_TCP", 54322))
 {
 
@@ -18,6 +18,7 @@ void MyMatch::Open()
 	MyPostgres::Open();
 	connectee.Open(MyConfigParser::GetInt("Match1_Port"));
 	connectee.Accept("auth", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
+	connectee.Accept("battle", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connector_battle.Connect();
 	MyLogger::log("Match Server Start", MyLogger::LogType::info);
 }
@@ -98,11 +99,17 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 								int loose = 0;
 								int draw = 0;
 								MyPostgres db;
-								auto result = db.exec1("SELECT win_count, lose_count, draw_count FROM userlist WHERE id=" + std::to_string(account_id));
+								auto result = db.exec1("SELECT win_count, loose_count, draw_count FROM userlist WHERE id=" + std::to_string(account_id));
 								win = result[0].as<int>();
 								loose = result[1].as<int>();
 								draw = result[2].as<int>();
 								matchmaker.Enter(account_id, win, draw, loose);
+							}
+							catch(const pqxx::pqxx_exception & e)
+							{
+								client->Send(MyBytes::Create<byte>(ERR_DB_FAILED));
+								client->Close();
+								throw MyExcepts("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
 							}
 							catch(const std::exception &e)
 							{
@@ -122,7 +129,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				break;
 			case MyDisconnectMessage::Message_ID:
 				matchmaker.Exit(account_id);
-				sessions.Erase(account_id);
+				sessions.EraseLKey(account_id);
 				isAnswered = true;
 				break;
 			case MyMatchMakerMessage::Message_ID:
@@ -159,7 +166,7 @@ MyBytes MyMatch::MatchInquiry(MyBytes bytes)
 					{
 						MyBytes answer = MyBytes::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
 						answer.push<Hash_t>(cookie->first);
-						answer.push<unsigned int>(MACHINE_ID);
+						answer.push<Seed_t>(MACHINE_ID);
 						return answer;
 					}
 				}
@@ -200,81 +207,71 @@ MyBytes MyMatch::MatchInquiry(MyBytes bytes)
 
 void MyMatch::MatchMake(std::shared_ptr<bool> killswitch)
 {
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "MatchMaker");
+#endif
 	while(isRunning && !(*killswitch))
 	{
-		std::this_thread::sleep_for(std::chrono::seconds(5));
+		std::this_thread::sleep_for(std::chrono::seconds(rematch_delay));
 		matchmaker.Process();
 
-		MyBytes answer = connector_battle.Request(MyBytes::Create<byte>(INQ_AVAILABLE));	//TODO : 모든 battle 서버에 쿼리 날리기.
-		byte header = answer.pop<byte>();
-		switch(header)
+		while(matchmaker.isThereMatch())
 		{
-			case SUCCESS:
+			auto [lp, rp] = matchmaker.GetMatch();
+			Account_ID_t lpid = lp.whoami();
+			Account_ID_t rpid = rp.whoami();
+			auto lpresult = sessions.FindLKey(lpid);
+			auto rpresult = sessions.FindLKey(rpid);
+			Hash_t lpcookie;
+			Hash_t rpcookie;
+			std::shared_ptr<MyNotifier> lpnotifier;
+			std::shared_ptr<MyNotifier> rpnotifier;
+			if(lpresult)
+			{
+				lpcookie = lpresult->first;
+				lpnotifier = lpresult->second;
+			}
+			if(rpresult)
+			{
+				rpcookie = rpresult->first;
+				rpnotifier = rpresult->second;
+			}
+			
+			if(lpresult && rpresult)	//둘다 정상접속 상태이면
+			{
+				//battle서버에 battle 등록.
+				MyBytes req = MyBytes::Create<byte>(INQ_MATCH_TRANSFER);
+				req.push<Account_ID_t>(lpid);
+				req.push<Hash_t>(sessions.FindLKey(lpid)->first);
+				req.push<Account_ID_t>(rpid);
+				req.push<Hash_t>(sessions.FindLKey(rpid)->first);
+				
 				{
-					int capacity = answer.pop<size_t>();
-					while(matchmaker.isThereMatch() && capacity > 0)
+					int battle_server = 1;	//TODO : 모든 Battle 서버에 쿼리 날려보기. battle서버가 늘어날 경우, 해당 서버 번호를 넣어야 한다.
+					MyBytes ans = connector_battle.Request(req);
+					byte result = ans.pop<byte>();
+					if(result == SUCCESS)
 					{
-						auto [lp, rp] = matchmaker.GetMatch();
-						Account_ID_t lpid = lp.whoami();
-						Account_ID_t rpid = rp.whoami();
-						auto lpresult = sessions.FindLKey(lpid);
-						auto rpresult = sessions.FindLKey(rpid);
-						Hash_t lpcookie;
-						Hash_t rpcookie;
-						std::shared_ptr<MyNotifier> lpnotifier;
-						std::shared_ptr<MyNotifier> rpnotifier;
-						if(lpresult)
-						{
-							lpcookie = lpresult->first;
-							lpnotifier = lpresult->second;
-						}
-						if(rpresult)
-						{
-							rpcookie = rpresult->first;
-							rpnotifier = rpresult->second;
-						}
-						
-						if(lpresult && rpresult)	//둘다 정상접속 상태이면
-						{
-							int battle_server = 1;	//TODO : battle서버가 늘어날 경우, 해당 서버 번호를 넣어야 한다.
+						lpnotifier->push(std::make_shared<MyMatchMakerMessage>(battle_server));
+						rpnotifier->push(std::make_shared<MyMatchMakerMessage>(battle_server));
+						matchmaker.PopMatch();
 
-							//battle서버에 battle 등록.
-							MyBytes req = MyBytes::Create<byte>(INQ_MATCH_TRANSFER);
-							req.push<Account_ID_t>(lpid);
-							req.push<Hash_t>(sessions.FindLKey(lpid)->first);
-							req.push<Account_ID_t>(rpid);
-							req.push<Hash_t>(sessions.FindLKey(rpid)->first);
-							MyBytes ans = connector_battle.Request(req);
-							byte result = ans.pop<byte>();
-							if(result == SUCCESS)
-							{
-								lpnotifier->push(std::make_shared<MyMatchMakerMessage>(battle_server));
-								rpnotifier->push(std::make_shared<MyMatchMakerMessage>(battle_server));
-								matchmaker.PopMatch();
-								capacity--;
-
-								sessions.Erase(lpid);
-								sessions.Erase(rpid);
-							}
-							else	//battle서버에서 매치 전달에 실패한 경우
-							{
-								MyLogger::raise(std::make_exception_ptr(MyExcepts("Battle Server Cannot Accept Battle : " + std::to_string(result), __STACKINFO__)));
-								break;	//TODO : 다른 가용 battle서버를 찾아야 한다.
-							}
-						}
-						else	//매칭된 둘 중에 한명이라도 이미 접속을 종료했다면 남은 한명을 다시 큐에 집어넣는다.
-						{
-							if(lpresult > 0) matchmaker.Enter(lp);
-							if(rpresult > 0) matchmaker.Enter(rp);
-							matchmaker.PopMatch();
-						}
+						sessions.EraseLKey(lpid);
+						sessions.EraseLKey(rpid);
+					}
+					else	//battle서버에서 매치 전달에 실패한 경우
+					{
+						MyLogger::raise(std::make_exception_ptr(MyExcepts("Battle Server Cannot Accept Battle : " + std::to_string(result), __STACKINFO__)));
+						break;	//TODO : 다른 가용 battle서버를 찾아야 한다.
 					}
 				}
-				break;
-			case ERR_OUT_OF_CAPACITY:
-				//TODO : 다른 battle 서버 찾기.
-				//이번 매치는 쉬기. 쉬는 동안 배틀서버의 수용량이 늘기를 바래야됨. 매칭내역은 보존함.
-				break;
+			}
+			else	//매칭된 둘 중에 한명이라도 이미 접속을 종료했다면 남은 한명을 다시 큐에 집어넣는다.
+			{
+				if(lpresult > 0) matchmaker.Enter(lp);
+				if(rpresult > 0) matchmaker.Enter(rp);
+				matchmaker.PopMatch();
+			}
 		}
 	}
 }
