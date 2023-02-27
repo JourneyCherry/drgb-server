@@ -139,10 +139,10 @@ void MyGame::Work()
 			result.push<int>(now_round);
 
 			for(int i = 0;i<MAX_PLAYER;i++)
-			{
 				players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
+			for(int i = 0;i<MAX_PLAYER;i++)
 				players[i].action = MEDITATE;
-			}
+
 			lk.unlock();
 		}
 	}
@@ -220,7 +220,7 @@ bool MyGame::process()
 					players[target].health -= 1;
 				break;
 			case FIRE:
-				if(players[target].action & 0x07)	//meditate, guard, punch
+				if(players[target].action & 0x0b)	//meditate, guard, punch
 					players[target].health -= 1;
 				break;
 			case GUARD:

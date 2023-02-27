@@ -19,8 +19,10 @@ MyExpected<MyBytes, int> MyTCPClient::Recv()
 		if(socket_fd < 0)
 			return {-1};
 		int recvlen = read(socket_fd, buf, BUFSIZE);
-		if(recvlen <= 0)
-			return {recvlen == 0?0:errno};
+		if(recvlen < 0)
+			return {errno};
+		if(recvlen == 0)
+			return {-1};
 
 		recvbuffer.Recv(buf, recvlen);
 	}

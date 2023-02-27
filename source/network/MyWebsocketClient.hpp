@@ -8,7 +8,7 @@
 class MyWebsocketClient : public MyClientSocket
 {
 	private:
-		std::unique_ptr<boost::beast::websocket::stream<boost::asio::ip::tcp::socket>> ws;
+		boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws;
 
 	public:
 		MyWebsocketClient(boost::asio::ip::tcp::socket);

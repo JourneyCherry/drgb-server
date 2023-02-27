@@ -7,8 +7,8 @@
 class MyWebsocketServer : public MyServerSocket
 {
 	private:
-		std::unique_ptr<boost::beast::net::io_context> ioc;
-		std::unique_ptr<boost::asio::ip::tcp::acceptor> acceptor;
+		boost::beast::net::io_context ioc;
+		boost::asio::ip::tcp::acceptor acceptor;
 
 	public:
 		MyWebsocketServer(int);
