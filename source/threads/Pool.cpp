@@ -11,6 +11,12 @@ namespace mylib
 
 		Pool::~Pool()
 		{
+			if(isRunning)
+				Stop();
+		}
+
+		void Pool::Stop()
+		{
 			isRunning = false;
 			cv.notify_all();
 			while(pool.size() > 0 || gc_queue.size() > 0)
@@ -61,6 +67,8 @@ namespace mylib
 
 		bool Pool::insert(Pool::Value value)
 		{
+			if(!isRunning)
+				return false;
 			try
 			{
 				ulock lk(mtx);
@@ -72,7 +80,7 @@ namespace mylib
 			catch(MyExcepts e)
 			{
 				e.stack(__STACKINFO__);
-				throw;
+				throw e;
 			}
 			catch(const std::exception &e)
 			{

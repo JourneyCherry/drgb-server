@@ -22,6 +22,7 @@ MyGame::MyGame(Account_ID_t lpid, Account_ID_t rpid)
 		players[i].health = MAX_HEALTH;
 		players[i].energy = 0;
 		players[i].target = (MAX_PLAYER - 1) - i;	//한 게임의 플레이어 수가 2명 초과일 경우, 플레이어가 직접 타겟을 정할 수 있도록 변경 필요.
+		players[i].result = 0;
 	}
 	players[0].id = lpid;
 	players[1].id = rpid;
@@ -42,6 +43,8 @@ int MyGame::Connect(Account_ID_t id, std::shared_ptr<MyClientSocket> socket)
 				existing->Close();
 			}
 			cv.notify_all();
+			if(players[i].result != 0)	//초기값이 아닌 경우 이미 게임이 종료된 것.
+				return -1;
 			return i;
 		}
 	}
@@ -64,7 +67,8 @@ void MyGame::Action(int side, int action)
 	if(!CheckAction(action))	//유효하지 않은 행동.
 		return;
 	ulock lk(mtx);
-	players[side].action = action;
+	if(required_energy.at(action) <= players[side].energy)
+		players[side].action = action;
 }
 
 int MyGame::GetWinner()
@@ -102,7 +106,7 @@ void MyGame::Work()
 	{
 		ulock lk(mtx);
 		cv.wait(lk, isAllIn);
-		SendAll(MyBytes::Create<byte>(GAME_PLAYER_ALL_CONNECTED));
+		SendAll(MyBytes::Create<byte>(GAME_PLAYER_ALL_CONNECTED) + MyBytes::Create<int>(-1));
 	}
 
 	//실제 플레이 내용
@@ -121,14 +125,26 @@ void MyGame::Work()
 				isGameOver = true;
 				if(now_round <= DODGE_ROUND || GetWinner() < 0)	//일정 라운드 이내거나 둘다 연결이 종료되면 무효. 그 외엔 나간 쪽이 loose
 				{
-					SendAll(MyBytes::Create<byte>(GAME_CRASHED));
+					for(int i = 0;i<MAX_PLAYER;i++)
+						players[i].result = GAME_CRASHED;
 					return;
 				}
+				break;	//여기서 나가면 접속해있는 쪽에 win을 주게 된다.
 			}
 			else
 			{
-				SendAll(MyBytes::Create<byte>(GAME_PLAYER_ALL_CONNECTED));	//사용자들에게 경기재개 패킷을 보낸 뒤
-				now_round--;		//해당 라운드를 무효 한다.
+				now_round--;		//해당 라운드를 무효 한 뒤,
+
+				MyBytes result = MyBytes::Create<byte>(GAME_PLAYER_ALL_CONNECTED);	//사용자들에게 경기재개 패킷과
+				result.push<int>(now_round);	//이전 라운드의 결과를 보내준다.
+
+				if(now_round >= 0)	//최초 라운드는 결과를 보내지 않는다.(아직 진행된 내용이 없으므로)
+				{
+					for(int i = 0;i<MAX_PLAYER;i++)
+						players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
+					for(int i = 0;i<MAX_PLAYER;i++)
+						players[i].action = MEDITATE;
+				}
 			}
 		}
 		else
@@ -176,13 +192,13 @@ void MyGame::Work()
 	{
 		MyLogger::log("DB Error : " + std::string(e.base().what()), MyLogger::LogType::error);
 		SendAll(MyBytes::Create<byte>(ERR_DB_FAILED));
-		throw;
+		std::rethrow_exception(std::current_exception());
 	}
 	catch(const std::exception &e)
 	{
 		MyLogger::log("Error : " + std::string(e.what()), MyLogger::LogType::error);
 		SendAll(MyBytes::Create<byte>(ERR_DB_FAILED));
-		throw;
+		std::rethrow_exception(std::current_exception());
 	}
 
 	//결과에 따라 승/패가 나뉘기 때문에 SendAll()로 보낼 수 없어, 따로 보냄.

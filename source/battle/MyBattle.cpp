@@ -20,6 +20,7 @@ void MyBattle::Open()
 
 void MyBattle::Close()
 {
+	gamepool.Stop();
 	poolManager.stop();
 	connector_match.Disconnect();
 	connectee.Close();
@@ -37,7 +38,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	}
 	Hash_t cookie = authenticate->pop<Hash_t>();
 	auto session = cookies.FindRKey(cookie);
-	if(!session)
+	if(!session)	//세션이 match로부터 오지 않는 경우
 	{
 		client->Close();
 		return;
@@ -48,6 +49,13 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 
 	//Game에 접속 보내기.
 	int side = GameSession->Connect(account_id, client);
+	if(side < 0)	//게임이 종료되었거나 올바르지 않은 세션이 올라온 경우
+	{
+		cookies.EraseLKey(account_id);
+		client->Send(MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+		client->Close();
+		return;
+	}
 
 	while(isRunning)
 	{
@@ -161,6 +169,8 @@ void MyBattle::pool_manage(std::shared_ptr<bool> killswitch)
 					continue;
 				auto [id, cookie, _g] = *erase_result;
 				auto socket = player.socket;
+				if(!socket)		//소켓이 nullptr이면 게임 중간에 나간 것이므로 무시.
+					continue;
 
 				MyBytes req = MyBytes::Create<byte>(INQ_COOKIE_TRANSFER);
 				req.push<Account_ID_t>(id);
@@ -179,6 +189,7 @@ void MyBattle::pool_manage(std::shared_ptr<bool> killswitch)
 						match_server_seed = -1;
 						break;
 				}
+
 				MyBytes packet = MyBytes::Create<byte>(player.result);
 				packet.push<Seed_t>(match_server_seed);
 				socket->Send(packet);
@@ -189,5 +200,6 @@ void MyBattle::pool_manage(std::shared_ptr<bool> killswitch)
 		{
 			MyLogger::raise();
 		}
+		//TODO : 중간에 exception이 발생해도 session들을 빼내는 작업이 필요하다.
 	}
 }

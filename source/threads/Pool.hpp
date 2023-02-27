@@ -37,6 +37,7 @@ namespace mylib
 			public:
 				Pool(int);
 				~Pool();
+				void Stop();
 				bool insert(Value);
 				Value WaitForFinish();
 				size_t size() const;

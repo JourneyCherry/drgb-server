@@ -32,7 +32,7 @@ class MyGame : public mylib::threads::PoolElement
 		static constexpr int MAX_HEALTH = 1;
 		static constexpr int MAX_ENERGY = 2;
 		static constexpr int MAX_ROUND = 10;
-		static constexpr int DODGE_ROUND = 3;
+		static constexpr int DODGE_ROUND = 2;
 
 		struct player_info
 		{

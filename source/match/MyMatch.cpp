@@ -25,8 +25,8 @@ void MyMatch::Open()
 
 void MyMatch::Close()
 {
-	connectee.Close();
 	connector_battle.Disconnect();
+	connectee.Close();
 	MyPostgres::Close();
 	MyLogger::log("Match Server Stop", MyLogger::LogType::info);
 }
