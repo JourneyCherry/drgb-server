@@ -35,11 +35,6 @@ void MyThreadExceptInterface::ThrowThreadException()
 	ThrowThreadException(std::current_exception());
 }
 
-void MyThreadExceptInterface::ThrowThreadException(const std::exception &e)
-{
-	ThrowThreadException(std::make_exception_ptr(e));
-}
-
 void MyThreadExceptInterface::ThrowThreadException(std::exception_ptr now_except)
 {
 	if(parent)

@@ -129,9 +129,9 @@ namespace mylib
 				if(function)
 					function(killswitch);
 			}
-			catch(const std::exception& e)
+			catch(...)
 			{
-				exception = std::make_exception_ptr(e);
+				exception = std::current_exception();
 			}
 			(*runswitch) = false;
 			cv->notify_one();	//stop()에 묶인 thread 중 1개만 열어서 tc_thread.join()을 수행하게 한다.

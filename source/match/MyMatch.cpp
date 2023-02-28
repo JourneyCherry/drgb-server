@@ -6,7 +6,6 @@ MyMatch::MyMatch() :
 	t_matchmaker(std::bind(&MyMatch::MatchMake, this, std::placeholders::_1), this),
 	MyServer(MyConfigParser::GetInt("Match1_ClientPort_Web", 54321), MyConfigParser::GetInt("Match1_ClientPort_TCP", 54322))
 {
-
 }
 
 MyMatch::~MyMatch()

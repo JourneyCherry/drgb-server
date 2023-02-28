@@ -85,7 +85,13 @@ void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
 		socklen_t client_addr_len = sizeof(client_addr);
 		int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
 		if (client_fd < 0)
-			throw MyExcepts("MyConnectee::AcceptLoop::accept : " + std::to_string(errno), __STACKINFO__);
+		{
+			int error_code = errno;
+			if(error_code == EINVAL)	//shutdown(socket_fd, SHUT_RDWR)로부터 반환됨.
+				break;
+			else
+				throw MyExcepts("MyConnectee::AcceptLoop::accept : " + std::to_string(error_code), __STACKINFO__);
+		}
 		char authentication_buffer[BUFSIZE];
 		int recvsize = recv(client_fd, authentication_buffer, BUFSIZE, 0);	//TODO : Fail within n seconds.
 		if(recvsize <= 0)

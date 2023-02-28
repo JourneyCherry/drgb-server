@@ -1,6 +1,11 @@
 #include "MyBattle.hpp"
 
-MyBattle::MyBattle() : connectee(this), connector_match(this, MyConfigParser::GetString("Match1_Addr"), MyConfigParser::GetInt("Match1_Port", 52431), "battle"), gamepool(MAX_GAME), poolManager(std::bind(&MyBattle::pool_manage, this, std::placeholders::_1), this, false), MyServer(MyConfigParser::GetInt("Battle1_ClientPort_Web", 54321), MyConfigParser::GetInt("Battle1_ClientPort_TCP", 54322))
+MyBattle::MyBattle() : 
+	connectee(this), 
+	connector_match(this, MyConfigParser::GetString("Match1_Addr"), MyConfigParser::GetInt("Match1_Port", 52431), "battle"), 
+	gamepool(MAX_GAME), 
+	poolManager(std::bind(&MyBattle::pool_manage, this, std::placeholders::_1), this, false), 
+	MyServer(MyConfigParser::GetInt("Battle1_ClientPort_Web", 54321), MyConfigParser::GetInt("Battle1_ClientPort_TCP", 54322))
 {
 }
 
@@ -152,6 +157,8 @@ void MyBattle::pool_manage(std::shared_ptr<bool> killswitch)
 		try
 		{
 			auto result = gamepool.WaitForFinish();
+			if(result == nullptr)	//null이 오면 gamepool이 멈춤 + queue가 비어있다는 소리이므로 종료 필요.
+				break;
 
 			MyGame *game = dynamic_cast<MyGame*>(result.get());	//바로 윗줄의 result가 shared_ptr의 형태이므로, 소유권을 여기서 가질 수 있다.
 			std::queue<MyGame::player_info> players;
