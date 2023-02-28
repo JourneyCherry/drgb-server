@@ -5,7 +5,10 @@
 #include <stdexcept>
 #include "MyTypes.hpp"
 
-class MyBytes
+namespace mylib{
+namespace utils{
+
+class ByteQueue
 {
 	private:
 		static bool g_isLittleEndian;
@@ -14,18 +17,18 @@ class MyBytes
 		std::vector<byte> bytes;
 		long unsigned int ptr;
 	public:
-		MyBytes();
-		MyBytes(std::vector<byte>);
-		MyBytes(bool);
-		MyBytes(const MyBytes&);
-		MyBytes(const char *, size_t);
-		MyBytes(MyBytes&&) noexcept;
-		MyBytes &operator=(const MyBytes&);	//대입 연산자
-		MyBytes& operator=(MyBytes&&);		//이동 대입 연산자
-		MyBytes operator+(const MyBytes&) const;
+		ByteQueue();
+		ByteQueue(std::vector<byte>);
+		ByteQueue(bool);
+		ByteQueue(const ByteQueue&);
+		ByteQueue(const char *, size_t);
+		ByteQueue(ByteQueue&&) noexcept;
+		ByteQueue &operator=(const ByteQueue&);	//대입 연산자
+		ByteQueue& operator=(ByteQueue&&);		//이동 대입 연산자
+		ByteQueue operator+(const ByteQueue&) const;
 		byte operator[](long unsigned int) const;
-		MyBytes& operator+=(const MyBytes&);
-		~MyBytes();
+		ByteQueue& operator+=(const ByteQueue&);
+		~ByteQueue();
 		template <typename T> void push(T);
 		template <typename T> void push(T, bool);
 		template <typename T> void push_head(T);
@@ -47,18 +50,18 @@ class MyBytes
 		size_t Size() const;
 		size_t Remain();
 		const byte* data();
-		template<typename T> static MyBytes Create(T);
-		MyBytes split(long long int = -1, long long int = -1) const;
+		template<typename T> static ByteQueue Create(T);
+		ByteQueue split(long long int = -1, long long int = -1) const;
 };
 
 template <typename T>
-void MyBytes::push(T data)
+void ByteQueue::push(T data)
 {
 	push<T>(data, defaultEndian);
 }
 
 template <typename T>
-void MyBytes::push(T data, bool endian)
+void ByteQueue::push(T data, bool endian)
 {
 	byte *p = (byte*)&data;
 	unsigned int len = sizeof(T) / sizeof(byte);
@@ -72,13 +75,13 @@ void MyBytes::push(T data, bool endian)
 }
 
 template <typename T>
-void MyBytes::push_head(T data)
+void ByteQueue::push_head(T data)
 {
 	push_head<T>(data, defaultEndian);
 }
 
 template <typename T>
-void MyBytes::push_head(T data, bool endian)
+void ByteQueue::push_head(T data, bool endian)
 {
 	byte *p = (byte*)&data;
 	unsigned int len = sizeof(T) / sizeof(byte);
@@ -92,32 +95,32 @@ void MyBytes::push_head(T data, bool endian)
 }
 
 template <typename T>
-std::vector<T> MyBytes::pops(bool peek)
+std::vector<T> ByteQueue::pops(bool peek)
 {
 	return pops<T>(Remain(), peek, defaultEndian);
 }
 
 template <typename T>
-std::vector<T> MyBytes::pops(bool peek, bool endian)
+std::vector<T> ByteQueue::pops(bool peek, bool endian)
 {
 	return pops<T>(Remain(), peek, endian);
 }
 
 template <typename T>
-std::vector<T> MyBytes::pops(size_t size, bool peek)
+std::vector<T> ByteQueue::pops(size_t size, bool peek)
 {
 	return pops<T>(size, peek, defaultEndian);
 }
 
 template <typename T>
-std::vector<T> MyBytes::pops(size_t size, bool peek, bool endian)
+std::vector<T> ByteQueue::pops(size_t size, bool peek, bool endian)
 {
 	if(size <= 0)
 		size = Remain() - ptr;
 
 	size_t cell = sizeof(T);
 	if(ptr + cell * size > Remain())
-		throw std::out_of_range("MyBytes : Byte Out of Range");
+		throw std::out_of_range("ByteQueue : Byte Out of Range");
 
 	std::vector<T> result;
 	
@@ -148,17 +151,17 @@ std::vector<T> MyBytes::pops(size_t size, bool peek, bool endian)
 }
 
 template <typename T>
-T MyBytes::pop(bool peek)
+T ByteQueue::pop(bool peek)
 {
 	return pop<T>(peek, defaultEndian);
 }
 
 template <typename T>
-T MyBytes::pop(bool peek, bool endian)
+T ByteQueue::pop(bool peek, bool endian)
 {
 	unsigned int len = sizeof(T) / sizeof(byte);
 	if(ptr + len > bytes.size())
-		throw std::out_of_range("MyBytes : Byte Out of Range");
+		throw std::out_of_range("ByteQueue : Byte Out of Range");
 
 	T result;
 	std::vector<byte> b;
@@ -180,10 +183,13 @@ T MyBytes::pop(bool peek, bool endian)
 }
 
 template <typename T>
-MyBytes MyBytes::Create(T data)
+ByteQueue ByteQueue::Create(T data)
 {
-	MyBytes result;
+	ByteQueue result;
 	result.push<T>(data);
 
 	return result;
+}
+
+}
 }

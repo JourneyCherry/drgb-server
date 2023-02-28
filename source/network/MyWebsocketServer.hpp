@@ -16,7 +16,7 @@ class MyWebsocketServer : public MyServerSocket
 		MyWebsocketServer(MyWebsocketServer&&) = delete;
 		~MyWebsocketServer();
 
-		MyExpected<std::shared_ptr<MyClientSocket>, int> Accept() override;
+		Expected<std::shared_ptr<MyClientSocket>, int> Accept() override;
 		void Close() override;
 
 		MyWebsocketServer& operator=(const MyWebsocketServer&) = delete;

@@ -6,7 +6,7 @@ std::unique_ptr<pqxx::connection> MyPostgres::db_c = nullptr;
 MyPostgres::MyPostgres()
 {
 	if(!isRunning)
-		throw MyExcepts("Postgres is not running", __STACKINFO__);
+		throw StackTraceExcept("Postgres is not running", __STACKINFO__);
 	db_w = std::make_unique<pqxx::work>(*db_c);
 }
 
@@ -35,13 +35,13 @@ bool MyPostgres::isOpened()
 
 void MyPostgres::Open()
 {
-	int retry = MyConfigParser::GetInt("DBRetryCount", 5);
-	int wait_sec = MyConfigParser::GetInt("DBRetryDelaySec", 1);
-	std::string hostname = MyConfigParser::GetString("DBAddr");
-	std::string dbname = MyConfigParser::GetString("DBName");
-	int dbport = MyConfigParser::GetInt("DBPort", 5432);
-	std::string dbuser = MyConfigParser::GetString("DBUser");
-	std::string dbpwd = MyConfigParser::GetString("DBPwd");
+	int retry = ConfigParser::GetInt("DBRetryCount", 5);
+	int wait_sec = ConfigParser::GetInt("DBRetryDelaySec", 1);
+	std::string hostname = ConfigParser::GetString("DBAddr");
+	std::string dbname = ConfigParser::GetString("DBName");
+	int dbport = ConfigParser::GetInt("DBPort", 5432);
+	std::string dbuser = ConfigParser::GetString("DBUser");
+	std::string dbpwd = ConfigParser::GetString("DBPwd");
 	std::string db_conn_str = "host=" + hostname + " dbname=" + dbname + " user=" + dbuser + " password=" + dbpwd + " port=" + std::to_string(dbport);
 
 	std::exception_ptr tempe;
@@ -54,7 +54,7 @@ void MyPostgres::Open()
 		}
 		catch(pqxx::failure e)
 		{
-			MyLogger::log("DB Connection Failed. Wait for " + std::to_string(wait_sec) + " seconds and Retry...(Remain Try : " + std::to_string(retry) + ")", MyLogger::LogType::info);
+			Logger::log("DB Connection Failed. Wait for " + std::to_string(wait_sec) + " seconds and Retry...(Remain Try : " + std::to_string(retry) + ")", Logger::LogType::info);
 			std::this_thread::sleep_for(std::chrono::seconds(wait_sec));
 			tempe = std::current_exception();
 			if(retry > 0)	retry--;	//retry가 음수면 연결이 될 때 까지 시도한다.
@@ -65,7 +65,7 @@ void MyPostgres::Open()
 
 	if(db_c == nullptr || !db_c->is_open())
 		std::rethrow_exception(tempe);
-	MyLogger::log("DB Connection Success", MyLogger::LogType::info);
+	Logger::log("DB Connection Success", Logger::LogType::info);
 	isRunning = true;
 }
 

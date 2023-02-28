@@ -8,7 +8,10 @@
 #include <map>
 #include <stdexcept>
 
-class MyLogger
+namespace mylib{
+namespace utils{
+
+class Logger
 {
 	public:
 		enum LogType : int
@@ -20,8 +23,8 @@ class MyLogger
 			debug
 		};
 	private:
-		static std::unique_ptr<MyLogger> instance_;
-		static MyLogger* instance();
+		static std::unique_ptr<Logger> instance_;
+		static Logger* instance();
 		static std::map<LogType, int> ports;
 		const static std::string service_name;
 		bool isOpened;
@@ -29,8 +32,8 @@ class MyLogger
 		std::mutex verbose_mtx;
 
 	public:
-		MyLogger();
-		~MyLogger();
+		Logger();
+		~Logger();
 		static void OpenLog(bool = false);
 		static void ConfigPort(LogType, int);
 		static void log(std::string, LogType=LogType::info);
@@ -45,3 +48,6 @@ class MyLogger
 		void log_(std::string, LogType);
 		int GetLogPort(int);
 };
+
+}
+}

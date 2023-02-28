@@ -4,7 +4,10 @@
 #include <fstream>
 #include <functional>
 
-class MyConfigParser
+namespace mylib{
+namespace utils{
+
+class ConfigParser
 {
 	private:
 		static std::unordered_map<std::string, std::string> dict;
@@ -19,3 +22,6 @@ class MyConfigParser
 		static void delete_comment(std::string&);
 		static std::pair<std::string, std::string> split(const std::string&);
 };
+
+}
+}

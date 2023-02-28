@@ -1,18 +1,18 @@
 SET ( LIBS
-	MyBase64
-	MyBytes
+	Encoder
+	ByteQueue
 	#MyCodes
-	MyConfigParser
-	MyCrypto
-	MyDaemoner
-	#MyDeMap
-	MyExcepts
-	#MyExpected
-	MyGetOpt
-	#MyInvoker
-	MyLogger
-	MyMsg
-	MyNotifier
+	ConfigParser
+	Hasher
+	Daemonizer
+	#DeMap
+	StackTraceExcept
+	#Expected
+	GetArg
+	#Invoker
+	Logger
+	PacketProcessor
+	Notifier
 	#MyTypes
 )
 
@@ -20,6 +20,6 @@ FOREACH( LIB IN LISTS LIBS )
 	ADD_LIBRARY( ${LIB} ${LIB}.cpp ${LIB}.hpp )
 ENDFOREACH()
 
-TARGET_LINK_LIBRARIES ( MyCrypto PUBLIC crypto )
-TARGET_LINK_LIBRARIES ( MyGetOpt PUBLIC MyExcepts )
-TARGET_LINK_LIBRARIES ( MyExcepts PUBLIC MyLogger )
+TARGET_LINK_LIBRARIES ( Hasher PUBLIC crypto )
+TARGET_LINK_LIBRARIES ( GetArg PUBLIC StackTraceExcept )
+TARGET_LINK_LIBRARIES ( StackTraceExcept PUBLIC Logger )

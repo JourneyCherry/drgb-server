@@ -4,11 +4,7 @@
 #include <queue>
 #include <cmath>
 #include <memory>
-
-typedef unsigned char byte;
-typedef int32_t Int;
-typedef uint32_t UInt;
-typedef unsigned long long Account_ID_t;
+#include "MyTypes.hpp"
 
 class queue_element
 {

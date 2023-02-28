@@ -62,6 +62,6 @@ class MyGame : public mylib::threads::PoolElement
 		void Work() override;
 		bool process();
 		bool CheckAction(int);
-		void SendAll(MyBytes);	//같은 패킷 보낼때 씀.
-		MyBytes GetPlayerByte(const struct player_info&);
+		void SendAll(ByteQueue);	//같은 패킷 보낼때 씀.
+		ByteQueue GetPlayerByte(const struct player_info&);
 };

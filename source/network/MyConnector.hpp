@@ -7,10 +7,18 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include "MyInvoker.hpp"
-#include "MyMsg.hpp"
+#include "Invoker.hpp"
+#include "PacketProcessor.hpp"
 #include "Thread.hpp"
-#include "MyExcepts.hpp"
+#include "StackTraceExcept.hpp"
+
+using mylib::utils::ByteQueue;
+using mylib::utils::StackTraceExcept;
+using mylib::utils::PacketProcessor;
+using mylib::utils::Logger;
+using mylib::utils::Invoker;
+using mylib::threads::Thread;
+using mylib::threads::ThreadExceptHandler;
 
 class MyConnector
 {
@@ -19,10 +27,9 @@ class MyConnector
 		int target_port;
 	
 	private:
-		using Thread = mylib::threads::Thread;
 
 		bool isRunning;
-		MyCommon::Invoker<bool> isConnected;
+		Invoker<bool> isConnected;
 
 		int socket_fd;
 		struct sockaddr_in addr;
@@ -32,7 +39,7 @@ class MyConnector
 	
 		Thread t_conn;
 		Thread t_recv;
-		MyMsg recvbuffer;
+		PacketProcessor recvbuffer;
 
 	protected:
 		std::string keyword;
@@ -42,9 +49,9 @@ class MyConnector
 		void RecvLoop(std::shared_ptr<bool>);
 
 	public:
-		MyConnector(MyThreadExceptInterface*, std::string, int, std::string);
+		MyConnector(ThreadExceptHandler*, std::string, int, std::string);
 		virtual ~MyConnector();
 		void Connect();
 		void Disconnect();
-		MyBytes Request(MyBytes);
+		ByteQueue Request(ByteQueue);
 };

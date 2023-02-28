@@ -1,23 +1,26 @@
-#include "MyLogger.hpp"
+#include "Logger.hpp"
 
-std::unique_ptr<MyLogger> MyLogger::instance_ = nullptr;
-std::map<MyLogger::LogType, int> MyLogger::ports;
-const std::string MyLogger::service_name = "drgb";
-MyLogger* MyLogger::instance()
+namespace mylib{
+namespace utils{
+
+std::unique_ptr<Logger> Logger::instance_ = nullptr;
+std::map<Logger::LogType, int> Logger::ports;
+const std::string Logger::service_name = "drgb";
+Logger* Logger::instance()
 {
 	if(instance_ == nullptr)
-		instance_ = std::make_unique<MyLogger>();
+		instance_ = std::make_unique<Logger>();
 	return instance_.get();
 }
 
-std::string MyLogger::strerrno(int num)
+std::string Logger::strerrno(int num)
 {
 	char *str = std::strerror(num);
 	int len = std::strlen(str);
 	return std::string(str, len) +  "(" + std::to_string(num) + ")";
 }
 
-MyLogger::MyLogger()
+Logger::Logger()
 {
 	static const LogType All[] = {default_type, info, auth, error, debug};
 	for(LogType t : All)
@@ -25,20 +28,20 @@ MyLogger::MyLogger()
 	isOpened = false;
 }
 
-MyLogger::~MyLogger()
+Logger::~Logger()
 {
 	if(isOpened)
 		closelog();
 }
 
-void MyLogger::OpenLog(bool _verbose){instance()->OpenLog_(_verbose);}
-void MyLogger::ConfigPort(LogType type, int port){instance()->ConfigPort_(type, port);}
-void MyLogger::log(std::string content, LogType type){instance()->log_(content, type);}
-void MyLogger::raise()
+void Logger::OpenLog(bool _verbose){instance()->OpenLog_(_verbose);}
+void Logger::ConfigPort(LogType type, int port){instance()->ConfigPort_(type, port);}
+void Logger::log(std::string content, LogType type){instance()->log_(content, type);}
+void Logger::raise()
 {
 	raise(std::current_exception());
 }
-void MyLogger::raise(std::exception_ptr e)
+void Logger::raise(std::exception_ptr e)
 {
 #ifdef __DEBUG__
 	std::rethrow_exception(e);
@@ -54,7 +57,7 @@ void MyLogger::raise(std::exception_ptr e)
 	}
 #endif
 }
-MyLogger::LogType MyLogger::GetType(std::string name)
+Logger::LogType Logger::GetType(std::string name)
 {
 	if(name == "default")	return default_type;
 	if(name == "info")	return info;
@@ -64,7 +67,7 @@ MyLogger::LogType MyLogger::GetType(std::string name)
 	return default_type;
 }
 
-void MyLogger::OpenLog_(bool _verbose)
+void Logger::OpenLog_(bool _verbose)
 {
 	isVerbose = _verbose;
 
@@ -77,14 +80,14 @@ void MyLogger::OpenLog_(bool _verbose)
 			ConfigPort_(p.first, p.second);
 	}
 		
-	MyLogger::ports[default_type] |= LOG_INFO;
+	Logger::ports[default_type] |= LOG_INFO;
 
 	openlog(service_name.c_str(), LOG_PID, ports[default_type]);
 	
 	isOpened = true;
 }
 
-void MyLogger::ConfigPort_(LogType type, int port)
+void Logger::ConfigPort_(LogType type, int port)
 {
 	int tp = GetLogPort(port);	//Target Port
 	if(port <= 0)
@@ -110,7 +113,7 @@ void MyLogger::ConfigPort_(LogType type, int port)
 	ports[type] = tp;
 }
 
-void MyLogger::log_(std::string content, LogType type)
+void Logger::log_(std::string content, LogType type)
 {
 	if(isVerbose)
 	{
@@ -127,9 +130,12 @@ void MyLogger::log_(std::string content, LogType type)
 	syslog(ports[type], "%s", content.c_str());
 }
 
-int MyLogger::GetLogPort(int port)
+int Logger::GetLogPort(int port)
 {
 	if(port < 0 || port > 7)
 		port = 0;
 	return ((port + 16) << 3);	//(16<<3) == LOG_LOCAL0
+}
+
+}
 }

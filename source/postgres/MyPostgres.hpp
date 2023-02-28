@@ -4,8 +4,12 @@
 #include <memory>
 #include <thread>
 #include <chrono>
-#include "MyConfigParser.hpp"
-#include "MyExcepts.hpp"
+#include "ConfigParser.hpp"
+#include "StackTraceExcept.hpp"
+
+using mylib::utils::ConfigParser;
+using mylib::utils::StackTraceExcept;
+using mylib::utils::Logger;
 
 class MyPostgres
 {

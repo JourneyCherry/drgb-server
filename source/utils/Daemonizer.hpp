@@ -7,10 +7,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fstream>
-#include "MyExcepts.hpp"
+#include "StackTraceExcept.hpp"
 
-namespace MyCommon
-{
-	bool Daemonizer();
-	void Create_PidFile(std::string);
+namespace mylib{
+namespace utils{
+
+bool Daemonizer();
+void Create_PidFile(std::string);
+
+}
 }

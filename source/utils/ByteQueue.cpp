@@ -1,20 +1,23 @@
-#include "MyBytes.hpp"
+#include "ByteQueue.hpp"
 
-bool MyBytes::g_isLittleEndian = MyBytes::isLittleEndianSystem();
+namespace mylib{
+namespace utils{
 
-bool MyBytes::isLittleEndianSystem()
+bool ByteQueue::g_isLittleEndian = ByteQueue::isLittleEndianSystem();
+
+bool ByteQueue::isLittleEndianSystem()
 {
 	int num = 1;
 	return (((unsigned char*)(&num))[0] == 1);
 }
 
-MyBytes::MyBytes()
+ByteQueue::ByteQueue()
 {
 	defaultEndian = g_isLittleEndian;
 	ptr = 0;
 }
 
-MyBytes::MyBytes(std::vector<byte> bstream)
+ByteQueue::ByteQueue(std::vector<byte> bstream)
 {
 	int len = bstream.size();
 	for(int i = 0;i<len;i++)
@@ -23,13 +26,13 @@ MyBytes::MyBytes(std::vector<byte> bstream)
 	ptr = 0;
 }
 
-MyBytes::MyBytes(bool endian)
+ByteQueue::ByteQueue(bool endian)
 {
 	defaultEndian = endian;
 	ptr = 0;
 }
 
-MyBytes::MyBytes(const char *buf, size_t size)
+ByteQueue::ByteQueue(const char *buf, size_t size)
 {
 	defaultEndian = g_isLittleEndian;
 	for(int i = 0;i<size;i++)
@@ -37,14 +40,14 @@ MyBytes::MyBytes(const char *buf, size_t size)
 	ptr = 0;
 }
 
-MyBytes::MyBytes(const MyBytes& copy)
+ByteQueue::ByteQueue(const ByteQueue& copy)
 {
 	defaultEndian = copy.defaultEndian;
 	ptr = copy.ptr;
 	bytes = copy.bytes;
 }
 
-MyBytes::MyBytes(MyBytes&& move) noexcept
+ByteQueue::ByteQueue(ByteQueue&& move) noexcept
 {
 	defaultEndian = move.defaultEndian;
 	ptr = move.ptr;
@@ -54,7 +57,7 @@ MyBytes::MyBytes(MyBytes&& move) noexcept
 	move.bytes.clear();
 }
 
-MyBytes &MyBytes::operator=(const MyBytes& copy)
+ByteQueue &ByteQueue::operator=(const ByteQueue& copy)
 {
 	defaultEndian = copy.defaultEndian;
 	ptr = copy.ptr;
@@ -63,7 +66,7 @@ MyBytes &MyBytes::operator=(const MyBytes& copy)
 	return *this;
 }
 
-MyBytes& MyBytes::operator=(MyBytes&& move)
+ByteQueue& ByteQueue::operator=(ByteQueue&& move)
 {
 	defaultEndian = move.defaultEndian;
 	ptr = move.ptr;
@@ -75,49 +78,49 @@ MyBytes& MyBytes::operator=(MyBytes&& move)
 	return *this;
 }
 
-MyBytes MyBytes::operator+(const MyBytes& adder) const
+ByteQueue ByteQueue::operator+(const ByteQueue& adder) const
 {
-	MyBytes result(*this);
+	ByteQueue result(*this);
 	result.bytes.insert(result.bytes.end(), adder.bytes.begin(), adder.bytes.end());
 
 	return result;
 }
 
-byte MyBytes::operator[](long unsigned int index) const
+byte ByteQueue::operator[](long unsigned int index) const
 {
 	if(index < 0 || index >= bytes.size())
-		throw std::out_of_range("MyBytes::operator[long unsigned int] : Byte Out of Range");
+		throw std::out_of_range("ByteQueue::operator[long unsigned int] : Byte Out of Range");
 	return bytes[index];
 }
 
-MyBytes& MyBytes::operator+=(const MyBytes& adder)
+ByteQueue& ByteQueue::operator+=(const ByteQueue& adder)
 {
 	this->bytes.insert(this->bytes.end(), adder.bytes.begin(), adder.bytes.end());
 
 	return *this;
 }
 
-MyBytes::~MyBytes()
+ByteQueue::~ByteQueue()
 {
 	ptr = 0;
 	bytes.clear();
 }
 
-void MyBytes::push(const byte* datas, int len)
+void ByteQueue::push(const byte* datas, int len)
 {
 	for(int i = 0;i<len;i++)
 		bytes.push_back(datas[i]);
 }
 
-std::string MyBytes::popstr(bool peek)
+std::string ByteQueue::popstr(bool peek)
 {
 	return popstr(Remain(), peek);
 }
 
-std::string MyBytes::popstr(size_t len, bool peek)
+std::string ByteQueue::popstr(size_t len, bool peek)
 {
 	if(ptr + len > bytes.size())
-		throw std::out_of_range("MyBytes::pop(int) : Byte Out of Range");
+		throw std::out_of_range("ByteQueue::pop(int) : Byte Out of Range");
 
 	std::vector<byte> bstream;
 
@@ -132,20 +135,20 @@ std::string MyBytes::popstr(size_t len, bool peek)
 	return result;
 }
 
-void MyBytes::SetEndian(bool endian)
+void ByteQueue::SetEndian(bool endian)
 {
 	defaultEndian = endian;
 }
 
-void MyBytes::Next(int len)
+void ByteQueue::Next(int len)
 {
 	if(ptr + len > bytes.size())
-		throw std::out_of_range("MyBytes::Next(int) : Byte Out of Range");
+		throw std::out_of_range("ByteQueue::Next(int) : Byte Out of Range");
 
 	ptr += len;
 }
 
-void MyBytes::Prev(int len)
+void ByteQueue::Prev(int len)
 {
 	if(len < 0)
 		ptr = 0;
@@ -153,35 +156,35 @@ void MyBytes::Prev(int len)
 		ptr = std::max(ptr - len, (long unsigned int)0);
 }
 
-void MyBytes::Reset()
+void ByteQueue::Reset()
 {
 	ptr = 0;
 }
 
-void MyBytes::Clear()
+void ByteQueue::Clear()
 {
 	Reset();
 	bytes.clear();
 }
 
-size_t MyBytes::Size() const
+size_t ByteQueue::Size() const
 {
 	return bytes.size();
 }
 
-size_t MyBytes::Remain()
+size_t ByteQueue::Remain()
 {
 	return bytes.size() - ptr;
 }
 
-const byte* MyBytes::data()
+const byte* ByteQueue::data()
 {
 	return bytes.data();
 }
 
-MyBytes MyBytes::split(long long int start, long long int end) const
+ByteQueue ByteQueue::split(long long int start, long long int end) const
 {
-	MyBytes result;
+	ByteQueue result;
 	if(start < 0 || start >= bytes.size())
 		start = ptr;
 	if(end < 0 || end >= bytes.size())
@@ -191,4 +194,7 @@ MyBytes MyBytes::split(long long int start, long long int end) const
 	result.ptr = ptr - start;
 
 	return result;
+}
+
+}
 }

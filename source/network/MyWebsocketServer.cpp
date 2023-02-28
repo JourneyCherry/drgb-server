@@ -10,7 +10,7 @@ MyWebsocketServer::~MyWebsocketServer()
 	Close();
 }
 
-MyExpected<std::shared_ptr<MyClientSocket>, int> MyWebsocketServer::Accept()
+Expected<std::shared_ptr<MyClientSocket>, int> MyWebsocketServer::Accept()
 {
 	try
 	{

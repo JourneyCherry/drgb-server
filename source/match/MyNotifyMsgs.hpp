@@ -1,6 +1,8 @@
 #pragma once
-#include "MyBytes.hpp"
-#include "MyNotifier.hpp"
+#include "ByteQueue.hpp"
+#include "Notifier.hpp"
+
+using mylib::utils::MyNotifyTarget;
 
 class MyDisconnectMessage : public MyNotifyTarget
 {
@@ -15,8 +17,8 @@ class MyClientMessage : public MyNotifyTarget
 {
 	public:
 		static constexpr int Message_ID = 1;
-		MyBytes message;
-		MyClientMessage(MyBytes data) : message(data){}
+		ByteQueue message;
+		MyClientMessage(ByteQueue data) : message(data){}
 		~MyClientMessage() = default;
 		int Type() override { return Message_ID;}
 };

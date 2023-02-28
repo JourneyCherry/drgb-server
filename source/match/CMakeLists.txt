@@ -19,10 +19,10 @@ TARGET_LINK_LIBRARIES ( MyMatch PUBLIC
 	MyServer
 	MyConnectee
 	MyConnector
-	MyConfigParser
+	ConfigParser
 	#MyCodes	#Header-Only
 	MyMatchMaker
-	MyNotifier
+	Notifier
 	MyPostgres
 )
 

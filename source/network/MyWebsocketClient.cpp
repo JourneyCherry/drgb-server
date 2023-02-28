@@ -15,7 +15,7 @@ MyWebsocketClient::MyWebsocketClient(boost::asio::ip::tcp::socket socket) : ws{s
 	if(ec)
 	{
 		Close();
-		throw MyExcepts(std::string(ec.message()) + "(" + std::to_string(ec.value()) + ")", __STACKINFO__);
+		throw StackTraceExcept(std::string(ec.message()) + "(" + std::to_string(ec.value()) + ")", __STACKINFO__);
 	}
 
 	ws.binary(true);
@@ -26,7 +26,7 @@ MyWebsocketClient::~MyWebsocketClient()
 	Close();
 }
 
-MyExpected<MyBytes, int> MyWebsocketClient::Recv()
+Expected<ByteQueue, int> MyWebsocketClient::Recv()
 {
 	if(!ws.is_open())
 		return {-1};
@@ -63,10 +63,10 @@ MyExpected<MyBytes, int> MyWebsocketClient::Recv()
 	return recvbuffer.GetMsg();
 }
 
-MyExpected<int> MyWebsocketClient::Send(MyBytes bytes)
+Expected<int> MyWebsocketClient::Send(ByteQueue bytes)
 {
 
-	MyBytes capsulated = MyMsg::enpackage(bytes);
+	ByteQueue capsulated = PacketProcessor::enpackage(bytes);
 	boost::asio::const_buffer buffer(capsulated.data(), capsulated.Size());
 	boost::beast::error_code ec;
 
@@ -94,6 +94,6 @@ void MyWebsocketClient::Close()
 		)
 			return;
 		if(ec)
-			throw MyExcepts(std::string(ec.message()) + "(" + std::to_string(ec.value()) + ")", __STACKINFO__);
+			throw StackTraceExcept(std::string(ec.message()) + "(" + std::to_string(ec.value()) + ")", __STACKINFO__);
 	}
 }

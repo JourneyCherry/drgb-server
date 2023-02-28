@@ -5,11 +5,13 @@
 #include "MyServer.hpp"
 #include "MyGame.hpp"
 #include "MyCodes.hpp"
-#include "MyDeMap.hpp"
+#include "DeMap.hpp"
 #include "MyConnector.hpp"
 #include "MyConnectee.hpp"
 #include "Pool.hpp"
 #include "Thread.hpp"
+
+using mylib::utils::DeMap;
 
 class MyBattle : public MyServer
 {
@@ -20,7 +22,7 @@ class MyBattle : public MyServer
 		MyConnectee connectee;
 		MyConnector connector_match;
 
-		MyDeMap<Account_ID_t, Hash_t, std::shared_ptr<MyGame>> cookies;
+		DeMap<Account_ID_t, Hash_t, std::shared_ptr<MyGame>> cookies;
 		mylib::threads::Thread poolManager;
 		mylib::threads::Pool gamepool;
 	
@@ -32,6 +34,6 @@ class MyBattle : public MyServer
 		void ClientProcess(std::shared_ptr<MyClientSocket>) override;
 
 	private:
-		MyBytes BattleInquiry(MyBytes);
+		ByteQueue BattleInquiry(ByteQueue);
 		void pool_manage(std::shared_ptr<bool>);
 };

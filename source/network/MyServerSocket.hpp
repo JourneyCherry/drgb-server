@@ -1,7 +1,9 @@
 #pragma once
 #include <memory>
-#include "MyExpected.hpp"
+#include "Expected.hpp"
 #include "MyClientSocket.hpp"
+
+using mylib::utils::Expected;
 
 class MyServerSocket
 {
@@ -17,6 +19,6 @@ class MyServerSocket
 		MyServerSocket& operator=(const MyServerSocket&) = delete;
 		MyServerSocket& operator=(MyServerSocket&&) = delete;
 
-		virtual MyExpected<std::shared_ptr<MyClientSocket>, int> Accept() = 0;
+		virtual Expected<std::shared_ptr<MyClientSocket>, int> Accept() = 0;
 		virtual void Close() = 0;
 };

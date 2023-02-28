@@ -11,7 +11,7 @@ MyTCPClient::~MyTCPClient()
 	Close();
 }
 
-MyExpected<MyBytes, int> MyTCPClient::Recv()
+Expected<ByteQueue, int> MyTCPClient::Recv()
 {
 	unsigned char buf[BUFSIZE];
 	while(!recvbuffer.isMsgIn())
@@ -30,11 +30,11 @@ MyExpected<MyBytes, int> MyTCPClient::Recv()
 	return recvbuffer.GetMsg();
 }
 
-MyExpected<int> MyTCPClient::Send(MyBytes bytes)
+Expected<int> MyTCPClient::Send(ByteQueue bytes)
 {
 	if(socket_fd < 0)
 		return {-1, false};
-	MyBytes capsulated = MyMsg::enpackage(bytes);
+	ByteQueue capsulated = PacketProcessor::enpackage(bytes);
 	int sendlen = send(socket_fd, capsulated.data(), capsulated.Size(), 0);
 	if(sendlen <= 0)
 		return {sendlen == 0?0:errno, false};

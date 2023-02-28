@@ -2,9 +2,9 @@
 
 MyMatch::MyMatch() : 
 	connectee(this), 
-	connector_battle(this, MyConfigParser::GetString("Battle1_Addr"), MyConfigParser::GetInt("Battle1_Port"), "match"),
+	connector_battle(this, ConfigParser::GetString("Battle1_Addr"), ConfigParser::GetInt("Battle1_Port"), "match"),
 	t_matchmaker(std::bind(&MyMatch::MatchMake, this, std::placeholders::_1), this),
-	MyServer(MyConfigParser::GetInt("Match1_ClientPort_Web", 54321), MyConfigParser::GetInt("Match1_ClientPort_TCP", 54322))
+	MyServer(ConfigParser::GetInt("Match1_ClientPort_Web", 54321), ConfigParser::GetInt("Match1_ClientPort_TCP", 54322))
 {
 }
 
@@ -15,11 +15,11 @@ MyMatch::~MyMatch()
 void MyMatch::Open()
 {
 	MyPostgres::Open();
-	connectee.Open(MyConfigParser::GetInt("Match1_Port"));
+	connectee.Open(ConfigParser::GetInt("Match1_Port"));
 	connectee.Accept("auth", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connectee.Accept("battle", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connector_battle.Connect();
-	MyLogger::log("Match Server Start", MyLogger::LogType::info);
+	Logger::log("Match Server Start", Logger::LogType::info);
 }
 
 void MyMatch::Close()
@@ -27,13 +27,13 @@ void MyMatch::Close()
 	connector_battle.Disconnect();
 	connectee.Close();
 	MyPostgres::Close();
-	MyLogger::log("Match Server Stop", MyLogger::LogType::info);
+	Logger::log("Match Server Stop", Logger::LogType::info);
 }
 
 void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 {
 	Account_ID_t account_id = 0;
-	std::shared_ptr<MyNotifier> noti = nullptr;
+	std::shared_ptr<Notifier> noti = nullptr;
 	// Authentication
 	{
 		auto answer = client->Recv();
@@ -42,7 +42,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			client->Close();
 			if(answer.error() < 0)
 				return;
-			throw MyExcepts("client::recv() error : " + std::to_string(answer.error()), __STACKINFO__);
+			throw StackTraceExcept("client::recv() error : " + std::to_string(answer.error()), __STACKINFO__);
 		}
 		Hash_t cookie = answer->pop<Hash_t>();
 		auto result = sessions.FindRKey(cookie);
@@ -53,13 +53,13 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		}
 		if(account_id <= 0)
 		{
-			client->Send(MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+			client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 			client->Close();
 			return;
 		}
 	}
 
-	noti = std::make_shared<MyNotifier>();
+	noti = std::make_shared<Notifier>();
 	sessions.InsertLKeyValue(account_id, noti);
 	mylib::threads::Thread receiver([&](std::shared_ptr<bool> killswitch)
 	{
@@ -86,7 +86,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		{
 			case MyClientMessage::Message_ID:
 				{
-					MyBytes data = ((MyClientMessage*)message->get())->message;
+					ByteQueue data = ((MyClientMessage*)message->get())->message;
 					//TODO : 클라이언트 메시지 처리
 					byte header = data.pop<byte>();
 					switch(header)
@@ -106,22 +106,22 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 							}
 							catch(const pqxx::pqxx_exception & e)
 							{
-								client->Send(MyBytes::Create<byte>(ERR_DB_FAILED));
+								client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
 								client->Close();
-								throw MyExcepts("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
+								throw StackTraceExcept("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
 							}
 							catch(const std::exception &e)
 							{
-								client->Send(MyBytes::Create<byte>(ERR_DB_FAILED));
+								client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
 								client->Close();
-								throw MyExcepts("DB Failed : " + std::string(e.what()), __STACKINFO__);
+								throw StackTraceExcept("DB Failed : " + std::string(e.what()), __STACKINFO__);
 							}
 							break;
 						case REQ_PAUSEMATCH:	//매치메이커 큐에서 빼기.
 							matchmaker.Exit(account_id);
 							break;
 						default:
-							client->Send(MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION));
+							client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
 							break;
 					}
 				}
@@ -134,14 +134,14 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			case MyMatchMakerMessage::Message_ID:
 				{
 					int battle_id = ((MyMatchMakerMessage*)message->get())->BattleServer;
-					MyBytes answer = MyBytes::Create<byte>(ANS_MATCHMADE);
+					ByteQueue answer = ByteQueue::Create<byte>(ANS_MATCHMADE);
 					answer.push<int>(battle_id);
 					client->Send(answer);
 					isAnswered = true;
 				}
 				break;
 			default:
-				client->Send(MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION));
+				client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
 				break;
 		}
 	}
@@ -149,7 +149,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	receiver.stop();
 }
 
-MyBytes MyMatch::MatchInquiry(MyBytes bytes)
+ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
 {
 	byte header = bytes.pop<byte>();
 	switch(header)
@@ -163,7 +163,7 @@ MyBytes MyMatch::MatchInquiry(MyBytes bytes)
 					auto cookie = sessions.FindLKey(account_id);
 					if(cookie)
 					{
-						MyBytes answer = MyBytes::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
+						ByteQueue answer = ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
 						answer.push<Hash_t>(cookie->first);
 						answer.push<Seed_t>(MACHINE_ID);
 						return answer;
@@ -172,14 +172,14 @@ MyBytes MyMatch::MatchInquiry(MyBytes bytes)
 
 				//battle 서버에 요청하여 cookie 찾기.	//TODO : 추후, battle 서버가 늘어날 경우, 모든 battle서버에 요청하도록 변경 필요.
 				{
-					MyBytes query = MyBytes::Create<byte>(INQ_ACCOUNT_CHECK);
+					ByteQueue query = ByteQueue::Create<byte>(INQ_ACCOUNT_CHECK);
 					query.push<Account_ID_t>(account_id);
-					MyBytes answer = connector_battle.Request(query);
+					ByteQueue answer = connector_battle.Request(query);
 					byte query_header = answer.pop<byte>();
 					switch(query_header)
 					{
 						case ERR_NO_MATCH_ACCOUNT:
-							return MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT);
+							return ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT);
 						case ERR_EXIST_ACCOUNT_BATTLE:	//쿠키와 몇번 배틀서버인지(unsigned int)는 뒤에 붙어있다.
 						case ERR_OUT_OF_CAPACITY:		//서버 접속 불가. 단일 byte.
 							return answer;
@@ -193,15 +193,15 @@ MyBytes MyMatch::MatchInquiry(MyBytes bytes)
 				Hash_t cookie = bytes.pop<Hash_t>();
 
 				if(sessions.Size() >= MAX_CLIENTS)
-					return MyBytes::Create<byte>(ERR_OUT_OF_CAPACITY);
+					return ByteQueue::Create<byte>(ERR_OUT_OF_CAPACITY);
 				
 				if(!sessions.Insert(account_id, cookie, nullptr))
-					return MyBytes::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
+					return ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
 			}
-			return MyBytes::Create<byte>(SUCCESS);
+			return ByteQueue::Create<byte>(SUCCESS);
 	}
 
-	return MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION);
+	return ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 }
 
 void MyMatch::MatchMake(std::shared_ptr<bool> killswitch)
@@ -223,8 +223,8 @@ void MyMatch::MatchMake(std::shared_ptr<bool> killswitch)
 			auto rpresult = sessions.FindLKey(rpid);
 			Hash_t lpcookie;
 			Hash_t rpcookie;
-			std::shared_ptr<MyNotifier> lpnotifier;
-			std::shared_ptr<MyNotifier> rpnotifier;
+			std::shared_ptr<Notifier> lpnotifier;
+			std::shared_ptr<Notifier> rpnotifier;
 			if(lpresult)
 			{
 				lpcookie = lpresult->first;
@@ -239,7 +239,7 @@ void MyMatch::MatchMake(std::shared_ptr<bool> killswitch)
 			if(lpresult && rpresult)	//둘다 정상접속 상태이면
 			{
 				//battle서버에 battle 등록.
-				MyBytes req = MyBytes::Create<byte>(INQ_MATCH_TRANSFER);
+				ByteQueue req = ByteQueue::Create<byte>(INQ_MATCH_TRANSFER);
 				req.push<Account_ID_t>(lpid);
 				req.push<Hash_t>(sessions.FindLKey(lpid)->first);
 				req.push<Account_ID_t>(rpid);
@@ -247,7 +247,7 @@ void MyMatch::MatchMake(std::shared_ptr<bool> killswitch)
 				
 				{
 					int battle_server = 1;	//TODO : 모든 Battle 서버에 쿼리 날려보기. battle서버가 늘어날 경우, 해당 서버 번호를 넣어야 한다.
-					MyBytes ans = connector_battle.Request(req);
+					ByteQueue ans = connector_battle.Request(req);
 					byte result = ans.pop<byte>();
 					if(result == SUCCESS)
 					{
@@ -260,7 +260,7 @@ void MyMatch::MatchMake(std::shared_ptr<bool> killswitch)
 					}
 					else	//battle서버에서 매치 전달에 실패한 경우
 					{
-						MyLogger::raise(std::make_exception_ptr(MyExcepts("Battle Server Cannot Accept Battle : " + std::to_string(result), __STACKINFO__)));
+						Logger::raise(std::make_exception_ptr(StackTraceExcept("Battle Server Cannot Accept Battle : " + std::to_string(result), __STACKINFO__)));
 						break;	//TODO : 다른 가용 battle서버를 찾아야 한다.
 					}
 				}

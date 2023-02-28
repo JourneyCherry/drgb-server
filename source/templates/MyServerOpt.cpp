@@ -13,7 +13,7 @@ struct option MyServerOpt::long_options[] =
 MyServerOpt::MyServerOpt(int argc, char *argv[])
 {
 	ClearOpt();
-	GetOpt(argc, argv);
+	GetArgs(argc, argv);
 }
 
 void MyServerOpt::ClearOpt()
@@ -25,7 +25,7 @@ void MyServerOpt::ClearOpt()
 	verbose_flag = false;
 }
 
-void MyServerOpt::GetOpt(int argc, char *argv[])
+void MyServerOpt::GetArgs(int argc, char *argv[])
 {
 	int option_index = 0;
 	int c = 0;
@@ -46,21 +46,21 @@ void MyServerOpt::GetOpt(int argc, char *argv[])
 			case 'L':
 				{
 					if(!optarg)
-						throw MyExcepts("There is no Argument : " + std::string(argv[optind-1]), __STACKINFO__);
+						throw StackTraceExcept("There is no Argument : " + std::string(argv[optind-1]), __STACKINFO__);
 					std::string var, value;
 					if(!splitarg(optarg, std::ref(var), std::ref(value)))
-						throw MyExcepts("Parse Failed : " + std::string(argv[optind-1]), __STACKINFO__);
+						throw StackTraceExcept("Parse Failed : " + std::string(argv[optind-1]), __STACKINFO__);
 					int port = std::atoi(value.c_str());
-					MyLogger::ConfigPort(MyLogger::GetType(var), port);
+					Logger::ConfigPort(Logger::GetType(var), port);
 				}
 				break;
 			case 'v':
 				verbose_flag = true;
 				break;
 			case '?':
-				throw MyExcepts("Unknown Argument : " + std::string(argv[optind-1]), __STACKINFO__);
+				throw StackTraceExcept("Unknown Argument : " + std::string(argv[optind-1]), __STACKINFO__);
 			default:
-				throw MyExcepts("getopt_long gets error(" + std::to_string(c) + ") : " + std::string(argv[optind-1]), __STACKINFO__);
+				throw StackTraceExcept("getopt_long gets error(" + std::to_string(c) + ") : " + std::string(argv[optind-1]), __STACKINFO__);
 		}
 	}
 }

@@ -2,21 +2,25 @@
 #include <memory>
 #include <mutex>
 #include <condition_variable>
-#include "MyBytes.hpp"
+#include "ByteQueue.hpp"
 #include "MyWebsocketServer.hpp"
 #include "MyWebsocketClient.hpp"
 #include "MyTCPServer.hpp"
 #include "MyTCPClient.hpp"
 #include "Thread.hpp"
 
-class MyServer : public MyThreadExceptInterface
+using mylib::threads::ThreadExceptHandler;
+using mylib::threads::Thread;
+using mylib::utils::Logger;
+using mylib::utils::StackTraceExcept;
+
+class MyServer : public ThreadExceptHandler
 {
 	protected:
 		bool isRunning;
 		static constexpr int MAX_CLIENTS = 5;		//최대 수용 가능 클라이언트 수. //TODO : 추후 확장 필요.
 
 	private:
-		using Thread = mylib::threads::Thread;
 
 		static constexpr int MAX_SOCKET = 2;
 		std::array<std::shared_ptr<MyServerSocket>, MAX_SOCKET> sockets;

@@ -1,6 +1,6 @@
 #include "MyConnectee.hpp"
 
-MyConnectee::MyConnectee(MyThreadExceptInterface *parent)
+MyConnectee::MyConnectee(ThreadExceptHandler *parent)
  : t_accept(std::bind(&MyConnectee::AcceptLoop, this, std::placeholders::_1), parent, false)
 {
 	server_fd = -1;
@@ -43,12 +43,12 @@ void MyConnectee::Close()
 	t_accept.stop();//TODO : t_accept.exception 처리
 }
 
-void MyConnectee::Accept(std::string keyword, std::function<MyBytes(MyBytes)> process)
+void MyConnectee::Accept(std::string keyword, std::function<ByteQueue(ByteQueue)> process)
 {
 	if(!server_fd.wait([](int fd){return fd >= 0;}))
-		throw MyExcepts("MyConnectee::Accept : server_fd is not opened", __STACKINFO__);
-	std::shared_ptr<MyCommon::Invoker<int>> sfd = std::make_shared<MyCommon::Invoker<int>>(-1);
-	std::pair<std::shared_ptr<Thread>, std::shared_ptr<MyCommon::Invoker<int>>> p = {std::make_shared<Thread>(std::bind(&MyConnectee::ClientLoop, this, keyword, sfd, process, std::placeholders::_1)), sfd};
+		throw StackTraceExcept("MyConnectee::Accept : server_fd is not opened", __STACKINFO__);
+	std::shared_ptr<Invoker<int>> sfd = std::make_shared<Invoker<int>>(-1);
+	std::pair<std::shared_ptr<Thread>, std::shared_ptr<Invoker<int>>> p = {std::make_shared<Thread>(std::bind(&MyConnectee::ClientLoop, this, keyword, sfd, process, std::placeholders::_1)), sfd};
 	clients.insert({keyword, std::move(p)});
 }
 
@@ -59,18 +59,18 @@ void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
 #endif
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0)
-		throw MyExcepts("MyConnectee::Open()::socket() Failed : " + std::to_string(errno), __STACKINFO__);
+		throw StackTraceExcept("MyConnectee::Open()::socket() Failed : " + std::to_string(errno), __STACKINFO__);
 	if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const int*)&opt_reuseaddr, sizeof(opt_reuseaddr)) < 0)
-		throw MyExcepts("MyConnectee::Open()::setsockopt() Failed : " + std::to_string(errno), __STACKINFO__);
+		throw StackTraceExcept("MyConnectee::Open()::setsockopt() Failed : " + std::to_string(errno), __STACKINFO__);
 
 	struct sockaddr_in server_addr;
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(port);
 	server_addr.sin_addr.s_addr = INADDR_ANY;
 	if (bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-		throw MyExcepts("MyConnectee::Open()::bind() Failed : " + std::to_string(errno), __STACKINFO__);
+		throw StackTraceExcept("MyConnectee::Open()::bind() Failed : " + std::to_string(errno), __STACKINFO__);
 	if(listen(fd, LISTENSIZE) < 0)
-		throw MyExcepts("MyConnectee::Open()::listen() Failed : " + std::to_string(errno), __STACKINFO__);
+		throw StackTraceExcept("MyConnectee::Open()::listen() Failed : " + std::to_string(errno), __STACKINFO__);
 
 	if(server_fd > 0)
 		shutdown(server_fd, SHUT_RDWR);
@@ -90,7 +90,7 @@ void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
 			if(error_code == EINVAL)	//shutdown(socket_fd, SHUT_RDWR)로부터 반환됨.
 				break;
 			else
-				throw MyExcepts("MyConnectee::AcceptLoop::accept : " + std::to_string(error_code), __STACKINFO__);
+				throw StackTraceExcept("MyConnectee::AcceptLoop::accept : " + std::to_string(error_code), __STACKINFO__);
 		}
 		char authentication_buffer[BUFSIZE];
 		int recvsize = recv(client_fd, authentication_buffer, BUFSIZE, 0);	//TODO : Fail within n seconds.
@@ -104,17 +104,17 @@ void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
 		std::string authenticate = std::string(authentication_buffer, recvsize);
 		if(clients.find(authenticate) == clients.end())
 		{
-			MyLogger::log("Host <- " + authenticate + " Failed(Unknown keyword)");
+			Logger::log("Host <- " + authenticate + " Failed(Unknown keyword)");
 			shutdown(client_fd, SHUT_RDWR);
 			continue;
 		}
 		if((*clients[authenticate].second) >= 0)
 		{
 			//TODO : kill late client? or kick earlier client?
-			MyLogger::log("MyConnectee::AcceptLoop(" + authenticate + ") : there is already connected connector.", MyLogger::LogType::debug);
+			Logger::log("MyConnectee::AcceptLoop(" + authenticate + ") : there is already connected connector.", Logger::LogType::debug);
 		}
-		MyLogger::log("MyConnectee::AcceptLoop(" + authenticate + ") is connected", MyLogger::LogType::debug);
-		MyLogger::log("Host <- " + authenticate + " is Connected");
+		Logger::log("MyConnectee::AcceptLoop(" + authenticate + ") is connected", Logger::LogType::debug);
+		Logger::log("Host <- " + authenticate + " is Connected");
 		(*clients[authenticate].second) = client_fd;
 	}
 	
@@ -124,16 +124,16 @@ void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
 
 void MyConnectee::ClientLoop(
 	std::string keyword, 
-	std::shared_ptr<MyCommon::Invoker<int>> fd, 
-	std::function<MyBytes(MyBytes)> process,
+	std::shared_ptr<Invoker<int>> fd, 
+	std::function<ByteQueue(ByteQueue)> process,
 	std::shared_ptr<bool> killswitch
 )
 {
 #ifdef __DEBUG__
 	pthread_setname_np(pthread_self(), (std::string("ConnecteeLoop_") + keyword).c_str());
 #endif
-	MyMsg recvbuffer;
-	MyLogger::log("MyConnectee::AcceptLoop(" + keyword + ") waits for connect", MyLogger::LogType::debug);
+	PacketProcessor recvbuffer;
+	Logger::log("MyConnectee::AcceptLoop(" + keyword + ") waits for connect", Logger::LogType::debug);
 	while(isRunning)
 	{
 		if(!fd->wait([](int value){return value >= 0;}))
@@ -147,7 +147,7 @@ void MyConnectee::ClientLoop(
 		int recvlen = recv(*fd, buffer, BUFSIZE, 0);
 		if(recvlen == 0)
 		{
-			MyLogger::log("Host <- " + keyword + " is Disconnected");
+			Logger::log("Host <- " + keyword + " is Disconnected");
 			shutdown(*fd, SHUT_RDWR);
 			*fd = -1;
 			recvbuffer.Clear();
@@ -155,9 +155,9 @@ void MyConnectee::ClientLoop(
 		}
 		else if(recvlen < 0)
 		{
-			MyLogger::log("Host <- " + keyword + " is Disconnected");
+			Logger::log("Host <- " + keyword + " is Disconnected");
 			shutdown(*fd, SHUT_RDWR);
-			MyLogger::log("MyConnectee::ClientLoop(" + keyword + ")::recv() : " + MyLogger::strerrno(errno), MyLogger::LogType::debug);
+			Logger::log("MyConnectee::ClientLoop(" + keyword + ")::recv() : " + Logger::strerrno(errno), Logger::LogType::debug);
 			*fd = -1;
 			recvbuffer.Clear();
 			continue;
@@ -167,20 +167,20 @@ void MyConnectee::ClientLoop(
 		if(!recvbuffer.isMsgIn())
 			continue;
 
-		MyBytes answer;
+		ByteQueue answer;
 		try
 		{
-			MyBytes data = recvbuffer.GetMsg();
+			ByteQueue data = recvbuffer.GetMsg();
 			answer = process(data);
 		}
 		catch(const std::exception &e)
 		{
 			answer.Clear();
-			answer = MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION);
+			answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 		}
-		std::vector<byte> msg = MyMsg::enpackage(answer);
+		std::vector<byte> msg = PacketProcessor::enpackage(answer);
 		int sendlen = send(*fd, msg.data(), msg.size(), 0);
 		if(sendlen <= 0)
-			throw MyExcepts("Cannot Send Packet to Client : " + std::to_string(errno), __STACKINFO__);
+			throw StackTraceExcept("Cannot Send Packet to Client : " + std::to_string(errno), __STACKINFO__);
 	}
 }

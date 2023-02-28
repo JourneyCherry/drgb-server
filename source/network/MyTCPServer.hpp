@@ -9,7 +9,10 @@
 #include <cerrno>
 #include "MyServerSocket.hpp"
 #include "MyTCPClient.hpp"
-#include "MyExcepts.hpp"
+#include "StackTraceExcept.hpp"
+
+using mylib::utils::StackTraceExcept;
+using mylib::utils::Expected;
 
 class MyTCPServer : public MyServerSocket
 {
@@ -23,7 +26,7 @@ class MyTCPServer : public MyServerSocket
 		MyTCPServer(MyTCPServer&&) = delete;
 		~MyTCPServer();
 
-		MyExpected<std::shared_ptr<MyClientSocket>, int> Accept() override;
+		Expected<std::shared_ptr<MyClientSocket>, int> Accept() override;
 		void Close() override;
 
 		MyTCPServer& operator=(const MyTCPServer&) = delete;

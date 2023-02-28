@@ -1,6 +1,6 @@
 #include "MyConnector.hpp"
 
-MyConnector::MyConnector(MyThreadExceptInterface* parent, std::string addr, int port, std::string key)
+MyConnector::MyConnector(ThreadExceptHandler* parent, std::string addr, int port, std::string key)
 	: t_conn(std::bind(&MyConnector::Connect_, this, std::placeholders::_1), parent, false),
 	t_recv(std::bind(&MyConnector::RecvLoop, this, std::placeholders::_1), parent, false)
 {
@@ -22,7 +22,7 @@ void MyConnector::Connect()
 	if(!isRunning)
 	{
 		if(keyword.length() <= 0)
-			throw MyExcepts("MyConnector::Create_Socket() : keyword is null", __STACKINFO__);
+			throw StackTraceExcept("MyConnector::Create_Socket() : keyword is null", __STACKINFO__);
 		isRunning = true;
 		isConnected.use();
 		t_conn.start();
@@ -48,7 +48,7 @@ void MyConnector::Connect_(std::shared_ptr<bool> killswitch)
 
 		socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 		if(socket_fd < 0)	//socket file descriptor는 non-negative integer이다. 즉, 0을 포함한 값이 정상값이다.
-			throw MyExcepts("MyConnector(" + keyword + ") : socket() : " + std::to_string(errno), __STACKINFO__);	//이 예외를 받을 loop가 필요하다.
+			throw StackTraceExcept("MyConnector(" + keyword + ") : socket() : " + std::to_string(errno), __STACKINFO__);	//이 예외를 받을 loop가 필요하다.
 
 		char port[6];
 
@@ -69,10 +69,10 @@ void MyConnector::Connect_(std::shared_ptr<bool> killswitch)
 			if (result_getaddr != 0)
 			{
 				//freeaddrinfo(serverinfo);
-				MyLogger::log("MyConnector::Connect() : Domain name resolution failed. Errno : " + std::to_string(result_getaddr) + " re-search after " + std::to_string(RETRY_WAIT_SEC) + " secs.", MyLogger::LogType::debug);
+				Logger::log("MyConnector::Connect() : Domain name resolution failed. Errno : " + std::to_string(result_getaddr) + " re-search after " + std::to_string(RETRY_WAIT_SEC) + " secs.", Logger::LogType::debug);
 				std::this_thread::sleep_for(std::chrono::seconds(RETRY_WAIT_SEC));
 				continue;
-				//throw MyExcepts("Domain name resolution failed");
+				//throw StackTraceExcept("Domain name resolution failed");
 			}
 			memcpy(&addr, serverinfo->ai_addr, sizeof(struct sockaddr));
 
@@ -83,29 +83,29 @@ void MyConnector::Connect_(std::shared_ptr<bool> killswitch)
 			int sendsize = send(socket_fd, keyword.c_str(), keyword.size(), 0);
 			if (sendsize > 0)
 			{
-				MyLogger::log("MyConnector::Connect(" + target_addr + ") : success as " + keyword, MyLogger::LogType::debug);
-				MyLogger::log("Host -> " + target_addr + " is Connected");
+				Logger::log("MyConnector::Connect(" + target_addr + ") : success as " + keyword, Logger::LogType::debug);
+				Logger::log("Host -> " + target_addr + " is Connected");
 				isConnected = true;
 				continue;
 			}
-			MyLogger::log("MyConnector::Connect()::send() Failed as " + MyLogger::strerrno(errno), MyLogger::LogType::debug);
+			Logger::log("MyConnector::Connect()::send() Failed as " + Logger::strerrno(errno), Logger::LogType::debug);
 		}
 		else
 		{
 			switch(errno)
 			{
 				case ECONNREFUSED:	//연결 거부될 경우.
-					MyLogger::log(keyword + " to " + target_addr + " is refused", MyLogger::LogType::debug);
+					Logger::log(keyword + " to " + target_addr + " is refused", Logger::LogType::debug);
 					break;
 				case ETIMEDOUT:		//연결 시간초과
-					MyLogger::log(keyword + " to " + target_addr + " is Timed Out", MyLogger::LogType::debug);
+					Logger::log(keyword + " to " + target_addr + " is Timed Out", Logger::LogType::debug);
 					break;
 				case EISCONN:		//이미 연결이 된 경우
-					MyLogger::log(keyword + " to " + target_addr + " is already Connected", MyLogger::LogType::debug);
+					Logger::log(keyword + " to " + target_addr + " is already Connected", Logger::LogType::debug);
 					isConnected = true;
 					continue;
 				default:
-					MyLogger::log(keyword + " to " + target_addr + " is Failed by " + MyLogger::strerrno(errno), MyLogger::LogType::debug);
+					Logger::log(keyword + " to " + target_addr + " is Failed by " + Logger::strerrno(errno), Logger::LogType::debug);
 					break;
 					//TODO : 여기서 throw exception하면 어디서 받아야될지 판단해야 한다.
 					//throw MyExternalErrorCode("MyConnector::Connect::connect()", errno);
@@ -113,7 +113,7 @@ void MyConnector::Connect_(std::shared_ptr<bool> killswitch)
 		}
 		if(isRunning)
 		{
-			MyLogger::log("MyConnector::Connect() : failed. retry after " + std::to_string(RETRY_WAIT_SEC) + " sec", MyLogger::LogType::debug);
+			Logger::log("MyConnector::Connect() : failed. retry after " + std::to_string(RETRY_WAIT_SEC) + " sec", Logger::LogType::debug);
 			std::this_thread::sleep_for(std::chrono::seconds(RETRY_WAIT_SEC));
 		}
 	}
@@ -153,12 +153,12 @@ void MyConnector::RecvLoop(std::shared_ptr<bool> killswitch)
 		{
 			recvbuffer.Stop();
 			isConnected = false;
-			MyLogger::log("Host -> " + target_addr + " is Disconnected");
+			Logger::log("Host -> " + target_addr + " is Disconnected");
 			continue;
 		}
 		else if(readsize < 0)
 		{
-			MyLogger::log("MyConnector::RecvLoop()::read() : Get error with \"" + MyLogger::strerrno(errno) + "\"", MyLogger::LogType::error);
+			Logger::log("MyConnector::RecvLoop()::read() : Get error with \"" + Logger::strerrno(errno) + "\"", Logger::LogType::error);
 			recvbuffer.Stop();
 			isConnected = false;
 			continue;
@@ -167,27 +167,27 @@ void MyConnector::RecvLoop(std::shared_ptr<bool> killswitch)
 	}
 }
 
-MyBytes MyConnector::Request(MyBytes data)
+ByteQueue MyConnector::Request(ByteQueue data)
 {
 	if (data.Size() <= 0)
-		throw MyExcepts("Request data is empty", __STACKINFO__);
+		throw StackTraceExcept("Request data is empty", __STACKINFO__);
 
-	std::vector<byte> msg = MyMsg::enpackage(data);
+	std::vector<byte> msg = PacketProcessor::enpackage(data);
 
 	while (isRunning)
 	{
 		if(!isConnected.wait(true))
-			throw MyExcepts("MyConnector is not working", __STACKINFO__);
+			throw StackTraceExcept("MyConnector is not working", __STACKINFO__);
 		std::unique_lock<std::mutex> lk(m_req);
 		int sendsize = send(socket_fd, (const char *)msg.data(), msg.size(), 0);
 		//TODO : send 부분 까지만 락을 걸지, 주고/받기 전 과정을 락을 걸지 판단 필요.
 		if(sendsize == 0)
 			continue;
 		else if (sendsize < 0)
-			throw MyExcepts("MyConnector::Request()::send() : " + std::to_string(errno), __STACKINFO__);	//TODO : 소켓을 상대가 끊었을 때 여기로 오면 예외를 던지는게 맞나?
+			throw StackTraceExcept("MyConnector::Request()::send() : " + std::to_string(errno), __STACKINFO__);	//TODO : 소켓을 상대가 끊었을 때 여기로 오면 예외를 던지는게 맞나?
 
 		return recvbuffer.JoinMsg();	//recvbuffer.isMsgIn()이 true일 때 까지 대기.
 	}
 
-	throw MyExcepts("MyConnector is not working", __STACKINFO__);
+	throw StackTraceExcept("MyConnector is not working", __STACKINFO__);
 }

@@ -1,13 +1,17 @@
 #pragma once
 #include <string>
-#include "MyExpected.hpp"
-#include "MyMsg.hpp"
+#include "Expected.hpp"
+#include "PacketProcessor.hpp"
+
+using mylib::utils::Expected;
+using mylib::utils::PacketProcessor;
+using mylib::utils::ByteQueue;
 
 class MyClientSocket
 {
 	protected:
 		std::string Address;
-		MyMsg recvbuffer;
+		PacketProcessor recvbuffer;
 
 	public:
 		MyClientSocket(){}
@@ -18,8 +22,8 @@ class MyClientSocket
 		MyClientSocket& operator=(const MyClientSocket&) = delete;
 		MyClientSocket& operator=(MyClientSocket&&) = delete;
 
-		virtual MyExpected<MyBytes, int> Recv() = 0;
-		virtual MyExpected<int> Send(MyBytes) = 0;	//Value가 ErrorCode가 된다.
+		virtual Expected<ByteQueue, int> Recv() = 0;
+		virtual Expected<int> Send(ByteQueue) = 0;	//Value가 ErrorCode가 된다.
 		virtual void Close() = 0;
 
 		std::string ToString();

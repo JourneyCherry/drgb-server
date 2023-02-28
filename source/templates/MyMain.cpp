@@ -29,10 +29,10 @@ int MyMain::main(int argc, char *argv[])
 	try
 	{
 		MyServerOpt opts(argc, argv);
-		MyLogger::OpenLog(opts.verbose_flag);
+		Logger::OpenLog(opts.verbose_flag);
 		if(opts.daemon_flag)
 		{
-			if(!MyCommon::Daemonizer())
+			if(!Daemonizer())
 				return 0;
 		}
 		else
@@ -42,21 +42,21 @@ int MyMain::main(int argc, char *argv[])
 		signal(SIGTERM, signal_handler);
 		signal(SIGPIPE, SIG_IGN);
 		if(opts.pid_flag)
-			MyCommon::Create_PidFile(opts.pid_path);
-		if(!MyConfigParser::ReadFile(opts.conf_path))
+			Create_PidFile(opts.pid_path);
+		if(!ConfigParser::ReadFile(opts.conf_path))
 			throw std::runtime_error("Cannot Open Config File");
 
 		process();
 	}
-	catch(MyExcepts e)
+	catch(StackTraceExcept e)
 	{
 		e.stack(__STACKINFO__);
-		MyLogger::log(e.what());
+		Logger::log(e.what());
 		exit_code = -1;
 	}
 	catch(const std::exception &e)
 	{
-		MyLogger::log("[Standard Exception] : " + std::string(e.what()), MyLogger::error);
+		Logger::log("[Standard Exception] : " + std::string(e.what()), Logger::error);
 		exit_code = -1;
 	}
 

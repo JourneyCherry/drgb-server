@@ -2,10 +2,13 @@
 #include <map>
 #include <mutex>
 #include <thread>
-#include "MyExpected.hpp"
+#include "Expected.hpp"
+
+namespace mylib{
+namespace utils{
 
 template <typename LKey, typename RKey, typename Value>
-class MyDeMap
+class DeMap
 {
 	private:
 		using ulock = std::unique_lock<std::mutex>;
@@ -15,8 +18,8 @@ class MyDeMap
 		std::map<LKey, Value> kvm;
 	
 	public:
-		MyDeMap() = default;
-		~MyDeMap() = default;
+		DeMap() = default;
+		~DeMap() = default;
 		bool Insert(LKey lkey, RKey rkey, Value value)
 		{
 			ulock lk(mtx);
@@ -30,7 +33,7 @@ class MyDeMap
 
 			return true;
 		}
-		MyExpected<std::pair<RKey, Value>> FindLKey(LKey key)
+		Expected<std::pair<RKey, Value>> FindLKey(LKey key)
 		{
 			ulock lk(mtx);
 
@@ -39,7 +42,7 @@ class MyDeMap
 			
 			return {{lrm[key], kvm[key]}};
 		}
-		MyExpected<std::pair<LKey, Value>> FindRKey(RKey key)
+		Expected<std::pair<LKey, Value>> FindRKey(RKey key)
 		{
 			ulock lk(mtx);
 
@@ -70,7 +73,7 @@ class MyDeMap
 
 			return true;
 		}
-		MyExpected<std::tuple<LKey, RKey, Value>> EraseLKey(LKey lkey)
+		Expected<std::tuple<LKey, RKey, Value>> EraseLKey(LKey lkey)
 		{
 			ulock lk(mtx);
 
@@ -87,7 +90,7 @@ class MyDeMap
 			return {{lkey, rkey, value}, true};
 		}
 
-		MyExpected<std::tuple<LKey, RKey, Value>> EraseRKey(RKey rkey)
+		Expected<std::tuple<LKey, RKey, Value>> EraseRKey(RKey rkey)
 		{
 			ulock lk(mtx);
 
@@ -117,3 +120,6 @@ class MyDeMap
 			return lrm.size();
 		}
 };
+
+}
+}

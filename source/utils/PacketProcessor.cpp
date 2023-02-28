@@ -1,15 +1,18 @@
-#include "MyMsg.hpp"
+#include "PacketProcessor.hpp"
 
-// MyMsg::encapsulate()의 std::vector<byte>::push_back()에 const static을 넣기 위해선 Definition이 필요한데, .hpp파일에 선언된 것은 Declaration이므로, 여기서의 Definition이 필요하다.
-const byte MyMsg::pattern;
-const byte MyMsg::eof;
+namespace mylib{
+namespace utils{
 
-MyMsg::MyMsg()
+// PacketProcessor::encapsulate()의 std::vector<byte>::push_back()에 const static을 넣기 위해선 Definition이 필요한데, .hpp파일에 선언된 것은 Declaration이므로, 여기서의 Definition이 필요하다.
+const byte PacketProcessor::pattern;
+const byte PacketProcessor::eof;
+
+PacketProcessor::PacketProcessor()
 {
 	isRunning = true;
 }
 
-MyMsg::~MyMsg()
+PacketProcessor::~PacketProcessor()
 {
 	isRunning = false;
 	cv.notify_all();
@@ -19,19 +22,19 @@ MyMsg::~MyMsg()
 	recvbuffer.clear();
 }
 
-void MyMsg::Start()
+void PacketProcessor::Start()
 {
 	isRunning = true;
 }
 
-void MyMsg::Stop()
+void PacketProcessor::Stop()
 {
 	isRunning = false;
 	cv.notify_all();
 	Clear();
 }
 
-void MyMsg::flush()
+void PacketProcessor::flush()
 {
 	int ptr = split();
 	while (ptr >= 0)	//빈 메시지가 Encapsulate되어 오면 ptr이 0이 된다.
@@ -44,7 +47,7 @@ void MyMsg::flush()
 	}
 }
 
-int MyMsg::split()
+int PacketProcessor::split()
 {
 	int size = recvbuffer.size();
 	for (int i = 0; i < size - 1; i++)
@@ -60,9 +63,9 @@ int MyMsg::split()
 	return -1;
 }
 
-MyBytes MyMsg::decapsulate(std::vector<byte> data)
+ByteQueue PacketProcessor::decapsulate(std::vector<byte> data)
 {
-	MyBytes result;
+	ByteQueue result;
 	for (auto i = data.begin(); i != data.end(); i++)
 	{
 		if (*i == pattern)
@@ -72,18 +75,18 @@ MyBytes MyMsg::decapsulate(std::vector<byte> data)
 	return result;
 }
 
-MyBytes MyMsg::decrypt(std::vector<byte> data)
+ByteQueue PacketProcessor::decrypt(std::vector<byte> data)
 {
 	// TODO : 복호화. 복호화 방식은 별도 const static 멤버변수를 통해 결정한다.
-	return MyBytes(data);
+	return ByteQueue(data);
 }
 
-MyBytes MyMsg::depackage(std::vector<byte> data)
+ByteQueue PacketProcessor::depackage(std::vector<byte> data)
 {
 	return decrypt(decapsulate(data).pops<byte>());
 }
 
-std::vector<byte> MyMsg::encapsulate(MyBytes data)
+std::vector<byte> PacketProcessor::encapsulate(ByteQueue data)
 {
 	std::vector<byte> result;
 	data.Reset();
@@ -100,19 +103,19 @@ std::vector<byte> MyMsg::encapsulate(MyBytes data)
 	return result;
 }
 
-std::vector<byte> MyMsg::encrypt(MyBytes data)
+std::vector<byte> PacketProcessor::encrypt(ByteQueue data)
 {
 	// TODO : 암호화. 암호화 방식은 별도 const static 멤버변수를 통해 결정한다.
 	data.Reset();
 	return data.pops<byte>();
 }
 
-std::vector<byte> MyMsg::enpackage(MyBytes data)
+std::vector<byte> PacketProcessor::enpackage(ByteQueue data)
 {
-	return encapsulate(MyBytes(encrypt(data)));
+	return encapsulate(ByteQueue(encrypt(data)));
 }
 
-void MyMsg::Recv(const byte *data, int len)
+void PacketProcessor::Recv(const byte *data, int len)
 {
 	locker lk(mtx);
 	for (int i = 0; i < len; i++)
@@ -122,7 +125,7 @@ void MyMsg::Recv(const byte *data, int len)
 		cv.notify_one();	//JoinMsg()는 항상 1개의 thread 에서만 대기해야 한다.
 }
 
-void MyMsg::Recv(const MyBytes &bytes)
+void PacketProcessor::Recv(const ByteQueue &bytes)
 {
 	locker lk(mtx);
 	size_t length = bytes.Size();
@@ -133,39 +136,42 @@ void MyMsg::Recv(const MyBytes &bytes)
 		cv.notify_one();	//JoinMsg()는 항상 1개의 thread 에서만 대기해야 한다.
 }
 
-bool MyMsg::isMsgIn()	//TODO : 보통 GetMsg를 호출하기 전에 필수적으로 isMsgIn을 호출하지만, 두 메소드 사이에서 타 스레드의 접근이 있을 수 있으므로, 둘을 합칠 필요가 있을 수 있다. 즉, 분리된 상태는 100% Thread-safe하다고 할 수 없다.
+bool PacketProcessor::isMsgIn()	//TODO : 보통 GetMsg를 호출하기 전에 필수적으로 isMsgIn을 호출하지만, 두 메소드 사이에서 타 스레드의 접근이 있을 수 있으므로, 둘을 합칠 필요가 있을 수 있다. 즉, 분리된 상태는 100% Thread-safe하다고 할 수 없다.
 {
 	return msgs.size() > 0;
 }
 
-MyBytes MyMsg::GetMsg()
+ByteQueue PacketProcessor::GetMsg()
 {
 	locker lk(mtx);
 	if (msgs.empty())
-		throw MyExcepts("MyMsg is Empty", __STACKINFO__);
-	MyBytes result = msgs.front();
+		throw StackTraceExcept("PacketProcessor is Empty", __STACKINFO__);
+	ByteQueue result = msgs.front();
 	msgs.pop();
 
 	return result;
 }
 
-MyBytes MyMsg::JoinMsg()
+ByteQueue PacketProcessor::JoinMsg()
 {
 	locker lk(mtx);
 	cv.wait(lk, [&](){return isMsgIn() || !isRunning;});
 	if(!isRunning)
-		throw MyExcepts("MyMsg::JoinMsg() : system is not working", __STACKINFO__);
-	MyBytes result = msgs.front();
+		throw StackTraceExcept("PacketProcessor::JoinMsg() : system is not working", __STACKINFO__);
+	ByteQueue result = msgs.front();
 	msgs.pop();
 	lk.unlock();
 
 	return result;
 }
 
-void MyMsg::Clear()
+void PacketProcessor::Clear()
 {
 	locker lk(mtx);
 	while (msgs.size() > 0)
 		msgs.pop();
 	recvbuffer.clear();
+}
+
+}
 }

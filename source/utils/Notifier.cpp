@@ -1,12 +1,15 @@
-#include "MyNotifier.hpp"
+#include "Notifier.hpp"
 
-MyNotifier::~MyNotifier()
+namespace mylib{
+namespace utils{
+
+Notifier::~Notifier()
 {
 	isRunning = false;
 	cv.notify_all();
 }
 
-void MyNotifier::push(std::shared_ptr<MyNotifyTarget> msg)
+void Notifier::push(std::shared_ptr<MyNotifyTarget> msg)
 {
 	if(!isRunning)
 		return;
@@ -16,7 +19,7 @@ void MyNotifier::push(std::shared_ptr<MyNotifyTarget> msg)
 	cv.notify_all();
 }
 
-MyExpected<std::shared_ptr<MyNotifyTarget>> MyNotifier::wait()
+Expected<std::shared_ptr<MyNotifyTarget>> Notifier::wait()
 {
 	ulock lk(mtx);
 	cv.wait(lk, [&](){return !isRunning || !messages.empty();});
@@ -27,4 +30,7 @@ MyExpected<std::shared_ptr<MyNotifyTarget>> MyNotifier::wait()
 	lk.unlock();
 
 	return msg;
+}
+
+}
 }

@@ -2,10 +2,10 @@
 
 MyBattle::MyBattle() : 
 	connectee(this), 
-	connector_match(this, MyConfigParser::GetString("Match1_Addr"), MyConfigParser::GetInt("Match1_Port", 52431), "battle"), 
+	connector_match(this, ConfigParser::GetString("Match1_Addr"), ConfigParser::GetInt("Match1_Port", 52431), "battle"), 
 	gamepool(MAX_GAME), 
 	poolManager(std::bind(&MyBattle::pool_manage, this, std::placeholders::_1), this, false), 
-	MyServer(MyConfigParser::GetInt("Battle1_ClientPort_Web", 54321), MyConfigParser::GetInt("Battle1_ClientPort_TCP", 54322))
+	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54321), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54322))
 {
 }
 
@@ -16,11 +16,11 @@ MyBattle::~MyBattle()
 void MyBattle::Open()
 {
 	MyPostgres::Open();
-	connectee.Open(MyConfigParser::GetInt("Battle1_Port"));
+	connectee.Open(ConfigParser::GetInt("Battle1_Port"));
 	connectee.Accept("match", std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1));
 	connector_match.Connect();
 	poolManager.start();
-	MyLogger::log("Battle Server Start", MyLogger::LogType::info);
+	Logger::log("Battle Server Start", Logger::LogType::info);
 }
 
 void MyBattle::Close()
@@ -30,7 +30,7 @@ void MyBattle::Close()
 	connector_match.Disconnect();
 	connectee.Close();
 	MyPostgres::Close();
-	MyLogger::log("Battle Server Stop", MyLogger::LogType::info);
+	Logger::log("Battle Server Stop", Logger::LogType::info);
 }
 
 void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
@@ -57,7 +57,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	if(side < 0)	//게임이 종료되었거나 올바르지 않은 세션이 올라온 경우
 	{
 		cookies.EraseLKey(account_id);
-		client->Send(MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 		client->Close();
 		return;
 	}
@@ -82,12 +82,12 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				}
 				catch(const std::exception &e)
 				{
-					client->Send(MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION));
-					MyLogger::raise();
+					client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+					Logger::raise();
 				}
 				break;
 			default:
-				client->Send(MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION));
+				client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
 				break;
 		}
 	}
@@ -95,7 +95,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	client->Close();
 }
 
-MyBytes MyBattle::BattleInquiry(MyBytes bytes)
+ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 {
 	byte header = bytes.pop<byte>();
 	switch(header)
@@ -105,8 +105,8 @@ MyBytes MyBattle::BattleInquiry(MyBytes bytes)
 				Account_ID_t account_id = bytes.pop<Account_ID_t>();
 				auto cookie = cookies.FindLKey(account_id);
 				if(!cookie)
-					return MyBytes::Create<byte>(ERR_NO_MATCH_ACCOUNT);
-				MyBytes result = MyBytes::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE);
+					return ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT);
+				ByteQueue result = ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE);
 				result.push<Hash_t>(cookie->first);
 				result.push<Seed_t>(MACHINE_ID);
 				return result;
@@ -116,9 +116,9 @@ MyBytes MyBattle::BattleInquiry(MyBytes bytes)
 			{
 				int now_game = gamepool.size();
 				if(now_game >= MAX_GAME)
-					return MyBytes::Create<byte>(ERR_OUT_OF_CAPACITY);
+					return ByteQueue::Create<byte>(ERR_OUT_OF_CAPACITY);
 					
-				MyBytes answer = MyBytes::Create<byte>(SUCCESS);
+				ByteQueue answer = ByteQueue::Create<byte>(SUCCESS);
 				answer.push<int>(MAX_GAME - now_game);
 				return answer;
 			}
@@ -127,7 +127,7 @@ MyBytes MyBattle::BattleInquiry(MyBytes bytes)
 			{
 				int now_game = gamepool.size();
 				if(now_game >= MAX_GAME)
-					return MyBytes::Create<byte>(ERR_OUT_OF_CAPACITY);
+					return ByteQueue::Create<byte>(ERR_OUT_OF_CAPACITY);
 
 				Account_ID_t lpid = bytes.pop<Account_ID_t>();
 				Hash_t lpcookie = bytes.pop<Hash_t>();
@@ -140,11 +140,11 @@ MyBytes MyBattle::BattleInquiry(MyBytes bytes)
 				cookies.Insert(rpid, rpcookie, new_game);
 				gamepool.insert(new_game);
 
-				return MyBytes::Create<byte>(SUCCESS);
+				return ByteQueue::Create<byte>(SUCCESS);
 			}
 			break;
 	}
-	return MyBytes::Create<byte>(ERR_PROTOCOL_VIOLATION);
+	return ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 }
 
 void MyBattle::pool_manage(std::shared_ptr<bool> killswitch)
@@ -179,11 +179,11 @@ void MyBattle::pool_manage(std::shared_ptr<bool> killswitch)
 				if(!socket)		//소켓이 nullptr이면 게임 중간에 나간 것이므로 무시.
 					continue;
 
-				MyBytes req = MyBytes::Create<byte>(INQ_COOKIE_TRANSFER);
+				ByteQueue req = ByteQueue::Create<byte>(INQ_COOKIE_TRANSFER);
 				req.push<Account_ID_t>(id);
 				req.push<Hash_t>(cookie);
 
-				MyBytes msg = connector_match.Request(req);
+				ByteQueue msg = connector_match.Request(req);
 				byte header = msg.pop<byte>();
 
 				switch(header)
@@ -192,12 +192,12 @@ void MyBattle::pool_manage(std::shared_ptr<bool> killswitch)
 					case ERR_EXIST_ACCOUNT_MATCH:	//이미 해당 쿠키가 Match서버에 있으면 Match 서버에 주도권을 준다.(즉, 정상동작)
 						break;
 					default:
-						MyLogger::log("Cookie Transfer Failed : " + std::to_string(header), MyLogger::LogType::error);
+						Logger::log("Cookie Transfer Failed : " + std::to_string(header), Logger::LogType::error);
 						match_server_seed = -1;
 						break;
 				}
 
-				MyBytes packet = MyBytes::Create<byte>(player.result);
+				ByteQueue packet = ByteQueue::Create<byte>(player.result);
 				packet.push<Seed_t>(match_server_seed);
 				socket->Send(packet);
 				socket->Close();
@@ -205,7 +205,7 @@ void MyBattle::pool_manage(std::shared_ptr<bool> killswitch)
 		}
 		catch(const std::exception& e)
 		{
-			MyLogger::raise();
+			Logger::raise();
 		}
 		//TODO : 중간에 exception이 발생해도 session들을 빼내는 작업이 필요하다.
 	}

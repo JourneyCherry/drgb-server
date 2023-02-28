@@ -53,7 +53,7 @@ void MyServer::Join()
 		}
 		catch(...)
 		{
-			MyLogger::raise();
+			Logger::raise();
 			//TODO : exception 발생시킨 곳 확인하고 다시 서비스 올리기.
 		}
 	}
@@ -72,7 +72,7 @@ void MyServer::Accept(std::shared_ptr<bool> killswitch, std::shared_ptr<MyServer
 			if(client.error() < 0)	//-1은 shutdown에 의해서 종료될 경우이다. 0이상은 errno 또는 에러코드 값.
 				break;
 			else
-				throw MyExcepts("Socket Accept Failed (" + std::to_string(client.error()) + ")", __STACKINFO__);
+				throw StackTraceExcept("Socket Accept Failed (" + std::to_string(client.error()) + ")", __STACKINFO__);
 		}
 
 		ulock lk(m_accepts);
@@ -101,10 +101,10 @@ void MyServer::Work(std::shared_ptr<bool> killswitch)
 		{
 			ClientProcess(client);
 		}
-		catch(MyExcepts e)
+		catch(StackTraceExcept e)
 		{
 			e.stack(__STACKINFO__);
-			MyLogger::raise(std::current_exception());	//Release면 Log 남기기, Debug면 Throw
+			Logger::raise(std::current_exception());	//Release면 Log 남기기, Debug면 Throw
 		}
 	}
 }

@@ -21,7 +21,7 @@ TARGET_LINK_LIBRARIES ( MyBattle PUBLIC
 	MyServer
 	MyGame
 	#MyCodes
-	#MyDeMap
+	#DeMap
 	MyConnector
 	MyConnectee
 	Pool

@@ -1,7 +1,11 @@
 #pragma once
-#include "MyGetOpt.hpp"
+#include "GetArg.hpp"
 
-class MyServerOpt : public MyCommon::MyGetOpt
+using mylib::utils::GetArg;
+using mylib::utils::Logger;
+using mylib::utils::StackTraceExcept;
+
+class MyServerOpt : public GetArg
 {
 	private:
 		static struct option long_options[];
@@ -17,5 +21,5 @@ class MyServerOpt : public MyCommon::MyGetOpt
 	public:
 		MyServerOpt(int argc, char** argv);
 		void ClearOpt() override;
-		void GetOpt(int, char**) override;
+		void GetArgs(int, char**) override;
 };

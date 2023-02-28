@@ -3,7 +3,8 @@
 #include <boost/beast/websocket.hpp>
 #include <memory>
 #include "MyClientSocket.hpp"
-#include "MyLogger.hpp"
+
+using mylib::utils::StackTraceExcept;
 
 class MyWebsocketClient : public MyClientSocket
 {
@@ -16,8 +17,8 @@ class MyWebsocketClient : public MyClientSocket
 		MyWebsocketClient(MyWebsocketClient&&) = delete;
 		~MyWebsocketClient();
 		
-		MyExpected<MyBytes, int> Recv() override;
-		MyExpected<int> Send(MyBytes) override;
+		Expected<ByteQueue, int> Recv() override;
+		Expected<int> Send(ByteQueue) override;
 		void Close() override;
 
 		MyWebsocketClient& operator=(const MyWebsocketClient&) = delete;

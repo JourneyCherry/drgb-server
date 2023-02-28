@@ -1,8 +1,11 @@
-#include "MyConfigParser.hpp"
+#include "ConfigParser.hpp"
 
-std::unordered_map<std::string, std::string> MyConfigParser::dict = std::unordered_map<std::string, std::string>();
+namespace mylib{
+namespace utils{
 
-bool MyConfigParser::ReadFile(const std::string &path)
+std::unordered_map<std::string, std::string> ConfigParser::dict = std::unordered_map<std::string, std::string>();
+
+bool ConfigParser::ReadFile(const std::string &path)
 {
 	std::ifstream openFile;
 	openFile.open(path);
@@ -23,14 +26,14 @@ bool MyConfigParser::ReadFile(const std::string &path)
 	return true;
 }
 
-std::string MyConfigParser::GetString(std::string key, std::string default_value)
+std::string ConfigParser::GetString(std::string key, std::string default_value)
 {
 	if(dict.find(key) == dict.end())
 		return default_value;
 	return dict[key];
 }
 
-int MyConfigParser::GetInt(std::string key, int default_value)
+int ConfigParser::GetInt(std::string key, int default_value)
 {
 	int result;
 	try
@@ -46,7 +49,7 @@ int MyConfigParser::GetInt(std::string key, int default_value)
 	return result;
 }
 
-double MyConfigParser::GetDouble(std::string key, double default_value)
+double ConfigParser::GetDouble(std::string key, double default_value)
 {
 	double result;
 	try
@@ -62,7 +65,7 @@ double MyConfigParser::GetDouble(std::string key, double default_value)
 	return result;
 }
 
-bool MyConfigParser::check_line(const std::string &line)
+bool ConfigParser::check_line(const std::string &line)
 {
 	int max = line.length();
 	char quotes = '\0';
@@ -88,7 +91,7 @@ bool MyConfigParser::check_line(const std::string &line)
 	return num_of_equal == 1 && quotes == '\0';	//따옴표는 닫혀 있어야 한다.
 }
 
-void MyConfigParser::trim(std::string &src)
+void ConfigParser::trim(std::string &src)
 {
 	static std::string trimmer = " \t\n\r\f\v";
 	//erase(0, std::string::npos) == erase(std::string::npos + 1) == erase(0) == clear()
@@ -96,7 +99,7 @@ void MyConfigParser::trim(std::string &src)
 	src.erase(0, src.find_first_not_of(trimmer));
 }
 
-void MyConfigParser::delete_comment(std::string &src)
+void ConfigParser::delete_comment(std::string &src)
 {
 	size_t pos = src.find_first_of('#');
 	if(pos == std::string::npos)
@@ -104,7 +107,7 @@ void MyConfigParser::delete_comment(std::string &src)
 	src.erase(src.find_first_of('#'));
 }
 
-std::pair<std::string, std::string> MyConfigParser::split(const std::string &src)
+std::pair<std::string, std::string> ConfigParser::split(const std::string &src)
 {
 	std::string front = src;
 	std::string end = src;
@@ -121,4 +124,7 @@ std::pair<std::string, std::string> MyConfigParser::split(const std::string &src
 		end.erase(end.find_first_of("\'\""));
 	}
 	return {front, end};
+}
+
+}
 }

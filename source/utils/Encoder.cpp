@@ -1,7 +1,10 @@
-#include "MyBase64.hpp"
+#include "Encoder.hpp"
 
-const char* MyCommon::Base64::charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-const byte MyCommon::Base64::mapset[256] = 
+namespace mylib{
+namespace utils{
+
+const char* Encoder::charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const byte Encoder::mapset[256] = 
 {
 	255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,	//00-0F
 	255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,	//10255F
@@ -21,7 +24,7 @@ const byte MyCommon::Base64::mapset[256] =
 	255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255	//F0-FF
 };
 
-std::string MyCommon::Base64::Encode(const byte *bytes, size_t len)
+std::string Encoder::EncodeBase64(const byte *bytes, size_t len)
 {
 	std::string result;
 
@@ -63,12 +66,12 @@ std::string MyCommon::Base64::Encode(const byte *bytes, size_t len)
 	return result;
 }
 
-std::string MyCommon::Base64::Encode(std::vector<byte> bytes)
+std::string Encoder::EncodeBase64(std::vector<byte> bytes)
 {
-	return Encode(bytes.data(), bytes.size());
+	return EncodeBase64(bytes.data(), bytes.size());
 }
 
-std::vector<byte> MyCommon::Base64::Decode(std::string str)
+std::vector<byte> Encoder::DecodeBase64(std::string str)
 {
 	std::vector<byte> result;
 	
@@ -105,31 +108,34 @@ std::vector<byte> MyCommon::Base64::Decode(std::string str)
 	return result;
 }
 
-byte MyCommon::Base64::cut_6_2(byte s)
+byte Encoder::cut_6_2(byte s)
 {
 	return (s & 0xFC) >> 2;
 }
-byte MyCommon::Base64::cut_2_6(byte s)
+byte Encoder::cut_2_6(byte s)
 {
 	return s & 0x3F;
 }
-byte MyCommon::Base64::mix_2_4(byte lhs, byte rhs)
+byte Encoder::mix_2_4(byte lhs, byte rhs)
 {
 	return (lhs & 0x03) << 4 | (rhs & 0xF0) >> 4;
 }
-byte MyCommon::Base64::mix_4_2(byte lhs, byte rhs)
+byte Encoder::mix_4_2(byte lhs, byte rhs)
 {
 	return (lhs & 0x0F) << 2 | (rhs & 0xC0) >> 6;
 }
-byte MyCommon::Base64::mix_6_2(byte lhs, byte rhs)
+byte Encoder::mix_6_2(byte lhs, byte rhs)
 {
 	return lhs << 2 | (rhs & 0x30) >> 4;
 }
-byte MyCommon::Base64::mix_4_4(byte lhs, byte rhs)
+byte Encoder::mix_4_4(byte lhs, byte rhs)
 {
 	return (lhs & 0x0F) << 4 | (rhs & 0x3C) >> 2;
 }
-byte MyCommon::Base64::mix_2_6(byte lhs, byte rhs)
+byte Encoder::mix_2_6(byte lhs, byte rhs)
 {
 	return (lhs & 0x03) << 6 | rhs;
+}
+
+}
 }

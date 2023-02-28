@@ -2,10 +2,15 @@
 #include <memory>
 #include <functional>
 #include <pthread.h>
-#include "MyDaemoner.hpp"
+#include "Daemonizer.hpp"
 #include "MyServerOpt.hpp"
-#include "MyLogger.hpp"
-#include "MyConfigParser.hpp"
+#include "Logger.hpp"
+#include "ConfigParser.hpp"
+
+using mylib::utils::Daemonizer;
+using mylib::utils::Create_PidFile;
+using mylib::utils::Logger;
+using mylib::utils::ConfigParser;
 
 class MyMain
 {

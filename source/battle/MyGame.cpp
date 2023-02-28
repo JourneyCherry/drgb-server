@@ -39,7 +39,7 @@ int MyGame::Connect(Account_ID_t id, std::shared_ptr<MyClientSocket> socket)
 			players[i].socket = socket;
 			if(existing != nullptr)
 			{
-				existing->Send(MyBytes::Create<byte>(ERR_DUPLICATED_ACCESS));
+				existing->Send(ByteQueue::Create<byte>(ERR_DUPLICATED_ACCESS));
 				existing->Close();
 			}
 			cv.notify_all();
@@ -106,7 +106,7 @@ void MyGame::Work()
 	{
 		ulock lk(mtx);
 		cv.wait(lk, isAllIn);
-		SendAll(MyBytes::Create<byte>(GAME_PLAYER_ALL_CONNECTED) + MyBytes::Create<int>(-1));
+		SendAll(ByteQueue::Create<byte>(GAME_PLAYER_ALL_CONNECTED) + ByteQueue::Create<int>(-1));
 	}
 
 	//실제 플레이 내용
@@ -117,7 +117,7 @@ void MyGame::Work()
 		bool isSomeoneOut = cv.wait_for(lk, Round_Time, [&](){return !isAllIn();});	//cv.wait_for()는 시간이 다된&Notify된 시점의 Predicate값을 return 한다.
 		if(isSomeoneOut)
 		{
-			SendAll(MyBytes::Create<byte>(GAME_PLAYER_DISCONNEDTED));
+			SendAll(ByteQueue::Create<byte>(GAME_PLAYER_DISCONNEDTED));
 			bool isAllConnected = cv.wait_for(lk, Dis_Time, isAllIn);
 			lk.unlock();
 			if(!isAllConnected)	//Disconnection Time이 지날떄까지 들어오지 못하면 해당 게임은 종료된다.
@@ -135,7 +135,7 @@ void MyGame::Work()
 			{
 				now_round--;		//해당 라운드를 무효 한 뒤,
 
-				MyBytes result = MyBytes::Create<byte>(GAME_PLAYER_ALL_CONNECTED);	//사용자들에게 경기재개 패킷과
+				ByteQueue result = ByteQueue::Create<byte>(GAME_PLAYER_ALL_CONNECTED);	//사용자들에게 경기재개 패킷과
 				result.push<int>(now_round);	//이전 라운드의 결과를 보내준다.
 
 				if(now_round >= 0)	//최초 라운드는 결과를 보내지 않는다.(아직 진행된 내용이 없으므로)
@@ -151,7 +151,7 @@ void MyGame::Work()
 		{
 			isGameOver = process();
 			//라운드 결과 전달하기.
-			MyBytes result = MyBytes::Create<byte>(GAME_ROUND_RESULT);
+			ByteQueue result = ByteQueue::Create<byte>(GAME_ROUND_RESULT);
 			result.push<int>(now_round);
 
 			for(int i = 0;i<MAX_PLAYER;i++)
@@ -190,14 +190,14 @@ void MyGame::Work()
 	}
 	catch(const pqxx::pqxx_exception &e)
 	{
-		MyLogger::log("DB Error : " + std::string(e.base().what()), MyLogger::LogType::error);
-		SendAll(MyBytes::Create<byte>(ERR_DB_FAILED));
+		Logger::log("DB Error : " + std::string(e.base().what()), Logger::LogType::error);
+		SendAll(ByteQueue::Create<byte>(ERR_DB_FAILED));
 		std::rethrow_exception(std::current_exception());
 	}
 	catch(const std::exception &e)
 	{
-		MyLogger::log("Error : " + std::string(e.what()), MyLogger::LogType::error);
-		SendAll(MyBytes::Create<byte>(ERR_DB_FAILED));
+		Logger::log("Error : " + std::string(e.what()), Logger::LogType::error);
+		SendAll(ByteQueue::Create<byte>(ERR_DB_FAILED));
 		std::rethrow_exception(std::current_exception());
 	}
 
@@ -207,7 +207,7 @@ void MyGame::Work()
 	{
 		players[i].result = (winner<0)?GAME_FINISHED_DRAW:(winner==i?GAME_FINISHED_WIN:GAME_FINISHED_LOOSE);
 		//결과를 보낼 때, match server에 세션을 넘겨주면서 match server 정보도 넘겨야 하므로, 이것은 MyBattle::pool_manage에서 처리한다.
-		//if(players[i].socket->Send(MyBytes::Create<byte>(result)))
+		//if(players[i].socket->Send(ByteQueue::Create<byte>(result)))
 		//	players[i].socket->Close();	//여기서 연결을 종료하면 MyBattle::ClientProcess()에서 연결끊김을 감지하여 알아서 스레드를 종료하게 된다.
 	}
 }
@@ -267,7 +267,7 @@ bool MyGame::CheckAction(int action)
 	return true;
 }
 
-void MyGame::SendAll(MyBytes byte)
+void MyGame::SendAll(ByteQueue byte)
 {
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
@@ -278,9 +278,9 @@ void MyGame::SendAll(MyBytes byte)
 	}
 }
 
-MyBytes MyGame::GetPlayerByte(const struct player_info &player)
+ByteQueue MyGame::GetPlayerByte(const struct player_info &player)
 {
-	MyBytes result = MyBytes::Create<byte>(player.action);
+	ByteQueue result = ByteQueue::Create<byte>(player.action);
 	result.push<int>(player.health);
 	result.push<int>(player.energy);
 
