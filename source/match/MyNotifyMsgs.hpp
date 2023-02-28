@@ -2,9 +2,9 @@
 #include "ByteQueue.hpp"
 #include "Notifier.hpp"
 
-using mylib::utils::MyNotifyTarget;
+using mylib::utils::NotifyTarget;
 
-class MyDisconnectMessage : public MyNotifyTarget
+class MyDisconnectMessage : public NotifyTarget
 {
 	public:
 		static constexpr int Message_ID = 0;
@@ -13,7 +13,7 @@ class MyDisconnectMessage : public MyNotifyTarget
 		int Type() override { return Message_ID;}
 };
 
-class MyClientMessage : public MyNotifyTarget
+class MyClientMessage : public NotifyTarget
 {
 	public:
 		static constexpr int Message_ID = 1;
@@ -23,7 +23,7 @@ class MyClientMessage : public MyNotifyTarget
 		int Type() override { return Message_ID;}
 };
 
-class MyMatchMakerMessage : public MyNotifyTarget
+class MyMatchMakerMessage : public NotifyTarget
 {
 	public:
 		static constexpr int Message_ID = 2;

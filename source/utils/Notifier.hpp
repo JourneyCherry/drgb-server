@@ -7,7 +7,7 @@
 namespace mylib{
 namespace utils{
 
-class MyNotifyTarget
+class NotifyTarget
 {
 	public:
 		virtual int Type() = 0;
@@ -21,13 +21,13 @@ class Notifier
 		bool isRunning;
 		std::mutex mtx;
 		std::condition_variable cv;
-		std::queue<std::shared_ptr<MyNotifyTarget>> messages;
+		std::queue<std::shared_ptr<NotifyTarget>> messages;
 
 	public:
 		Notifier() : isRunning(true){}
 		~Notifier();
-		void push(std::shared_ptr<MyNotifyTarget>);
-		Expected<std::shared_ptr<MyNotifyTarget>> wait();
+		void push(std::shared_ptr<NotifyTarget>);
+		Expected<std::shared_ptr<NotifyTarget>> wait();
 };
 
 }

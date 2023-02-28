@@ -9,7 +9,7 @@ Notifier::~Notifier()
 	cv.notify_all();
 }
 
-void Notifier::push(std::shared_ptr<MyNotifyTarget> msg)
+void Notifier::push(std::shared_ptr<NotifyTarget> msg)
 {
 	if(!isRunning)
 		return;
@@ -19,13 +19,13 @@ void Notifier::push(std::shared_ptr<MyNotifyTarget> msg)
 	cv.notify_all();
 }
 
-Expected<std::shared_ptr<MyNotifyTarget>> Notifier::wait()
+Expected<std::shared_ptr<NotifyTarget>> Notifier::wait()
 {
 	ulock lk(mtx);
 	cv.wait(lk, [&](){return !isRunning || !messages.empty();});
 	if(!isRunning)
 		return {};
-	std::shared_ptr<MyNotifyTarget> msg = messages.front();
+	std::shared_ptr<NotifyTarget> msg = messages.front();
 	messages.pop();
 	lk.unlock();
 

@@ -10,7 +10,7 @@
 #include "DeMap.hpp"
 
 using mylib::utils::Notifier;
-using mylib::utils::MyNotifyTarget;
+using mylib::utils::NotifyTarget;
 using mylib::utils::DeMap;
 using mylib::threads::Thread;
 
