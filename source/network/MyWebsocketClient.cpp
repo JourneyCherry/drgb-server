@@ -15,7 +15,7 @@ MyWebsocketClient::MyWebsocketClient(boost::asio::ip::tcp::socket socket) : ws{s
 	if(ec)
 	{
 		Close();
-		throw StackTraceExcept(std::string(ec.message()) + "(" + std::to_string(ec.value()) + ")", __STACKINFO__);
+		throw ErrorCodeExcept(ec, __STACKINFO__);
 	}
 
 	ws.binary(true);
@@ -26,10 +26,10 @@ MyWebsocketClient::~MyWebsocketClient()
 	Close();
 }
 
-Expected<ByteQueue, int> MyWebsocketClient::Recv()
+Expected<ByteQueue> MyWebsocketClient::Recv()
 {
 	if(!ws.is_open())
-		return {-1};
+		return {};
 
 	boost::beast::error_code ec;
 	boost::beast::flat_buffer buffer;
@@ -37,22 +37,22 @@ Expected<ByteQueue, int> MyWebsocketClient::Recv()
 	{
 		buffer.clear();
 		if(!ws.is_open())	//읽는 도중에 종료될 경우.
-			return {-1};
+			return {};
 
 		size_t recvlen = ws.read(buffer, ec);	//ws->read()는 buffer에 새 데이터를 append 한다.
 		if(recvlen == 0)
-			return {-1};
+			return {};
 		if(
 			ec == boost::beast::websocket::error::closed || 
 			ec == boost::asio::error::eof ||
 			ec == boost::asio::error::operation_aborted
 		)
-			return {-1};
+			return {};
 		if(ec)
-			return {ec.value()};
+			throw ErrorCodeExcept(ec, __STACKINFO__);
 
 		if(!ws.got_binary())
-			return {-1};	//TODO : 별도의 Error_Code 만들 필요 있음.
+			return {};	//TODO : 별도의 Error_Code 만들 필요 있음.
 
 		unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
 		size_t size = boost::asio::buffer_size(buffer.data());
@@ -63,21 +63,22 @@ Expected<ByteQueue, int> MyWebsocketClient::Recv()
 	return recvbuffer.GetMsg();
 }
 
-Expected<int> MyWebsocketClient::Send(ByteQueue bytes)
+ErrorCode MyWebsocketClient::Send(ByteQueue bytes)
 {
-
 	ByteQueue capsulated = PacketProcessor::enpackage(bytes);
 	boost::asio::const_buffer buffer(capsulated.data(), capsulated.Size());
 	boost::beast::error_code ec;
 
 	if(!ws.is_open())
-		return {-1, false};
+		return {ERR_CONNECTION_CLOSED};
 		
 	size_t sendlen = ws.write(buffer, ec);
-	if(ec || sendlen == 0)
-		return {ec.value(), false};
+	if(ec)
+		return {ec};
+	if(sendlen == 0)
+		return {ERR_CONNECTION_CLOSED};
 
-	return {0, true};
+	return {};
 }
 
 void MyWebsocketClient::Close()
@@ -94,6 +95,6 @@ void MyWebsocketClient::Close()
 		)
 			return;
 		if(ec)
-			throw StackTraceExcept(std::string(ec.message()) + "(" + std::to_string(ec.value()) + ")", __STACKINFO__);
+			throw ErrorCodeExcept(ec, __STACKINFO__);
 	}
 }

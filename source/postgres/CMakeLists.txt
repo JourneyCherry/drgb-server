@@ -9,6 +9,7 @@ TARGET_LINK_LIBRARIES ( ${LIB_NAME} PUBLIC
 	${PQXX}
 	${PQ}
 	ConfigParser
+	Logger
 )
 TARGET_COMPILE_OPTIONS ( ${LIB_NAME} PUBLIC
 	-std=c++17

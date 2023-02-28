@@ -6,6 +6,7 @@
 #include <chrono>
 #include "ConfigParser.hpp"
 #include "StackTraceExcept.hpp"
+#include "Logger.hpp"
 
 using mylib::utils::ConfigParser;
 using mylib::utils::StackTraceExcept;

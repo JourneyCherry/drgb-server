@@ -2,10 +2,12 @@
 #include <string>
 #include "Expected.hpp"
 #include "PacketProcessor.hpp"
+#include "ErrorCode.hpp"
 
 using mylib::utils::Expected;
 using mylib::utils::PacketProcessor;
 using mylib::utils::ByteQueue;
+using mylib::utils::ErrorCode;
 
 class MyClientSocket
 {
@@ -22,8 +24,8 @@ class MyClientSocket
 		MyClientSocket& operator=(const MyClientSocket&) = delete;
 		MyClientSocket& operator=(MyClientSocket&&) = delete;
 
-		virtual Expected<ByteQueue, int> Recv() = 0;
-		virtual Expected<int> Send(ByteQueue) = 0;	//Value가 ErrorCode가 된다.
+		virtual Expected<ByteQueue> Recv() = 0;
+		virtual ErrorCode Send(ByteQueue) = 0;	//Value가 ErrorCode가 된다.
 		virtual void Close() = 0;
 
 		std::string ToString();

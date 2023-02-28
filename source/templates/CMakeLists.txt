@@ -9,5 +9,5 @@ FOREACH( LIB IN LISTS LIBS )
 ENDFOREACH()
 
 TARGET_LINK_LIBRARIES ( MyServerOpt PUBLIC GetArg )
-TARGET_LINK_LIBRARIES ( MyServer PUBLIC Thread MyClientSocket MyServerSocket ByteQueue MyTCPServer MyTCPClient MyWebsocketServer MyWebsocketClient )
+TARGET_LINK_LIBRARIES ( MyServer PUBLIC Thread Logger MyClientSocket MyServerSocket ByteQueue MyTCPServer MyTCPClient MyWebsocketServer MyWebsocketClient )
 TARGET_LINK_LIBRARIES ( MyMain PUBLIC Logger Daemonizer ConfigParser MyServerOpt )

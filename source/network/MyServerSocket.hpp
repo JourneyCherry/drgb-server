@@ -19,6 +19,6 @@ class MyServerSocket
 		MyServerSocket& operator=(const MyServerSocket&) = delete;
 		MyServerSocket& operator=(MyServerSocket&&) = delete;
 
-		virtual Expected<std::shared_ptr<MyClientSocket>, int> Accept() = 0;
+		virtual Expected<std::shared_ptr<MyClientSocket>> Accept() = 0;
 		virtual void Close() = 0;
 };

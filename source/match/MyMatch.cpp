@@ -40,9 +40,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		if(!answer)
 		{
 			client->Close();
-			if(answer.error() < 0)
-				return;
-			throw StackTraceExcept("client::recv() error : " + std::to_string(answer.error()), __STACKINFO__);
+			return;
 		}
 		Hash_t cookie = answer->pop<Hash_t>();
 		auto result = sessions.FindRKey(cookie);

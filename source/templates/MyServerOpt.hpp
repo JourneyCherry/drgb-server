@@ -1,5 +1,6 @@
 #pragma once
 #include "GetArg.hpp"
+#include "Logger.hpp"
 
 using mylib::utils::GetArg;
 using mylib::utils::Logger;

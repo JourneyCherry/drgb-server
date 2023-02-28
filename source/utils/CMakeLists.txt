@@ -1,4 +1,5 @@
 SET ( LIBS
+	ErrorCode
 	Encoder
 	ByteQueue
 	#MyCodes
@@ -22,4 +23,4 @@ ENDFOREACH()
 
 TARGET_LINK_LIBRARIES ( Hasher PUBLIC crypto )
 TARGET_LINK_LIBRARIES ( GetArg PUBLIC StackTraceExcept )
-TARGET_LINK_LIBRARIES ( StackTraceExcept PUBLIC Logger )
+TARGET_LINK_LIBRARIES ( StackTraceExcept PUBLIC ErrorCode )

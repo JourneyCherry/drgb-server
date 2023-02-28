@@ -4,7 +4,7 @@
 #include <memory>
 #include "MyClientSocket.hpp"
 
-using mylib::utils::StackTraceExcept;
+using mylib::utils::ErrorCodeExcept;
 
 class MyWebsocketClient : public MyClientSocket
 {
@@ -17,8 +17,8 @@ class MyWebsocketClient : public MyClientSocket
 		MyWebsocketClient(MyWebsocketClient&&) = delete;
 		~MyWebsocketClient();
 		
-		Expected<ByteQueue, int> Recv() override;
-		Expected<int> Send(ByteQueue) override;
+		Expected<ByteQueue> Recv() override;
+		ErrorCode Send(ByteQueue) override;
 		void Close() override;
 
 		MyWebsocketClient& operator=(const MyWebsocketClient&) = delete;

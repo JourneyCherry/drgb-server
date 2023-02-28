@@ -3,6 +3,10 @@
 #include <boost/beast/websocket.hpp>
 #include "MyServerSocket.hpp"
 #include "MyWebsocketClient.hpp"
+#include "StackTraceExcept.hpp"
+
+using mylib::utils::ErrorCodeExcept;
+using mylib::utils::StackTraceExcept;
 
 class MyWebsocketServer : public MyServerSocket
 {
@@ -16,7 +20,7 @@ class MyWebsocketServer : public MyServerSocket
 		MyWebsocketServer(MyWebsocketServer&&) = delete;
 		~MyWebsocketServer();
 
-		Expected<std::shared_ptr<MyClientSocket>, int> Accept() override;
+		Expected<std::shared_ptr<MyClientSocket>> Accept() override;
 		void Close() override;
 
 		MyWebsocketServer& operator=(const MyWebsocketServer&) = delete;

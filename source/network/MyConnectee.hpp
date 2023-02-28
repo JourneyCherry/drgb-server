@@ -11,6 +11,7 @@
 #include "PacketProcessor.hpp"
 #include "ThreadExceptHandler.hpp"
 #include "Thread.hpp"
+#include "Logger.hpp"
 
 using mylib::utils::Invoker;
 using mylib::utils::ByteQueue;

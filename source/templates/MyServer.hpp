@@ -8,6 +8,7 @@
 #include "MyTCPServer.hpp"
 #include "MyTCPClient.hpp"
 #include "Thread.hpp"
+#include "Logger.hpp"
 
 using mylib::threads::ThreadExceptHandler;
 using mylib::threads::Thread;

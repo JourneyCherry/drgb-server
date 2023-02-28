@@ -7,6 +7,8 @@
 #include "MyClientSocket.hpp"
 #include "Expected.hpp"
 
+using mylib::utils::ErrorCodeExcept;
+
 class MyTCPClient : public MyClientSocket
 {
 	private:
@@ -18,8 +20,8 @@ class MyTCPClient : public MyClientSocket
 		MyTCPClient(MyTCPClient&&) = delete;
 		~MyTCPClient();
 	public:
-		Expected<ByteQueue, int> Recv() override;
-		Expected<int> Send(ByteQueue) override;
+		Expected<ByteQueue> Recv() override;
+		ErrorCode Send(ByteQueue) override;
 		void Close() override;
 
 		MyTCPClient& operator=(const MyTCPClient&) = delete;

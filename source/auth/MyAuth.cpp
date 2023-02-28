@@ -32,11 +32,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	{
 		auto recv = client->Recv();
 		if(!recv)
-		{
-			if(recv.error() >= 0)	//-1이면 close()로 인한 연결 종료.
-				throw StackTraceExcept("Unknown Client Recv Failed : " + std::to_string(recv.error()), __STACKINFO__);
 			break;
-		}
 
 		try
 		{

@@ -2,15 +2,16 @@
 #include "MyTypes.hpp"
 
 //Error Codes
-static constexpr byte SUCCESS = 0;
-static constexpr byte ERR_PROTOCOL_VIOLATION = 10;		//프로토콜 위반
-static constexpr byte ERR_NO_MATCH_ACCOUNT = 11;		//일치하는 계정 없음
-static constexpr byte ERR_EXIST_ACCOUNT = 12;			//이미 일치하는 계정 존재함.
-static constexpr byte ERR_EXIST_ACCOUNT_MATCH = 13;		//이미 일치하는 계정 존재함 + 그 계정은 match서버에 있음.
-static constexpr byte ERR_EXIST_ACCOUNT_BATTLE = 14;	//이미 일치하는 계정 존재함 + 그 계정은 battle서버에 있음.
-static constexpr byte ERR_OUT_OF_CAPACITY = 15;			//대상 서버의 수용 가능 클라이언트 수 초과.
-static constexpr byte ERR_DB_FAILED = 16;				//DB 관련 에러. 클라이언트 측에선 연결끊기 외엔 할 수 있는게 없다.
-static constexpr byte ERR_DUPLICATED_ACCESS = 17;		//중복 접근. 보통 기존에 있는 세션에 보내지는 에러.
+static constexpr errorcode_t SUCCESS = 0;
+static constexpr errorcode_t ERR_PROTOCOL_VIOLATION = 10;		//프로토콜 위반
+static constexpr errorcode_t ERR_NO_MATCH_ACCOUNT = 11;		//일치하는 계정 없음
+static constexpr errorcode_t ERR_EXIST_ACCOUNT = 12;			//이미 일치하는 계정 존재함.
+static constexpr errorcode_t ERR_EXIST_ACCOUNT_MATCH = 13;		//이미 일치하는 계정 존재함 + 그 계정은 match서버에 있음.
+static constexpr errorcode_t ERR_EXIST_ACCOUNT_BATTLE = 14;	//이미 일치하는 계정 존재함 + 그 계정은 battle서버에 있음.
+static constexpr errorcode_t ERR_OUT_OF_CAPACITY = 15;			//대상 서버의 수용 가능 클라이언트 수 초과.
+static constexpr errorcode_t ERR_DB_FAILED = 16;				//DB 관련 에러. 클라이언트 측에선 연결끊기 외엔 할 수 있는게 없다.
+static constexpr errorcode_t ERR_DUPLICATED_ACCESS = 17;		//중복 접근. 보통 기존에 있는 세션에 보내지는 에러.
+static constexpr errorcode_t ERR_CONNECTION_CLOSED = 18;
 
 //Request from Client
 static constexpr byte REQ_REGISTER = 20;

@@ -11,18 +11,18 @@ MyTCPClient::~MyTCPClient()
 	Close();
 }
 
-Expected<ByteQueue, int> MyTCPClient::Recv()
+Expected<ByteQueue> MyTCPClient::Recv()
 {
 	unsigned char buf[BUFSIZE];
 	while(!recvbuffer.isMsgIn())
 	{
 		if(socket_fd < 0)
-			return {-1};
+			return {};
 		int recvlen = read(socket_fd, buf, BUFSIZE);
 		if(recvlen < 0)
-			return {errno};
+			throw ErrorCodeExcept(errno, __STACKINFO__);
 		if(recvlen == 0)
-			return {-1};
+			return {};
 
 		recvbuffer.Recv(buf, recvlen);
 	}
@@ -30,16 +30,18 @@ Expected<ByteQueue, int> MyTCPClient::Recv()
 	return recvbuffer.GetMsg();
 }
 
-Expected<int> MyTCPClient::Send(ByteQueue bytes)
+ErrorCode MyTCPClient::Send(ByteQueue bytes)
 {
 	if(socket_fd < 0)
-		return {-1, false};
+		return {ERR_CONNECTION_CLOSED};
 	ByteQueue capsulated = PacketProcessor::enpackage(bytes);
 	int sendlen = send(socket_fd, capsulated.data(), capsulated.Size(), 0);
-	if(sendlen <= 0)
-		return {sendlen == 0?0:errno, false};
+	if(sendlen == 0)
+		return {ERR_CONNECTION_CLOSED};
+	if(sendlen < 0)
+		return {errno};
 
-	return {0, true};
+	return {};
 }
 
 void MyTCPClient::Close()

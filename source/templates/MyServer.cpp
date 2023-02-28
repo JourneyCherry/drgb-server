@@ -68,12 +68,7 @@ void MyServer::Accept(std::shared_ptr<bool> killswitch, std::shared_ptr<MyServer
 	{
 		auto client = socket->Accept();
 		if(!client)
-		{
-			if(client.error() < 0)	//-1은 shutdown에 의해서 종료될 경우이다. 0이상은 errno 또는 에러코드 값.
-				break;
-			else
-				throw StackTraceExcept("Socket Accept Failed (" + std::to_string(client.error()) + ")", __STACKINFO__);
-		}
+			break;
 
 		ulock lk(m_accepts);
 		q_accepts.push(*client);
