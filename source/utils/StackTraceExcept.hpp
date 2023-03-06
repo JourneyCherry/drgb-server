@@ -32,7 +32,7 @@ class StackTraceExcept : public std::exception
 class ErrorCodeExcept : public StackTraceExcept
 {
 	public:
-		ErrorCodeExcept(ErrorCode ec, std::string file, std::string func, int line) : StackTraceExcept(ec.type(), ec.message_code(), file, func, line) {}
+		ErrorCodeExcept(ErrorCode ec, std::string file, std::string func, int line) : StackTraceExcept(ec.typestr(), ec.message_code(), file, func, line) {}
 };
 
 }

@@ -5,87 +5,103 @@
 #include <mutex>
 #include <memory>
 #include <functional>
+#include <string>
+#include <atomic>
 #include <condition_variable>
-#include "PoolElement.hpp"
-#include "StackTraceExcept.hpp"
+#include "ThreadExceptHandler.hpp"
+#include "StackTraceExcept.hpp"	//TODO : 상대경로가 아닌 헤더파일만 적으면 vscode에서 인식을 못한다. 단, cmake는 인식함.
+
+using mylib::threads::ThreadExceptHandler;
+using mylib::utils::StackTraceExcept;
 
 namespace mylib{
 namespace threads{
 
-template <class T, size_t MAX_POOL>
-class FixedPool
+template <typename T, size_t MAX_POOL>
+class FixedPool : public ThreadExceptHandler
 {
 	private:
 		using ulock = std::unique_lock<std::mutex>;
 
 		std::mutex mtx;
 		std::condition_variable cv;
-		std::queue<std::pair<size_t, std::exception_ptr>> except_queue;
 
 		bool isRunning;
+		std::atomic<size_t> capacity;
 
-		std::array<T, MAX_POOL> pool;
-		std::array<std::thread, MAX_POOL> tpool;
+		std::string name;
+		std::function<void(T)> process;
 
-		void Worker(size_t pos)
+		
+		std::array<std::thread, MAX_POOL> threadpool;
+		std::queue<T> msgqueue;
+
+		void Worker()
 		{
-			if(pos > MAX_POOL)
-				throw StackTraceExcept("Position Exceed Range", __STACKINFO__);
-
-			PoolElement* ppe = (PoolElement*)(&(pool[pos]));
-
+			Thread::SetThreadName(name);
+			
 			while(isRunning)
 			{
+				ulock lk(mtx);
+				cv.wait(lk, [&](){return !isRunning || !msgqueue.empty();});
+				if(msgqueue.empty())
+					continue;
+				T arg = msgqueue.front();
+				msgqueue.pop();
+				lk.unlock();
+				capacity.fetch_sub(1, std::memory_order_acquire);	//이 이후의 명령이 이 앞으로 오는 것 금지.
 				try
 				{
-					ppe->Work();
+					process(arg);
 				}
-				catch(const std::exception &e)
+				catch(...)
 				{
-					ulock lk(mtx);
-					except_queue.push(std::current_exception());
-					lk.unlock();
-
-					cv.notify_one();
+					ThrowThreadException();
 				}
+				capacity.fetch_add(1, std::memory_order_release);	//이 이전의 명령이 이 뒤로 오는 것 금지.
 			}
 		}
 		
 	public:
-		FixedPool() : isRunning(true)
+		FixedPool(std::function<void(T)> _process, ThreadExceptHandler *p = nullptr) : FixedPool("FixedPool", _process, p) {}
+		FixedPool(std::string _name, std::function<void(T)> _process, ThreadExceptHandler *p = nullptr) : name(_name), process(_process), isRunning(true), capacity(MAX_POOL)
 		{
-			static_assert(std::is_base_of_v<PoolElement, T>, "Type must inherit from PoolElement");
+			SetParent(p);
 			for(size_t i = 0;i<MAX_POOL;i++)
-				tpool[i] = std::thread(std::bind(&FixedPool::Worker, this, i));
+				threadpool[i] = std::thread(std::bind(&FixedPool::Worker, this));
 		}
 		~FixedPool()
 		{
 			stop();
-			for(size_t i = 0;i<MAX_POOL;i++)
-			{
-				if(tpool[i].joinable())
-					tpool[i].join();
-			}
 		}
-		T& operator[](size_t pos)
+
+		bool insert(T arg)
 		{
-			return std::ref(pool[pos]);
+			if(!isRunning)
+				return false;
+
+			ulock lk(mtx);
+			msgqueue.push(arg);
+			lk.unlock();
+			cv.notify_one();
+
+			return true;
 		}
+
 		void stop()
 		{
 			isRunning = false;
 			cv.notify_all();
+			for(size_t i = 0;i<MAX_POOL;i++)
+			{
+				if(threadpool[i].joinable())
+					threadpool[i].join();
+			}
 		}
-		void WaitCatch()
-		{
-			ulock lk(mtx);
-			cv.wait(lk, [&](){ return !isRunning || !except_queue.empty();});
-			if(!isRunning)
-				return;
-			std::exception_ptr eptr = except_queue.front();
-			except_queue.pop();
 
-			std::rethrow_exception(eptr);
+		size_t remain()
+		{
+			return capacity.load(std::memory_order_relaxed);
 		}
 };
 

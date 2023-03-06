@@ -28,11 +28,16 @@ void MyAuth::Close()
 void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 {
 	bool exit_client = false;
+
+	ErrorCode recv_ec;
 	while(isRunning || !exit_client)
 	{
 		auto recv = client->Recv();
 		if(!recv)
+		{
+			recv_ec = recv.error();
 			break;
+		}
 
 		try
 		{
@@ -157,4 +162,6 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	}
 
 	client->Close();
+	if(!client->isNormalClose(recv_ec))
+		throw ErrorCodeExcept(recv_ec, __STACKINFO__);
 }

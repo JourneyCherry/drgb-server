@@ -18,10 +18,9 @@ const std::map<errorcode_t, std::string> ErrorCode::strerrcode = {
 
 ErrorCode::ErrorCode() : ErrorCode(SUCCESS) {}
 
-ErrorCode::ErrorCode(errorcode_t ec)
+ErrorCode::ErrorCode(errorcode_t ec) : m_type(TYPE_CUSTOM), m_type_str("CustomCode")
 {
 	m_code = ec;
-	m_type_str = "CustomCode";
 	auto msg = strerrcode.find(ec);
 	if(msg == strerrcode.end())
 		m_message = "Unknown Code";
@@ -29,24 +28,23 @@ ErrorCode::ErrorCode(errorcode_t ec)
 		m_message = msg->second;
 }
 
-ErrorCode::ErrorCode(int _errno)
+ErrorCode::ErrorCode(int _errno) : m_type(TYPE_ERRNO), m_type_str("Errno")
 {
 	m_code = _errno;
-	m_type_str = "errno";
 	m_message = std::strerror(_errno);
 }
 
-ErrorCode::ErrorCode(boost::system::error_code ec)
+ErrorCode::ErrorCode(boost::system::error_code ec) : m_type(TYPE_BOOST), m_type_str("Boose")
 {
 	m_code = ec.value();
-	m_type_str = "Boost";
 	m_message = ec.message();
 }
 
 int ErrorCode::code() const { return m_code; }
 std::string ErrorCode::message() const { return m_message; }
 std::string ErrorCode::message_code() const { return "(" + std::to_string(m_code) + ") " + m_message; }
-std::string ErrorCode::type() const { return m_type_str; }
+std::string ErrorCode::typestr() const { return m_type_str; }
+int ErrorCode::typecode() const { return m_type; }
 
 ErrorCode::operator bool() const { return m_code == 0; }
 

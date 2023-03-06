@@ -91,9 +91,6 @@ int MyGame::GetWinner()
 
 void MyGame::Work()
 {
-#ifdef __DEBUG__
-	pthread_setname_np(pthread_self(), "GameWork");
-#endif
 	std::function<bool()> isAllIn = [&](){
 		for(int i = 0;i<MAX_PLAYER;i++)
 		{

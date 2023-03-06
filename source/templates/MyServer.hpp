@@ -9,9 +9,11 @@
 #include "MyTCPClient.hpp"
 #include "Thread.hpp"
 #include "Logger.hpp"
+#include "FixedPool.hpp"
 
 using mylib::threads::ThreadExceptHandler;
 using mylib::threads::Thread;
+using mylib::threads::FixedPool;
 using mylib::utils::Logger;
 using mylib::utils::StackTraceExcept;
 
@@ -27,11 +29,7 @@ class MyServer : public ThreadExceptHandler
 		std::array<std::shared_ptr<MyServerSocket>, MAX_SOCKET> sockets;
 		std::array<Thread, MAX_SOCKET> acceptors;
 
-		using ulock = std::unique_lock<std::mutex>;
-		std::mutex m_accepts;
-		std::queue<std::shared_ptr<MyClientSocket>> q_accepts;
-		std::condition_variable cv_workers;
-		std::vector<std::shared_ptr<Thread>> v_workers;
+		FixedPool<std::shared_ptr<MyClientSocket>, MAX_CLIENTS> workerpool;
 
 	public:
 		MyServer(int, int);
@@ -46,6 +44,5 @@ class MyServer : public ThreadExceptHandler
 		virtual void ClientProcess(std::shared_ptr<MyClientSocket>) = 0;
 	
 	private:
-		void Accept(std::shared_ptr<bool>, std::shared_ptr<MyServerSocket>);
-		void Work(std::shared_ptr<bool>);
+		void Accept(std::shared_ptr<MyServerSocket>);
 };

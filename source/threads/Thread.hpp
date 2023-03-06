@@ -4,6 +4,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <string>
 #include "ThreadExceptHandler.hpp"
 
 
@@ -13,12 +14,10 @@ namespace threads{
 class Thread : public ThreadExceptHandler
 {
 	private:
-		using tWorkerArg = std::shared_ptr<bool>;
 
 		std::shared_ptr<bool> tc_isRunning;
-		std::shared_ptr<bool> tc_KillSwitch;
 		std::shared_ptr<std::condition_variable> tc_cv;
-		std::function<void(tWorkerArg)> tc_function;
+		std::function<void()> tc_function;
 		std::shared_ptr<ThreadExceptHandler> tc_tei;
 
 		std::shared_ptr<std::mutex> tc_mutex;
@@ -26,18 +25,16 @@ class Thread : public ThreadExceptHandler
 
 		static void Process(
 			std::shared_ptr<bool>, 						// Run Switch
-			std::shared_ptr<bool>, 						// Kill Switch
 			std::shared_ptr<std::condition_variable>, 	// Condition Variable for Exit
-			std::function<void(tWorkerArg)>, 			// Work Function
+			std::function<void()>, 			// Work Function
 			std::shared_ptr<ThreadExceptHandler>	// Exception Pointer
 		);
 
-		void memset_vars();
-		bool isMemSet();
+		void initMemory();
 
 	public:
 		Thread();
-		Thread(std::function<void(tWorkerArg)>, ThreadExceptHandler* = nullptr, bool = true);
+		Thread(std::function<void()>, ThreadExceptHandler* = nullptr, bool = true);
 		Thread(const Thread&) = delete;
 		Thread(Thread&&) noexcept;
 		~Thread();
@@ -45,12 +42,14 @@ class Thread : public ThreadExceptHandler
 		Thread& operator=(Thread&&) noexcept;
 
 		bool start();
-		void stop();	//기본적으로 JoinUnitilStop()이다.
+		void join();	//기본적으로 JoinUnitilStop()이다.
 
 		void SetThreadExcept(ThreadExceptHandler*);
-		bool SetFunction(std::function<void(tWorkerArg)>);
+		bool SetFunction(std::function<void()>);
 
 		bool isRunning();
+
+		static void SetThreadName(const std::string&);
 };
 
 }

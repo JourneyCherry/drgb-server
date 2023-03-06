@@ -3,7 +3,7 @@
 MyMatch::MyMatch() : 
 	connectee(this), 
 	connector_battle(this, ConfigParser::GetString("Battle1_Addr"), ConfigParser::GetInt("Battle1_Port"), "match"),
-	t_matchmaker(std::bind(&MyMatch::MatchMake, this, std::placeholders::_1), this),
+	t_matchmaker(std::bind(&MyMatch::MatchMake, this), this),
 	MyServer(ConfigParser::GetInt("Match1_ClientPort_Web", 54321), ConfigParser::GetInt("Match1_ClientPort_TCP", 54322))
 {
 }
@@ -59,18 +59,15 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 
 	noti = std::make_shared<Notifier>();
 	sessions.InsertLKeyValue(account_id, noti);
-	mylib::threads::Thread receiver([&](std::shared_ptr<bool> killswitch)
+	Thread receiver([&]()
 	{
-		while(!(*killswitch))
-		{
-			auto result = client->Recv();
-			if(!result)
-			{
-				noti->push(std::make_shared<MyDisconnectMessage>());
-				break;
-			}
+		Expected<ByteQueue, ErrorCode> result{ByteQueue()};
+		while(result = client->Recv())
 			noti->push(std::make_shared<MyClientMessage>(*result));
-		}
+
+		noti->push(std::make_shared<MyDisconnectMessage>());
+		if(!client->isNormalClose(result.error()))
+			throw ErrorCodeExcept(result.error(), __STACKINFO__);
 	});
 
 	bool isAnswered = false;
@@ -144,7 +141,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		}
 	}
 	client->Close();
-	receiver.stop();
+	receiver.join();
 }
 
 ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
@@ -202,12 +199,11 @@ ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
 	return ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 }
 
-void MyMatch::MatchMake(std::shared_ptr<bool> killswitch)
+void MyMatch::MatchMake()
 {
-#ifdef __DEBUG__
-	pthread_setname_np(pthread_self(), "MatchMaker");
-#endif
-	while(isRunning && !(*killswitch))
+	Thread::SetThreadName("MatchMaker");
+
+	while(isRunning)
 	{
 		std::this_thread::sleep_for(std::chrono::seconds(rematch_delay));
 		matchmaker.Process();

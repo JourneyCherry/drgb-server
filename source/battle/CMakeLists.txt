@@ -24,7 +24,7 @@ TARGET_LINK_LIBRARIES ( MyBattle PUBLIC
 	#DeMap
 	MyConnector
 	MyConnectee
-	Pool
+	FixedPool
 	Thread
 )
 

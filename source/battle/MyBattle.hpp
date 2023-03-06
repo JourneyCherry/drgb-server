@@ -8,10 +8,12 @@
 #include "DeMap.hpp"
 #include "MyConnector.hpp"
 #include "MyConnectee.hpp"
-#include "Pool.hpp"
+#include "FixedPool.hpp"
 #include "Thread.hpp"
 
+using mylib::utils::StackTraceExcept;
 using mylib::utils::DeMap;
+using mylib::threads::FixedPool;
 
 class MyBattle : public MyServer
 {
@@ -23,8 +25,7 @@ class MyBattle : public MyServer
 		MyConnector connector_match;
 
 		DeMap<Account_ID_t, Hash_t, std::shared_ptr<MyGame>> cookies;
-		mylib::threads::Thread poolManager;
-		mylib::threads::Pool gamepool;
+		FixedPool<std::shared_ptr<MyGame>, MAX_GAME> gamepool;
 	
 	public:
 		MyBattle();
@@ -32,8 +33,8 @@ class MyBattle : public MyServer
 		void Open() override;
 		void Close() override;
 		void ClientProcess(std::shared_ptr<MyClientSocket>) override;
+		void GameProcess(std::shared_ptr<MyGame>);
 
 	private:
 		ByteQueue BattleInquiry(ByteQueue);
-		void pool_manage(std::shared_ptr<bool>);
 };

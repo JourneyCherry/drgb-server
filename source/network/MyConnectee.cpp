@@ -1,7 +1,7 @@
 #include "MyConnectee.hpp"
 
 MyConnectee::MyConnectee(ThreadExceptHandler *parent)
- : t_accept(std::bind(&MyConnectee::AcceptLoop, this, std::placeholders::_1), parent, false)
+ : t_accept(std::bind(&MyConnectee::AcceptLoop, this), this, false), ClientPool(this), ThreadExceptHandler(parent)
 {
 	server_fd = -1;
 	port = -1;
@@ -28,35 +28,25 @@ void MyConnectee::Close()
 {
 	isRunning = false;
 	if (server_fd >= 0)
-	{
 		shutdown(server_fd, SHUT_RDWR);
-		server_fd = -1;
-	}
-	for(auto &[key, pair] : clients)
-	{
-		shutdown(*pair.second, SHUT_RDWR);
-		(*pair.second) = -1;
-		pair.second->release();
-		pair.first->stop();	//TODO : pair.first.exception 처리
-	}
-	clients.clear();
-	t_accept.stop();//TODO : t_accept.exception 처리
+
+	t_accept.join();
+	ClientPool.safe_loop([&](int fd){ shutdown(fd, SHUT_RDWR); });
+	ClientPool.Stop();
 }
 
 void MyConnectee::Accept(std::string keyword, std::function<ByteQueue(ByteQueue)> process)
 {
 	if(!server_fd.wait([](int fd){return fd >= 0;}))
 		throw StackTraceExcept("MyConnectee::Accept : server_fd is not opened", __STACKINFO__);
-	std::shared_ptr<Invoker<int>> sfd = std::make_shared<Invoker<int>>(-1);
-	std::pair<std::shared_ptr<Thread>, std::shared_ptr<Invoker<int>>> p = {std::make_shared<Thread>(std::bind(&MyConnectee::ClientLoop, this, keyword, sfd, process, std::placeholders::_1)), sfd};
-	clients.insert({keyword, std::move(p)});
+	
+	KeywordProcessMap.insert_or_assign(keyword, process);
 }
 
-void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
+void MyConnectee::AcceptLoop()
 {
-#ifdef __DEBUG__
-	pthread_setname_np(pthread_self(), "ConnectAcceptor");
-#endif
+	Thread::SetThreadName("ConnectAcceptor");
+
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0)
 		throw StackTraceExcept("MyConnectee::Open()::socket() Failed : " + std::to_string(errno), __STACKINFO__);
@@ -78,8 +68,7 @@ void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
 
 	while(isRunning)
 	{
-		if(*killswitch)
-			break;
+		ClientPool.flush();	//주기적으로(여기선 새 Connector가 들어왔을 때) flush 해줌.
 			
 		struct sockaddr_in client_addr;
 		socklen_t client_addr_len = sizeof(client_addr);
@@ -96,71 +85,49 @@ void MyConnectee::AcceptLoop(std::shared_ptr<bool> killswitch)
 		int recvsize = recv(client_fd, authentication_buffer, BUFSIZE, 0);	//TODO : Fail within n seconds.
 		if(recvsize <= 0)
 		{
-			//TODO : Log error.(whether client close connection or socket causes error)
+			int error_code = errno;
+			if(error_code != EINVAL && recvsize < 0)
+				Logger::log("Connectee::Accept::recv : " + ErrorCode(error_code).message_code(), Logger::LogType::error);
 			shutdown(client_fd, SHUT_RDWR);
 			continue;
 		}
 		//인증용 문자열(즉, 발송지 이름)을 올바르게 받지 못하면 연결을 끊는다.
 		std::string authenticate = std::string(authentication_buffer, recvsize);
-		if(clients.find(authenticate) == clients.end())
+		if(KeywordProcessMap.find(authenticate) == KeywordProcessMap.end())
 		{
 			Logger::log("Host <- " + authenticate + " Failed(Unknown keyword)");
 			shutdown(client_fd, SHUT_RDWR);
 			continue;
 		}
-		if((*clients[authenticate].second) >= 0)
-		{
-			//TODO : kill late client? or kick earlier client?
-			Logger::log("MyConnectee::AcceptLoop(" + authenticate + ") : there is already connected connector.", Logger::LogType::debug);
-		}
-		Logger::log("MyConnectee::AcceptLoop(" + authenticate + ") is connected", Logger::LogType::debug);
-		Logger::log("Host <- " + authenticate + " is Connected");
-		(*clients[authenticate].second) = client_fd;
+		ClientPool.insert(client_fd, std::bind(&MyConnectee::ClientLoop, this, authenticate, client_fd));
 	}
 	
 	shutdown(server_fd, SHUT_RDWR);
 	server_fd = -1;
 }
 
-void MyConnectee::ClientLoop(
-	std::string keyword, 
-	std::shared_ptr<Invoker<int>> fd, 
-	std::function<ByteQueue(ByteQueue)> process,
-	std::shared_ptr<bool> killswitch
-)
+void MyConnectee::ClientLoop(std::string keyword, int fd)
 {
-#ifdef __DEBUG__
-	pthread_setname_np(pthread_self(), (std::string("ConnecteeLoop_") + keyword).c_str());
-#endif
+	Thread::SetThreadName("ConnecteeClientLoop_" + keyword);
+
+	Logger::log("Host <- " + keyword + " is Connected");	//TODO : Remote Address도 로깅 필요
 	PacketProcessor recvbuffer;
-	Logger::log("MyConnectee::AcceptLoop(" + keyword + ") waits for connect", Logger::LogType::debug);
 	while(isRunning)
-	{
-		if(!fd->wait([](int value){return value >= 0;}))
-			return;
-		
-		if(*killswitch)
-			return;
-		
+	{		
 		char buffer[BUFSIZE];
 		memset(buffer, 0, BUFSIZE);
-		int recvlen = recv(*fd, buffer, BUFSIZE, 0);
+		int recvlen = recv(fd, buffer, BUFSIZE, 0);
 		if(recvlen == 0)
 		{
-			Logger::log("Host <- " + keyword + " is Disconnected");
-			shutdown(*fd, SHUT_RDWR);
-			*fd = -1;
-			recvbuffer.Clear();
-			continue;
+			break;
 		}
 		else if(recvlen < 0)
 		{
+			int ec = errno;
 			Logger::log("Host <- " + keyword + " is Disconnected");
-			shutdown(*fd, SHUT_RDWR);
-			Logger::log("MyConnectee::ClientLoop(" + keyword + ")::recv() : " + Logger::strerrno(errno), Logger::LogType::debug);
-			*fd = -1;
-			recvbuffer.Clear();
-			continue;
+			if(ec != EINVAL)
+				throw ErrorCodeExcept(ec, __STACKINFO__);
+			break;
 		}
 		recvbuffer.Recv((byte*)buffer, recvlen);
 
@@ -171,7 +138,7 @@ void MyConnectee::ClientLoop(
 		try
 		{
 			ByteQueue data = recvbuffer.GetMsg();
-			answer = process(data);
+			answer = KeywordProcessMap[keyword](data);
 		}
 		catch(const std::exception &e)
 		{
@@ -179,8 +146,11 @@ void MyConnectee::ClientLoop(
 			answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 		}
 		std::vector<byte> msg = PacketProcessor::enpackage(answer);
-		int sendlen = send(*fd, msg.data(), msg.size(), 0);
+		int sendlen = send(fd, msg.data(), msg.size(), 0);
 		if(sendlen <= 0)
-			throw StackTraceExcept("Cannot Send Packet to Client : " + std::to_string(errno), __STACKINFO__);
+			throw ErrorCodeExcept(errno, __STACKINFO__);
 	}
+
+	Logger::log("Host <- " + keyword + " is Disconnected");
+	shutdown(fd, SHUT_RDWR);
 }

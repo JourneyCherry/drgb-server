@@ -3,7 +3,9 @@
 #include <boost/beast/websocket.hpp>
 #include <memory>
 #include "MyClientSocket.hpp"
+#include "ErrorCode.hpp"
 
+using mylib::utils::ErrorCode;
 using mylib::utils::ErrorCodeExcept;
 
 class MyWebsocketClient : public MyClientSocket
@@ -17,7 +19,7 @@ class MyWebsocketClient : public MyClientSocket
 		MyWebsocketClient(MyWebsocketClient&&) = delete;
 		~MyWebsocketClient();
 		
-		Expected<ByteQueue> Recv() override;
+		Expected<ByteQueue, ErrorCode> Recv() override;
 		ErrorCode Send(ByteQueue) override;
 		void Close() override;
 

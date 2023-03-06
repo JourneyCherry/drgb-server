@@ -26,10 +26,10 @@ MyWebsocketClient::~MyWebsocketClient()
 	Close();
 }
 
-Expected<ByteQueue> MyWebsocketClient::Recv()
+Expected<ByteQueue, ErrorCode> MyWebsocketClient::Recv()
 {
 	if(!ws.is_open())
-		return {};
+		return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
 	boost::beast::error_code ec;
 	boost::beast::flat_buffer buffer;
@@ -37,22 +37,22 @@ Expected<ByteQueue> MyWebsocketClient::Recv()
 	{
 		buffer.clear();
 		if(!ws.is_open())	//읽는 도중에 종료될 경우.
-			return {};
+			return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
 		size_t recvlen = ws.read(buffer, ec);	//ws->read()는 buffer에 새 데이터를 append 한다.
 		if(recvlen == 0)
-			return {};
+			return {ErrorCode{ERR_CONNECTION_CLOSED}};
 		if(
 			ec == boost::beast::websocket::error::closed || 
 			ec == boost::asio::error::eof ||
 			ec == boost::asio::error::operation_aborted
 		)
-			return {};
+			return {ErrorCode{ERR_CONNECTION_CLOSED}};
 		if(ec)
-			throw ErrorCodeExcept(ec, __STACKINFO__);
+			return {ErrorCode{ec}};
 
 		if(!ws.got_binary())
-			return {};	//TODO : 별도의 Error_Code 만들 필요 있음.
+			return {ErrorCode{ERR_PROTOCOL_VIOLATION}};
 
 		unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
 		size_t size = boost::asio::buffer_size(buffer.data());

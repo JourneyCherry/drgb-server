@@ -13,6 +13,7 @@ using mylib::utils::Notifier;
 using mylib::utils::NotifyTarget;
 using mylib::utils::DeMap;
 using mylib::threads::Thread;
+using mylib::utils::Expected;
 
 class MyMatch : public MyServer
 {
@@ -36,5 +37,5 @@ class MyMatch : public MyServer
 	
 	private:
 		ByteQueue MatchInquiry(ByteQueue);
-		void MatchMake(std::shared_ptr<bool>);
+		void MatchMake();
 };

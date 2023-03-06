@@ -1,8 +1,8 @@
 #include "MyConnector.hpp"
 
 MyConnector::MyConnector(ThreadExceptHandler* parent, std::string addr, int port, std::string key)
-	: t_conn(std::bind(&MyConnector::Connect_, this, std::placeholders::_1), parent, false),
-	t_recv(std::bind(&MyConnector::RecvLoop, this, std::placeholders::_1), parent, false)
+	: t_conn(std::bind(&MyConnector::Connect_, this), parent, false),
+	t_recv(std::bind(&MyConnector::RecvLoop, this), parent, false)
 {
 	isRunning = false;
 	isConnected = false;
@@ -30,18 +30,14 @@ void MyConnector::Connect()
 	}
 }
 
-void MyConnector::Connect_(std::shared_ptr<bool> killswitch)
+void MyConnector::Connect_()
 {
-#ifdef __DEBUG__
-	pthread_setname_np(pthread_self(), "Connector");
-#endif
+	Thread::SetThreadName("Connector");
+	
 	while(isRunning)
 	{
 		if(!isConnected.wait(false))
 			break;
-		
-		if(*killswitch)
-			return;
 
 		if(socket_fd >= 0)	//소켓이 열려있다면 닫고 시작한다.
 			shutdown(socket_fd, SHUT_RDWR);
@@ -127,22 +123,18 @@ void MyConnector::Disconnect()
 		isConnected.release();
 		shutdown(socket_fd, SHUT_RDWR);
 	}
-	t_conn.stop();
-	t_recv.stop();
+	t_conn.join();
+	t_recv.join();
 	//TODO : t_conn과 t_recv의 exception 처리하기. 단, rethrow를 하면 소멸자에서 예외를 던질 수 있으므로, Logging을 통해서 처리하자.
 }
 
-void MyConnector::RecvLoop(std::shared_ptr<bool> killswitch)
+void MyConnector::RecvLoop()
 {
-#ifdef __DEBUG__
-	pthread_setname_np(pthread_self(), "ConnectorReciver");
-#endif
+	Thread::SetThreadName("ConnectorReceiver");
+
 	while(isRunning)
 	{
 		if(!isConnected.wait(true))
-			return;
-		
-		if(*killswitch)
 			return;
 		
 		recvbuffer.Start();

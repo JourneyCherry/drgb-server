@@ -6,7 +6,6 @@
 #include "MyCodes.hpp"
 #include "MyPostgres.hpp"
 #include "MyClientSocket.hpp"
-#include "PoolElement.hpp"
 
 #ifdef __linux__
 	#define MYPOPCNT(x)	__builtin_popcount(x)
@@ -14,7 +13,7 @@
 	#define MYPOPCNT(x)	__popcnt(x)
 #endif
 
-class MyGame : public mylib::threads::PoolElement
+class MyGame
 {
 	private:
 		using ulock = std::unique_lock<std::mutex>;
@@ -57,9 +56,9 @@ class MyGame : public mylib::threads::PoolElement
 		void Disconnect(int, std::shared_ptr<MyClientSocket>);
 		void Action(int, int);
 		int GetWinner();
+		void Work();
 	
 	private:
-		void Work() override;
 		bool process();
 		bool CheckAction(int);
 		void SendAll(ByteQueue);	//같은 패킷 보낼때 씀.

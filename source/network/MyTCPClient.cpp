@@ -11,18 +11,18 @@ MyTCPClient::~MyTCPClient()
 	Close();
 }
 
-Expected<ByteQueue> MyTCPClient::Recv()
+Expected<ByteQueue, ErrorCode> MyTCPClient::Recv()
 {
 	unsigned char buf[BUFSIZE];
 	while(!recvbuffer.isMsgIn())
 	{
 		if(socket_fd < 0)
-			return {};
+			return {ErrorCode{ERR_CONNECTION_CLOSED}};
 		int recvlen = read(socket_fd, buf, BUFSIZE);
 		if(recvlen < 0)
-			throw ErrorCodeExcept(errno, __STACKINFO__);
+			return {ErrorCode{errno}};
 		if(recvlen == 0)
-			return {};
+			return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
 		recvbuffer.Recv(buf, recvlen);
 	}

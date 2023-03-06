@@ -46,8 +46,8 @@ class MyConnector
 		std::string keyword;
 
 	private:
-		void Connect_(std::shared_ptr<bool>);
-		void RecvLoop(std::shared_ptr<bool>);
+		void Connect_();
+		void RecvLoop();
 
 	public:
 		MyConnector(ThreadExceptHandler*, std::string, int, std::string);
