@@ -4,7 +4,6 @@
 #include <pthread.h>
 #include "Daemonizer.hpp"
 #include "MyServerOpt.hpp"
-#include "Logger.hpp"
 #include "ConfigParser.hpp"
 #include "Thread.hpp"
 

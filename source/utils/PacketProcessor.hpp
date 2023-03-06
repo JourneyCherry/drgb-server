@@ -5,7 +5,6 @@
 #include <condition_variable>
 #include "ByteQueue.hpp"
 #include "StackTraceExcept.hpp"
-#include "MyTypes.hpp"
 
 namespace mylib{
 namespace utils{

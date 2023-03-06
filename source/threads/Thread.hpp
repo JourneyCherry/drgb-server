@@ -7,7 +7,6 @@
 #include <string>
 #include "ThreadExceptHandler.hpp"
 
-
 namespace mylib{
 namespace threads{
 

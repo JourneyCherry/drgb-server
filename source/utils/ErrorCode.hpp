@@ -3,7 +3,6 @@
 #include <string>
 #include <cerrno>
 #include <boost/asio/error.hpp>
-#include "MyTypes.hpp"
 #include "MyCodes.hpp"
 
 namespace mylib{

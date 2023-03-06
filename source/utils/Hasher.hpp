@@ -1,6 +1,6 @@
 #pragma once
-#include "ByteQueue.hpp"
 #include <openssl/sha.h>
+#include "ByteQueue.hpp"
 
 namespace mylib{
 namespace utils{

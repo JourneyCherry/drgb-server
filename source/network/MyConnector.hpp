@@ -11,7 +11,6 @@
 #include "PacketProcessor.hpp"
 #include "Thread.hpp"
 #include "Logger.hpp"
-#include "StackTraceExcept.hpp"
 
 using mylib::utils::ByteQueue;
 using mylib::utils::StackTraceExcept;

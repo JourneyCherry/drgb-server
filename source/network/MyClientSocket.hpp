@@ -2,7 +2,6 @@
 #include <string>
 #include "Expected.hpp"
 #include "PacketProcessor.hpp"
-#include "ErrorCode.hpp"
 
 using mylib::utils::Expected;
 using mylib::utils::PacketProcessor;

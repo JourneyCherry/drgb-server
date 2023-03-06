@@ -4,12 +4,9 @@
 #include <memory>
 #include "MyServer.hpp"
 #include "MyGame.hpp"
-#include "MyCodes.hpp"
 #include "DeMap.hpp"
 #include "MyConnector.hpp"
 #include "MyConnectee.hpp"
-#include "FixedPool.hpp"
-#include "Thread.hpp"
 
 using mylib::utils::StackTraceExcept;
 using mylib::utils::DeMap;

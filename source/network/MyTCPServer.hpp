@@ -9,7 +9,6 @@
 #include <cerrno>
 #include "MyServerSocket.hpp"
 #include "MyTCPClient.hpp"
-#include "StackTraceExcept.hpp"
 
 using mylib::utils::ErrorCodeExcept;
 using mylib::utils::Expected;

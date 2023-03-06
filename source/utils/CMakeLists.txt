@@ -1,26 +1,44 @@
 SET ( LIBS
-	ErrorCode
-	Encoder
 	ByteQueue
-	#MyCodes
 	ConfigParser
-	Hasher
 	Daemonizer
-	#DeMap
-	StackTraceExcept
-	#Expected
+	DeMap		#Interface
+	Encoder
+	ErrorCode
+	Expected	#Interface
 	GetArg
-	#Invoker
+	Hasher
+	Invoker		#Interface
 	Logger
-	PacketProcessor
+	MyCodes		#Interface
+	MyTypes		#Interface
 	Notifier
-	#MyTypes
+	PacketProcessor
+	StackTraceExcept
 )
 
 FOREACH( LIB IN LISTS LIBS )
-	ADD_LIBRARY( ${LIB} ${LIB}.cpp ${LIB}.hpp )
+	IF ( EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${LIB}.cpp" )
+		ADD_LIBRARY( ${LIB} EXCLUDE_FROM_ALL ${LIB}.cpp ${LIB}.hpp )
+	ELSE()
+		ADD_LIBRARY( ${LIB} INTERFACE EXCLUDE_FROM_ALL ${LIB}.hpp )
+	ENDIF()
 ENDFOREACH()
 
-TARGET_LINK_LIBRARIES ( Hasher PUBLIC crypto )
+
+TARGET_LINK_LIBRARIES ( ByteQueue PUBLIC MyTypes )
+TARGET_LINK_LIBRARIES ( ConfigParser PUBLIC )
+TARGET_LINK_LIBRARIES ( Daemonizer PUBLIC StackTraceExcept )
+TARGET_LINK_LIBRARIES ( DeMap INTERFACE Expected )
+TARGET_LINK_LIBRARIES ( Encoder PUBLIC MyTypes )
+TARGET_LINK_LIBRARIES ( ErrorCode PUBLIC MyCodes )
+TARGET_LINK_LIBRARIES ( Expected INTERFACE )
 TARGET_LINK_LIBRARIES ( GetArg PUBLIC StackTraceExcept )
+TARGET_LINK_LIBRARIES ( Hasher PUBLIC ByteQueue crypto )
+TARGET_LINK_LIBRARIES ( Invoker INTERFACE )
+TARGET_LINK_LIBRARIES ( Logger PUBLIC )
+TARGET_LINK_LIBRARIES ( MyCodes INTERFACE MyTypes )
+TARGET_LINK_LIBRARIES ( MyTypes INTERFACE )
+TARGET_LINK_LIBRARIES ( Notifier PUBLIC Expected )
+TARGET_LINK_LIBRARIES ( PacketProcessor PUBLIC ByteQueue StackTraceExcept )
 TARGET_LINK_LIBRARIES ( StackTraceExcept PUBLIC ErrorCode )

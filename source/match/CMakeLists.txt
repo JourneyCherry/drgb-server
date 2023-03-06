@@ -2,17 +2,27 @@ SET ( TARGET match )
 SET ( LIBS
 	MyMatch
 	MyMatchMaker
+	MyNotifyMsgs
 )
 
 FOREACH ( LIB IN LISTS LIBS )
-	ADD_LIBRARY ( ${LIB} ${LIB}.cpp ${LIB}.hpp )
+	IF ( EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${LIB}.cpp" )
+		ADD_LIBRARY( ${LIB} EXCLUDE_FROM_ALL ${LIB}.cpp ${LIB}.hpp )
+	ELSE()
+		ADD_LIBRARY( ${LIB} INTERFACE EXCLUDE_FROM_ALL ${LIB}.hpp )
+	ENDIF()
 ENDFOREACH()
 
 ADD_EXECUTABLE ( ${TARGET} main.cpp )
 SET_TARGET_PROPERTIES ( ${TARGET} PROPERTIES OUTPUT_NAME ${PROJECT_NAME}-${TARGET} )
 
+TARGET_LINK_LIBRARIES ( MyNotifyMsgs INTERFACE 
+	ByteQueue
+	Notifier
+)
+
 TARGET_LINK_LIBRARIES ( MyMatchMaker PUBLIC
-	
+	MyTypes
 )
 
 TARGET_LINK_LIBRARIES ( MyMatch PUBLIC
@@ -20,9 +30,9 @@ TARGET_LINK_LIBRARIES ( MyMatch PUBLIC
 	MyConnectee
 	MyConnector
 	ConfigParser
-	#MyCodes	#Header-Only
+	MyCodes
 	MyMatchMaker
-	Notifier
+	MyNotifyMsgs
 	MyPostgres
 )
 

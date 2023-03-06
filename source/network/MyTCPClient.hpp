@@ -5,7 +5,6 @@
 #include <errno.h>
 #include <cstring>
 #include "MyClientSocket.hpp"
-#include "Expected.hpp"
 
 using mylib::utils::ErrorCode;
 using mylib::utils::ErrorCodeExcept;

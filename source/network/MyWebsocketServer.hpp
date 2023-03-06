@@ -3,7 +3,6 @@
 #include <boost/beast/websocket.hpp>
 #include "MyServerSocket.hpp"
 #include "MyWebsocketClient.hpp"
-#include "StackTraceExcept.hpp"
 
 using mylib::utils::ErrorCodeExcept;
 using mylib::utils::StackTraceExcept;

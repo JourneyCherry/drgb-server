@@ -1,13 +1,17 @@
 SET ( LIBS
-	MyServer
 	MyMain
+	MyServer
 	MyServerOpt
 )
 
 FOREACH( LIB IN LISTS LIBS )
-	ADD_LIBRARY( ${LIB} ${LIB}.cpp ${LIB}.hpp )
+	IF ( EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${LIB}.cpp" )
+		ADD_LIBRARY( ${LIB} EXCLUDE_FROM_ALL ${LIB}.cpp ${LIB}.hpp )
+	ELSE()
+		ADD_LIBRARY( ${LIB} INTERFACE EXCLUDE_FROM_ALL ${LIB}.hpp )
+	ENDIF()
 ENDFOREACH()
 
-TARGET_LINK_LIBRARIES ( MyServerOpt PUBLIC GetArg )
-TARGET_LINK_LIBRARIES ( MyServer PUBLIC Thread Logger MyClientSocket MyServerSocket ByteQueue MyTCPServer MyTCPClient MyWebsocketServer MyWebsocketClient )
-TARGET_LINK_LIBRARIES ( MyMain PUBLIC Logger Daemonizer ConfigParser MyServerOpt )
+TARGET_LINK_LIBRARIES ( MyMain PUBLIC Daemonizer ConfigParser MyServerOpt Thread )
+TARGET_LINK_LIBRARIES ( MyServer PUBLIC FixedPool Thread Logger MyTCPServer MyWebsocketServer )
+TARGET_LINK_LIBRARIES ( MyServerOpt PUBLIC GetArg Logger )
