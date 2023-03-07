@@ -18,15 +18,21 @@ class MyPostgres
 		static bool isRunning;
 
 		static std::unique_ptr<pqxx::connection> db_c;
+		static std::mutex db_mtx;
+
 		std::unique_ptr<pqxx::work> db_w;
+		std::unique_lock<std::mutex> db_lk;
+
 	public:
 		static void Open();
 		static void Close();
 		static bool isOpened();
 	public:
 		MyPostgres();
-		MyPostgres(MyPostgres&&);
-		MyPostgres& operator=(MyPostgres&&);
+		MyPostgres(const MyPostgres&) = delete;
+		MyPostgres(MyPostgres&&) = delete;
+		MyPostgres &operator=(const MyPostgres&) = delete;
+		MyPostgres& operator=(MyPostgres&&) = delete;
 		~MyPostgres();
 		void abort();
 		void commit();
