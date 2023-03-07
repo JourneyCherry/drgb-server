@@ -254,7 +254,7 @@ void MyMatch::MatchMake()
 					}
 					else	//battle서버에서 매치 전달에 실패한 경우
 					{
-						Logger::raise(std::make_exception_ptr(StackTraceExcept("Battle Server Cannot Accept Battle : " + std::to_string(result), __STACKINFO__)));
+						Logger::log("Battle Server Cannot Accept Battle : " + std::to_string(result), Logger::LogType::error);
 						break;	//TODO : 다른 가용 battle서버를 찾아야 한다.
 					}
 				}

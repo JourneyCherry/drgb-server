@@ -37,26 +37,6 @@ Logger::~Logger()
 void Logger::OpenLog(bool _verbose){instance()->OpenLog_(_verbose);}
 void Logger::ConfigPort(LogType type, int port){instance()->ConfigPort_(type, port);}
 void Logger::log(std::string content, LogType type){instance()->log_(content, type);}
-void Logger::raise()
-{
-	raise(std::current_exception());
-}
-void Logger::raise(std::exception_ptr e)
-{
-#ifdef __DEBUG__
-	std::rethrow_exception(e);
-#else
-	//std::exception_ptr로부터 what()을 끌어내는 방법.
-	try
-	{
-		std::rethrow_exception(e);
-	}
-	catch(const std::exception& ex)
-	{
-		log(ex.what(), LogType::error);
-	}
-#endif
-}
 Logger::LogType Logger::GetType(std::string name)
 {
 	if(name == "default")	return default_type;

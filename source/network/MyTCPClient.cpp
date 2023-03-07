@@ -41,7 +41,7 @@ ErrorCode MyTCPClient::Send(ByteQueue bytes)
 	if(sendlen < 0)
 		return {errno};
 
-	return {};
+	return {SUCCESS};
 }
 
 void MyTCPClient::Close()

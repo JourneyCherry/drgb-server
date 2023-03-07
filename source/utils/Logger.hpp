@@ -37,8 +37,6 @@ class Logger
 		static void OpenLog(bool = false);
 		static void ConfigPort(LogType, int);
 		static void log(std::string, LogType=LogType::info);
-		static void raise();
-		static void raise(std::exception_ptr);
 		static std::string strerrno(int);
 		static LogType GetType(std::string);
 	

@@ -44,9 +44,9 @@ void MyServer::Join()
 		{
 			WaitForThreadException();
 		}
-		catch(...)
+		catch(const std::exception &e)
 		{
-			Logger::raise();
+			Logger::log(e.what(), Logger::LogType::error);
 		}
 	}
 }

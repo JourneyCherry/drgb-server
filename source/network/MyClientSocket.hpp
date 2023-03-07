@@ -24,7 +24,7 @@ class MyClientSocket
 		MyClientSocket& operator=(MyClientSocket&&) = delete;
 
 		virtual Expected<ByteQueue, ErrorCode> Recv() = 0;
-		virtual ErrorCode Send(ByteQueue) = 0;	//Value가 ErrorCode가 된다.
+		virtual ErrorCode Send(ByteQueue) = 0;
 		virtual void Close() = 0;
 
 		std::string ToString();

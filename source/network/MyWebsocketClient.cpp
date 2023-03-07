@@ -78,7 +78,7 @@ ErrorCode MyWebsocketClient::Send(ByteQueue bytes)
 	if(sendlen == 0)
 		return {ERR_CONNECTION_CLOSED};
 
-	return {};
+	return {SUCCESS};
 }
 
 void MyWebsocketClient::Close()

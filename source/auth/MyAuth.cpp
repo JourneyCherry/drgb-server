@@ -29,13 +29,13 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 {
 	bool exit_client = false;
 
-	ErrorCode recv_ec;
-	while(isRunning || !exit_client)
+	ErrorCode ec;
+	while(isRunning && !exit_client && ec)
 	{
 		auto recv = client->Recv();
 		if(!recv)
 		{
-			recv_ec = recv.error();
+			ec = recv.error();
 			break;
 		}
 
@@ -73,7 +73,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					}
 					catch(const pqxx::unique_violation &e)
 					{
-						client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT));
+						ec = client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT));
 						continue;
 					}
 				}
@@ -90,18 +90,18 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			}
 			catch(const pqxx::plpgsql_no_data_found &e)
 			{
-				client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+				ec = client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 				continue;
 			}
 			catch(const pqxx::unexpected_rows &e)
 			{
-				client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+				ec = client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 				continue;
 			}
 			catch(const pqxx::pqxx_exception &e)
 			{
 				Logger::log("DB Error : " + std::string(e.base().what()), Logger::LogType::error);
-				client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+				ec = client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
 				continue;
 			}
 
@@ -131,11 +131,11 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 							switch(cookieheader)
 							{
 								case SUCCESS:
-									client->Send(ByteQueue::Create<byte>(SUCCESS) + cookie + match_server_byte);
+									ec = client->Send(ByteQueue::Create<byte>(SUCCESS) + cookie + match_server_byte);
 									exit_client = true;
 									break;
 								default:	//TODO : ERR_OUT_OF_CAPACITY가 오면 타 Match 서버로 연결해야 함.
-									client->Send(ByteQueue::Create<byte>(cookieheader));
+									ec = client->Send(ByteQueue::Create<byte>(cookieheader));
 									exit_client = true;
 									break;
 							}
@@ -144,7 +144,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					case ERR_EXIST_ACCOUNT_MATCH:	//쿠키와 몇번 매치서버인지(unsigned int)는 뒤에 붙어있다.
 					case ERR_EXIST_ACCOUNT_BATTLE:	//쿠키와 몇번 배틀서버인지(unsigned int)는 뒤에 붙어있다.
 					case ERR_OUT_OF_CAPACITY:		//서버 접속 불가. 단일 byte.
-						client->Send(answer);
+						ec = client->Send(answer);
 						exit_client = true;
 						break;
 					default:
@@ -156,12 +156,12 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		}
 		catch(const std::exception& e)
 		{
-			client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
-			Logger::raise();
+			ec = client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+			Logger::log(e.what(), Logger::LogType::error);
 		}
 	}
 
 	client->Close();
-	if(!client->isNormalClose(recv_ec))
-		throw ErrorCodeExcept(recv_ec, __STACKINFO__);
+	if(!client->isNormalClose(ec))
+		throw ErrorCodeExcept(ec, __STACKINFO__);
 }

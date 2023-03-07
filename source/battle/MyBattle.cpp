@@ -59,15 +59,15 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		return;
 	}
 
-	ErrorCode recv_ec;
-	while(isRunning)
+	ErrorCode ec;
+	while(isRunning && ec)
 	{
 		auto msg = client->Recv();
 		if(!msg)
 		{
 			//Game에 disconnect 메시지 보내기.
 			GameSession->Disconnect(side, client);
-			recv_ec = msg.error();
+			ec = msg.error();
 			break;
 		}
 		byte header = msg->pop<byte>();
@@ -81,19 +81,19 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				}
 				catch(const std::exception &e)
 				{
-					client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
-					Logger::raise();
+					ec = client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+					Logger::log(e.what(), Logger::LogType::error);
 				}
 				break;
 			default:
-				client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+				ec = client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
 				break;
 		}
 	}
 
 	client->Close();
-	if(!client->isNormalClose(recv_ec))
-		throw ErrorCodeExcept(recv_ec, __STACKINFO__);
+	if(!client->isNormalClose(ec))
+		throw ErrorCodeExcept(ec, __STACKINFO__);
 }
 
 ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)

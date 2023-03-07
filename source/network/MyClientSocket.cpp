@@ -7,5 +7,7 @@ std::string MyClientSocket::ToString()
 
 bool MyClientSocket::isNormalClose(const ErrorCode &ec)
 {
+	if(ec)
+		return true;
 	return (ec.typecode() == ErrorCode::TYPE_CUSTOM && ec.code() == ERR_CONNECTION_CLOSED);
 }
