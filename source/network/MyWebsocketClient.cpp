@@ -1,6 +1,7 @@
 #include "MyWebsocketClient.hpp"
 
-MyWebsocketClient::MyWebsocketClient(boost::asio::ip::tcp::socket socket) : ws{std::move(socket)}, MyClientSocket()
+MyWebsocketClient::MyWebsocketClient(std::shared_ptr<boost::asio::io_context> _pioc, boost::asio::ip::tcp::socket socket)
+ : pioc(_pioc), ws{std::move(socket)}, MyClientSocket()
 {
 	auto &sock = ws.next_layer();
 	boost::asio::ip::tcp::endpoint ep = sock.remote_endpoint();
@@ -31,33 +32,44 @@ Expected<ByteQueue, ErrorCode> MyWebsocketClient::Recv()
 	if(!ws.is_open())
 		return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
-	boost::beast::error_code ec;
-	boost::beast::flat_buffer buffer;
 	while(!recvbuffer.isMsgIn())
 	{
-		buffer.clear();
 		if(!ws.is_open())	//읽는 도중에 종료될 경우.
 			return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
-		size_t recvlen = ws.read(buffer, ec);	//ws->read()는 buffer에 새 데이터를 append 한다.
-		if(recvlen == 0)
-			return {ErrorCode{ERR_CONNECTION_CLOSED}};
-		if(
-			ec == boost::beast::websocket::error::closed || 
-			ec == boost::asio::error::eof ||
-			ec == boost::asio::error::operation_aborted
-		)
-			return {ErrorCode{ERR_CONNECTION_CLOSED}};
-		if(ec)
-			return {ErrorCode{ec}};
+		boost::beast::error_code result;
+		boost::beast::flat_buffer buffer;
+
+		ws.async_read(buffer, [&](boost::beast::error_code ec, size_t bytes_written)
+		{
+			result = ec;
+			if(ec)
+				return;
+			if(bytes_written == 0)
+				return;
+			if(!ws.got_binary())
+				return;
+
+			unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
+			size_t size = boost::asio::buffer_size(buffer.data());
+
+			recvbuffer.Recv(first, size);
+		});
+
+		if(pioc->stopped())
+			pioc->restart();
+		pioc->run();
 
 		if(!ws.got_binary())
 			return {ErrorCode{ERR_PROTOCOL_VIOLATION}};
-
-		unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
-		size_t size = boost::asio::buffer_size(buffer.data());
-
-		recvbuffer.Recv(first, size);
+		if(
+			result == boost::beast::websocket::error::closed || 
+			result == boost::asio::error::eof ||
+			result == boost::asio::error::operation_aborted
+		)
+			return {ErrorCode{ERR_CONNECTION_CLOSED}};
+		if(result)
+			return {ErrorCode{result}};
 	}
 
 	return recvbuffer.GetMsg();
@@ -86,7 +98,6 @@ void MyWebsocketClient::Close()
 	if(ws.is_open())
 	{
 		boost::beast::error_code ec;
-		while(!ws.is_message_done()){}	//메시지를 읽는 도중에 종료하지 않는다.
 		ws.close(boost::beast::websocket::close_code::normal, ec);
 		if(
 			ec == boost::beast::websocket::error::closed || 
@@ -97,4 +108,5 @@ void MyWebsocketClient::Close()
 		if(ec)
 			throw ErrorCodeExcept(ec, __STACKINFO__);
 	}
+	pioc->stop();
 }
