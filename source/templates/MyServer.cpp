@@ -57,10 +57,18 @@ void MyServer::Accept(std::shared_ptr<MyServerSocket> socket)
 
 	while(isRunning)
 	{
-		auto client = socket->Accept();
-		if(!client)
-			break;
+		try
+		{
+			auto client = socket->Accept();
+			if(!client)
+				break;
 
-		workerpool.insert(*client);
+			workerpool.insert(*client);
+		}
+		catch(const std::exception& e)
+		{
+			Logger::log(e.what(), Logger::LogType::error);	//에러 발생해도 스레드를 죽이지 않고 그대로 진행.
+			//TODO : socket이 reset이 필요할 경우 reset 해주기. 에러가 발생해서 소켓이 닫혔을 수 있기 때문.
+		}
 	}
 }

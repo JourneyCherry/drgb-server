@@ -34,7 +34,7 @@ ErrorCode::ErrorCode(int _errno) : m_type(TYPE_ERRNO), m_type_str("Errno")
 	m_message = std::strerror(_errno);
 }
 
-ErrorCode::ErrorCode(boost::system::error_code ec) : m_type(TYPE_BOOST), m_type_str("Boose")
+ErrorCode::ErrorCode(boost::system::error_code ec) : m_type(TYPE_BOOST), m_type_str("Boost")
 {
 	m_code = ec.value();
 	m_message = ec.message();

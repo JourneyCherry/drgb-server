@@ -29,7 +29,7 @@ void MyServerOpt::GetArgs(int argc, char *argv[])
 {
 	int option_index = 0;
 	int c = 0;
-	while((c = getopt_long(argc, argv, "dp:c:L:", long_options, &option_index)) != -1)
+	while((c = getopt_long(argc, argv, "dp:c:L:v", long_options, &option_index)) != -1)
 	{
 		switch(c)
 		{
