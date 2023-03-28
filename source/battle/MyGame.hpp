@@ -41,7 +41,11 @@ class MyGame
 			int health;
 			int energy;
 			int target;
+			ByteQueue info;
 			byte result;
+			//For Record Achievement
+			int prev_action;
+			int consecutive;
 		} players[MAX_PLAYER];
 
 		static constexpr int MEDITATE = 1 << 0;
@@ -63,4 +67,6 @@ class MyGame
 		bool CheckAction(int);
 		void SendAll(ByteQueue);	//같은 패킷 보낼때 씀.
 		ByteQueue GetPlayerByte(const struct player_info&);
+		void AchieveCount(Account_ID_t, Achievement_ID_t, std::shared_ptr<MyClientSocket>);
+		void AchieveProgress(Account_ID_t, Achievement_ID_t, int, std::shared_ptr<MyClientSocket>);
 };

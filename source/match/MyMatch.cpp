@@ -70,6 +70,38 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			throw ErrorCodeExcept(result.error(), __STACKINFO__);
 	});
 
+	//사용자에게 정보 전달.
+	try
+	{
+		MyPostgres db;
+		ByteQueue infopacket = ByteQueue::Create<byte>(GAME_PLAYER_INFO);
+		auto [nickname, win, draw, loose] = db.GetInfo(account_id);
+		infopacket.push<Achievement_ID_t>(nickname);	//nickname
+		infopacket.push<int>(win);	//win
+		infopacket.push<int>(draw);	//draw
+		infopacket.push<int>(loose);	//loose
+
+		auto result = db.GetAllAchieve(account_id);
+		for(auto pair : result)
+		{
+			infopacket.push<Achievement_ID_t>(pair.first);	//achieve id
+			infopacket.push<int>(pair.second);	//achieve count
+		}
+		client->Send(infopacket);
+	}
+	catch(const pqxx::pqxx_exception & e)
+	{
+		client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+		client->Close();
+		throw StackTraceExcept("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
+	}
+	catch(const std::exception &e)
+	{
+		client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+		client->Close();
+		throw StackTraceExcept("DB Failed : " + std::string(e.what()), __STACKINFO__);
+	}
+
 	bool isAnswered = false;
 	while(isRunning && !isAnswered)
 	{
@@ -82,21 +114,15 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			case MyClientMessage::Message_ID:
 				{
 					ByteQueue data = ((MyClientMessage*)message->get())->message;
-					//TODO : 클라이언트 메시지 처리
+					//클라이언트 메시지 처리
 					byte header = data.pop<byte>();
 					switch(header)
 					{
 						case REQ_STARTMATCH:	//매치메이커 큐에 넣기.
 							try
 							{
-								int win = 0;
-								int loose = 0;
-								int draw = 0;
 								MyPostgres db;
-								auto result = db.exec1("SELECT win_count, loose_count, draw_count FROM userlist WHERE id=" + std::to_string(account_id));
-								win = result[0].as<int>();
-								loose = result[1].as<int>();
-								draw = result[2].as<int>();
+								auto [_, win, draw, loose] = db.GetInfo(account_id);
 								matchmaker.Enter(account_id, win, draw, loose);
 							}
 							catch(const pqxx::pqxx_exception & e)
@@ -114,6 +140,36 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 							break;
 						case REQ_PAUSEMATCH:	//매치메이커 큐에서 빼기.
 							matchmaker.Exit(account_id);
+							break;
+						case REQ_CHNAME:
+							try
+							{
+								Achievement_ID_t nameindex = data.pop<Achievement_ID_t>();
+								MyPostgres db;
+								db.SetNickName(account_id, nameindex);
+
+								ByteQueue infopacket = ByteQueue::Create<byte>(GAME_PLAYER_INFO);
+								auto [nickname, win, draw, loose] = db.GetInfo(account_id);
+								infopacket.push<Achievement_ID_t>(nickname);
+								infopacket.push<int>(win);
+								infopacket.push<int>(draw);	
+								infopacket.push<int>(loose);
+
+								db.commit();
+								client->Send(infopacket);
+							}
+							catch(const pqxx::pqxx_exception & e)
+							{
+								client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+								client->Close();
+								throw StackTraceExcept("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
+							}
+							catch(const std::exception &e)
+							{
+								client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+								client->Close();
+								throw StackTraceExcept("DB Failed : " + std::string(e.what()), __STACKINFO__);
+							}
 							break;
 						default:
 							client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));

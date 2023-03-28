@@ -14,18 +14,36 @@ const std::chrono::seconds MyGame::Dis_Time = std::chrono::seconds(15);
 MyGame::MyGame(Account_ID_t lpid, Account_ID_t rpid)
 {
 	ulock lk(mtx);
+	players[0].id = lpid;
+	players[1].id = rpid;
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
-		players[i].id = 0;
 		players[i].socket = nullptr;
 		players[i].action = MEDITATE;
 		players[i].health = MAX_HEALTH;
 		players[i].energy = 0;
 		players[i].target = (MAX_PLAYER - 1) - i;	//한 게임의 플레이어 수가 2명 초과일 경우, 플레이어가 직접 타겟을 정할 수 있도록 변경 필요.
 		players[i].result = 0;
+		players[i].prev_action = -1;
+		players[i].consecutive = 0;
+		try
+		{
+			MyPostgres db;
+			auto [name, win, draw, loose] = db.GetInfo(players[i].id);
+			players[i].info.push<Achievement_ID_t>(name);	//nickname
+			players[i].info.push<int>(win);	//win
+			players[i].info.push<int>(draw);	//draw
+			players[i].info.push<int>(loose);	//loose
+		}
+		catch(const pqxx::pqxx_exception & e)
+		{
+			Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::error);
+		}
+		catch(const std::exception &e)
+		{
+			Logger::log("DB Failed : " + std::string(e.what()), Logger::LogType::error);
+		}
 	}
-	players[0].id = lpid;
-	players[1].id = rpid;
 }
 
 int MyGame::Connect(Account_ID_t id, std::shared_ptr<MyClientSocket> socket)
@@ -107,8 +125,9 @@ void MyGame::Work()
 	}
 
 	//실제 플레이 내용
+	int now_round = 0;
 	bool isGameOver = false;
-	for(int now_round = 0;now_round < MAX_ROUND && !isGameOver;now_round++)
+	for(;now_round < MAX_ROUND && !isGameOver;now_round++)
 	{
 		ulock lk(mtx);
 		bool isSomeoneOut = cv.wait_for(lk, Round_Time, [&](){return !isAllIn();});	//cv.wait_for()는 시간이 다된&Notify된 시점의 Predicate값을 return 한다.
@@ -162,26 +181,27 @@ void MyGame::Work()
 
 	//DB에 경기결과 기록 및 사용자들에게 경기결과 전달 + 연결 종료.
 	int winner = GetWinner();
+	if(winner < 0 && now_round == MAX_ROUND)
+	{
+		for(int i = 0;i<MAX_PLAYER;i++)
+			AchieveCount(players[i].id, ACHIEVE_AREYAWINNINGSON, players[i].socket);
+	}
 	try
 	{
 		MyPostgres db;
-		static std::string query = "SELECT win_count, draw_count, loose_count FROM userlist WHERE id=";
 		for(int i = 0;i<MAX_PLAYER;i++)
 		{
-			std::string idstr = std::to_string(players[i].id);
-			auto result = db.exec1(query + idstr);
-			int win = result[0].as<unsigned int>();
-			int draw = result[1].as<unsigned int>();
-			int loose = result[2].as<unsigned int>();
-			std::string targetstr;
+			int result = 0;
 			if(winner < 0)
-				targetstr = "draw_count=" + std::to_string(draw+1);
+				result = 0;
 			else if(winner == i)
-				targetstr = "win_count=" + std::to_string(win+1);
+			{
+				result = 1;
+			}
 			else
-				targetstr = "loose_count=" + std::to_string(loose+1);
+				result = -1;
 
-			db.exec("UPDATE userlist SET " + targetstr + " WHERE id=" + idstr);
+			db.IncreaseScore(players[i].id, result);
 		}
 		db.commit();
 	}
@@ -196,6 +216,15 @@ void MyGame::Work()
 		Logger::log("Error : " + std::string(e.what()), Logger::LogType::error);
 		SendAll(ByteQueue::Create<byte>(ERR_DB_FAILED));
 		std::rethrow_exception(std::current_exception());
+	}
+	
+	if(winner >= 0)
+	{
+		AchieveCount(players[winner].id, ACHIEVE_NOIVE, players[winner].socket);
+		AchieveCount(players[winner].id, ACHIEVE_CHALLENGER, players[winner].socket);
+		AchieveCount(players[winner].id, ACHIEVE_DOMINATOR, players[winner].socket);
+		AchieveCount(players[winner].id, ACHIEVE_SLAYER, players[winner].socket);
+		AchieveCount(players[winner].id, ACHIEVE_CONQUERER, players[winner].socket);
 	}
 
 	//결과에 따라 승/패가 나뉘기 때문에 SendAll()로 보낼 수 없어, 따로 보냄.
@@ -213,8 +242,15 @@ bool MyGame::process()
 {
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
+		int prev = players[i].prev_action;
 		int action = players[i].action;
 		int target = players[i].target;
+		players[i].prev_action = action;
+
+		players[i].consecutive++;
+		if(prev != action)
+			players[i].consecutive = 1;
+
 		auto iter = required_energy.find(action);
 		if(iter == required_energy.end())
 			continue;
@@ -226,19 +262,35 @@ bool MyGame::process()
 		switch(players[i].action)
 		{
 			case MEDITATE:
-				players[i].energy = std::min(MAX_ENERGY, players[i].energy + 1);
+				players[i].energy += 1;
+				if(players[i].energy > MAX_ENERGY)
+				{
+					AchieveCount(players[i].id, ACHIEVE_MEDITATE_ADDICTION, players[i].socket);
+					players[i].energy = MAX_ENERGY;
+				}
 				break;
 			case PUNCH:
 				if(players[target].action & 0x01)	//meditate
 					players[target].health -= 1;
+				if(players[target].action == players[i].action)
+					AchieveCount(players[i].id, ACHIEVE_DOPPELGANGER, players[i].socket);
+				AchieveProgress(players[i].id, ACHIEVE_PUNCH_ADDICTION, players[i].consecutive, players[i].socket);	//동일 행동 2회 이상. 단, 최대 진행도를 기록하기 위해, 별도로 consecutive가 2 이상인지 체크하지 않는다.
 				break;
 			case FIRE:
 				if(players[target].action & 0x0b)	//meditate, guard, punch
+				{
 					players[target].health -= 1;
+					if(players[target].health <= 0 && players[target].action == PUNCH)
+						AchieveCount(players[i].id, ACHIEVE_KNEELINMYSIGHT, players[i].socket);
+				}
+				if(players[target].action == players[i].action)
+					AchieveCount(players[i].id, ACHIEVE_DOPPELGANGER, players[i].socket);
+				AchieveCount(players[i].id, ACHIEVE_FIRE_ADDICTION, players[i].socket);
 				break;
 			case GUARD:
 			case EVADE:
 				//방어계열은 별도의 동작을 수행하지 않는다.
+				AchieveProgress(players[i].id, players[i].action == GUARD?ACHIEVE_GUARD_ADDICTION:ACHIEVE_EVADE_ADDICTION, players[i].consecutive, players[i].socket);	//동일 행동 2회 이상. 단, 최대 진행도를 기록하기 위해, 별도로 consecutive가 2 이상인지 체크하지 않는다.
 				break;
 			default:
 				continue;
@@ -282,4 +334,48 @@ ByteQueue MyGame::GetPlayerByte(const struct player_info &player)
 	result.push<int>(player.energy);
 
 	return result;
+}
+
+void MyGame::AchieveCount(Account_ID_t id, Achievement_ID_t achieve, std::shared_ptr<MyClientSocket> socket)
+{
+	try
+	{
+		MyPostgres db;
+		if(db.Achieve(id, achieve))
+		{
+			ByteQueue packet = ByteQueue::Create<byte>(GAME_PLAYER_ACHIEVE);
+			packet.push<Achievement_ID_t>(achieve);
+			socket->Send(packet);
+		}
+	}
+	catch(const pqxx::pqxx_exception & e)
+	{
+		Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::error);
+	}
+	catch(const std::exception &e)
+	{
+		Logger::log("DB Failed : " + std::string(e.what()), Logger::LogType::error);
+	}
+}
+
+void MyGame::AchieveProgress(Account_ID_t id, Achievement_ID_t achieve, int count, std::shared_ptr<MyClientSocket> socket)
+{
+	try
+	{
+		MyPostgres db;
+		if(db.AchieveProgress(id, achieve, count))
+		{
+			ByteQueue packet = ByteQueue::Create<byte>(GAME_PLAYER_ACHIEVE);
+			packet.push<Achievement_ID_t>(achieve);
+			socket->Send(packet);
+		}
+	}
+	catch(const pqxx::pqxx_exception & e)
+	{
+		Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::error);
+	}
+	catch(const std::exception &e)
+	{
+		Logger::log("DB Failed : " + std::string(e.what()), Logger::LogType::error);
+	}
 }

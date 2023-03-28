@@ -59,6 +59,16 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		return;
 	}
 
+	//사용자에게 정보 전달.
+	{
+		ByteQueue info = ByteQueue::Create<byte>(GAME_PLAYER_INFO_NAME);
+		if(GameSession->players[0].id == account_id)
+			info += GameSession->players[0].info + GameSession->players[1].info;
+		else
+			info += GameSession->players[1].info + GameSession->players[0].info;
+		client->Send(info);
+	}
+
 	ErrorCode ec;
 	while(isRunning && ec)
 	{

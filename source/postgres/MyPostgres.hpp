@@ -4,6 +4,8 @@
 #include <memory>
 #include <thread>
 #include <chrono>
+#include <tuple>
+#include <map>
 #include "ConfigParser.hpp"
 #include "StackTraceExcept.hpp"
 #include "Logger.hpp"
@@ -41,4 +43,13 @@ class MyPostgres
 		std::string quote_raw(const unsigned char*, size_t);
 		pqxx::result exec(const std::string& query);
 		pqxx::row exec1(const std::string& query);
+		std::tuple<Achievement_ID_t, int, int, int> GetInfo(Account_ID_t);
+		std::map<Achievement_ID_t, int> GetAllAchieve(Account_ID_t);
+		bool SetNickName(Account_ID_t, Achievement_ID_t);
+		void IncreaseScore(Account_ID_t, int);
+		bool Achieve(Account_ID_t, Achievement_ID_t);
+		bool AchieveProgress(Account_ID_t, Achievement_ID_t, int);
+
+	private:
+		std::tuple<int, int> GetAchieve(Account_ID_t, Achievement_ID_t);
 };

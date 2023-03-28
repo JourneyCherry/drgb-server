@@ -98,7 +98,7 @@ void MyWebsocketClient::Close()
 	if(ws.is_open())
 	{
 		boost::beast::error_code ec;
-		ws.close(boost::beast::websocket::close_code::normal, ec);
+		ws.close(boost::beast::websocket::close_code::normal, ec);	//TODO : 여기서 Block이 되면 모든 로직이 멈춘다. Timeout이나 비동기 종료가 필요함.
 		if(
 			ec == boost::beast::websocket::error::closed || 
 			ec == boost::asio::error::eof ||

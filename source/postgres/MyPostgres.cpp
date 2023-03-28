@@ -101,3 +101,78 @@ pqxx::row MyPostgres::exec1(const std::string& query)
 {
 	return db_w->exec1(query);
 }
+
+std::tuple<Achievement_ID_t, int, int, int> MyPostgres::GetInfo(Account_ID_t account_id)
+{
+	auto result = db_w->exec_params1("SELECT nickname, win_count, draw_count, loose_count FROM userlist WHERE id = $1", account_id);
+	return {
+		result[0].as<Achievement_ID_t>(), 
+		result[1].as<int>(), 
+		result[2].as<int>(), 
+		result[3].as<int>()
+	};
+}
+
+std::tuple<int, int> MyPostgres::GetAchieve(Account_ID_t account_id, Achievement_ID_t achieve_id)
+{
+	auto result = db_w->exec_params1("SELECT COALESCE(ua.count, 0), a.count FROM achievement a LEFT JOIN user_achievement ua ON ua.achievement_id = a.id AND ua.user_id = (SELECT id FROM userlist WHERE id = $1) WHERE a.id = (SELECT id FROM achievement WHERE id = $2)", account_id, achieve_id);
+	return {result[0].as<int>(), result[1].as<int>()};
+}
+
+std::map<Achievement_ID_t, int> MyPostgres::GetAllAchieve(Account_ID_t account_id)
+{
+	auto result = db_w->exec_params("SELECT a.id, ua.count FROM achievement a INNER JOIN user_achievement ua ON a.id = ua.achievement_id AND ua.user_id = $1", account_id);
+	std::map<Achievement_ID_t, int> achievements;
+	for(auto row : result)
+		achievements.insert({row[0].as<Achievement_ID_t>(), row[1].as<int>()});
+
+	return achievements;
+}
+
+bool MyPostgres::SetNickName(Account_ID_t account_id, Achievement_ID_t achieve_id)
+{
+	auto [achieve, goal] = GetAchieve(account_id, achieve_id);
+	if(achieve < goal)
+		return false;
+	db_w->exec_params0("UPDATE userlist SET nickname = $2 WHERE id = $1", account_id, achieve_id);
+	return true;
+}
+
+void MyPostgres::IncreaseScore(Account_ID_t id, int result)
+{
+	std::string query = "UPDATE userlist SET ";
+	if(result > 0)
+		query += "win_count = win_count + 1 ";
+	else if(result < 0)
+		query += "loose_count = loose_count + 1 ";
+	else
+		query += "draw_count = draw_count + 1 ";
+	query += "WHERE id = $1";
+	db_w->exec_params0(query.c_str(), id);
+}
+
+bool MyPostgres::Achieve(Account_ID_t id, Achievement_ID_t achieve)
+{
+	auto [count, require] = GetAchieve(id, achieve);
+	if(count < require)
+	{
+		db_w->exec_params0("INSERT INTO user_achievement (user_id, achievement_id, count) VALUES ($1, $2, 1) ON CONFLICT (user_id, achievement_id) DO UPDATE SET count = user_achievement.count + 1 WHERE user_achievement.user_id = $1 AND user_achievement.achievement_id = $2", id, achieve);	//ON CONFLICT는 PostgreSQL에서만 사용가능하다. MySQL은 ON DUPLICATE KEY이다.
+		db_w->commit();
+		return (require - count == 1);
+	}
+	return false;
+}
+
+bool MyPostgres::AchieveProgress(Account_ID_t id, Achievement_ID_t achieve, int c)
+{
+	auto [count, require] = GetAchieve(id, achieve);
+	if(count < require && 	//미달성 조건
+		count < c)			//진행도가 기존보다 더 진행되어야 함
+	{
+		c = std::min(require, c);
+		db_w->exec_params0("INSERT INTO user_achievement (user_id, achievement_id, count) VALUES ($1, $2, $3) ON CONFLICT (user_id, achievement_id) DO UPDATE SET count = $3 WHERE user_achievement.user_id = $1 AND user_achievement.achievement_id = $2", id, achieve, c);	//ON CONFLICT는 PostgreSQL에서만 사용가능하다. MySQL은 ON DUPLICATE KEY이다.
+		db_w->commit();
+		return (require <= c);	//3줄 위에서 require를 넘지않게 막고 있지만 혹시나 모를 경우를 위해 '동일'이 아닌 '이상'조건으로 설정함.
+	}
+	return false;
+}

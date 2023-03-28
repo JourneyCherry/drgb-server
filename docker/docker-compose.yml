@@ -10,7 +10,7 @@ services:
     image: drgb-clientweb
     ports:
       #TODO : 사용자들이 접속 할 포트로 변경 필요.(http : 80, httpd : 443)
-      - 51324:80
+      - 54321:80
     volumes:
       - ./ClientBuild:/usr/local/apache2/htdocs
   auth:
@@ -27,8 +27,8 @@ services:
     stdin_open: true
     privileged: true
     ports:
-      - "54321:54321" #web
-      - "54322:54322" #tcp
+      - "54322:54322" #web
+      - "54422:54422" #tcp
   match:
     container_name: match
     image: drgb-match
@@ -42,7 +42,7 @@ services:
     privileged: true
     ports:
       - "54323:54323" #web
-      - "54324:54324" #tcp
+      - "54423:54423" #tcp
   battle:
     container_name: battle
     image: drgb-battle
@@ -55,8 +55,8 @@ services:
     stdin_open: true
     privileged: true
     ports:
-      - "54325:54325" #web
-      - "54326:54326" #tcp
+      - "54324:54324" #web
+      - "54424:54424" #tcp
   db:
     container_name: db
     image: postgres

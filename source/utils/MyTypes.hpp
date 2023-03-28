@@ -7,6 +7,7 @@ typedef unsigned char byte;
 typedef int32_t Int;
 typedef uint32_t UInt;
 typedef unsigned long long Account_ID_t;
+typedef unsigned long long Achievement_ID_t;
 typedef int Seed_t;
 typedef byte errorcode_t;
 

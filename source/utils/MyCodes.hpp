@@ -1,6 +1,22 @@
 #pragma once
 #include "MyTypes.hpp"
 
+//Achievement List	//Achievement List는 파일을 통한 동적 변경이 불가능하다. 내부 로직에서 Ticking 로직을 변경할 수 없기 때문.
+static constexpr Achievement_ID_t ACHIEVE_NEWBIE = 1;
+static constexpr Achievement_ID_t ACHIEVE_MEDITATE_ADDICTION = 2;
+static constexpr Achievement_ID_t ACHIEVE_GUARD_ADDICTION = 3;
+static constexpr Achievement_ID_t ACHIEVE_EVADE_ADDICTION = 4;
+static constexpr Achievement_ID_t ACHIEVE_PUNCH_ADDICTION = 5;
+static constexpr Achievement_ID_t ACHIEVE_FIRE_ADDICTION = 6;
+static constexpr Achievement_ID_t ACHIEVE_NOIVE = 7;
+static constexpr Achievement_ID_t ACHIEVE_CHALLENGER = 8;
+static constexpr Achievement_ID_t ACHIEVE_DOMINATOR = 9;
+static constexpr Achievement_ID_t ACHIEVE_SLAYER = 10;
+static constexpr Achievement_ID_t ACHIEVE_CONQUERER = 11;
+static constexpr Achievement_ID_t ACHIEVE_KNEELINMYSIGHT = 12;
+static constexpr Achievement_ID_t ACHIEVE_DOPPELGANGER = 13;
+static constexpr Achievement_ID_t ACHIEVE_AREYAWINNINGSON = 14;
+
 //Error Codes
 static constexpr errorcode_t SUCCESS = 0;
 static constexpr errorcode_t ERR_PROTOCOL_VIOLATION = 10;		//프로토콜 위반
@@ -20,6 +36,7 @@ static constexpr byte REQ_CHPWD = 22;
 static constexpr byte REQ_STARTMATCH = 23;
 static constexpr byte REQ_PAUSEMATCH = 24;
 static constexpr byte REQ_GAME_ACTION = 25;
+static constexpr byte REQ_CHNAME = 26;
 
 //Answer to Client
 static constexpr byte ANS_MATCHMADE = 30;
@@ -31,11 +48,13 @@ static constexpr byte GAME_FINISHED_LOOSE = 34;
 static constexpr byte GAME_CRASHED = 35;	//게임이 터짐. 지금은 상대가 닷지하는 경우지만, 어뷰징을 방지하기 위해, 추후엔 초반 라운드에 닷지하는 경우 외엔 이 패킷을 없애야 한다.
 static constexpr byte GAME_PLAYER_DISCONNEDTED = 36;
 static constexpr byte GAME_PLAYER_ALL_CONNECTED = 37;
-
+static constexpr byte GAME_PLAYER_INFO = 38;		//플레이어 정보. 닉네임 및 업적 내용 포함.
+static constexpr byte GAME_PLAYER_INFO_NAME = 39;	//플레이어의 이름 정보.
+static constexpr byte GAME_PLAYER_ACHIEVE = 40;		//도전과제 달성 알림. 요구 횟수를 충족했을 때만 온다.
 
 //Inquiry among Servers
-static constexpr byte INQ_COOKIE_CHECK = 40;	//쿠키 존재/만료 여부 확인.
-static constexpr byte INQ_ACCOUNT_CHECK = 41;	//계정 접속/만료 여부 확인.
-static constexpr byte INQ_COOKIE_TRANSFER = 42;	//쿠키 전달. 
-static constexpr byte INQ_AVAILABLE = 43;		//가용량 확인.
-static constexpr byte INQ_MATCH_TRANSFER = 44;	//매치 전달. Account_ID_t, Hash_t(cookie), Account_ID_t, Hash_t(cookie) 순으로 따라온다.
+static constexpr byte INQ_COOKIE_CHECK = 50;	//쿠키 존재/만료 여부 확인.
+static constexpr byte INQ_ACCOUNT_CHECK = 51;	//계정 접속/만료 여부 확인.
+static constexpr byte INQ_COOKIE_TRANSFER = 52;	//쿠키 전달. 
+static constexpr byte INQ_AVAILABLE = 53;		//가용량 확인.
+static constexpr byte INQ_MATCH_TRANSFER = 54;	//매치 전달. Account_ID_t, Hash_t(cookie), Account_ID_t, Hash_t(cookie) 순으로 따라온다.
