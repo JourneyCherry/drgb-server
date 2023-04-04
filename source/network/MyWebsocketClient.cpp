@@ -27,58 +27,52 @@ MyWebsocketClient::~MyWebsocketClient()
 	Close();
 }
 
-Expected<ByteQueue, ErrorCode> MyWebsocketClient::Recv()
+Expected<std::vector<byte>, ErrorCode> MyWebsocketClient::RecvRaw()
 {
 	if(!ws.is_open())
 		return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
-	while(!recvbuffer.isMsgIn())
+	std::vector<byte> result_bytes;
+	boost::beast::error_code result;
+	boost::beast::flat_buffer buffer;
+
+	ws.async_read(buffer, [&](boost::beast::error_code ec, size_t bytes_written)
 	{
-		if(!ws.is_open())	//읽는 도중에 종료될 경우.
-			return {ErrorCode{ERR_CONNECTION_CLOSED}};
-
-		boost::beast::error_code result;
-		boost::beast::flat_buffer buffer;
-
-		ws.async_read(buffer, [&](boost::beast::error_code ec, size_t bytes_written)
-		{
-			result = ec;
-			if(ec)
-				return;
-			if(bytes_written == 0)
-				return;
-			if(!ws.got_binary())
-				return;
-
-			unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
-			size_t size = boost::asio::buffer_size(buffer.data());
-
-			recvbuffer.Recv(first, size);
-		});
-
-		if(pioc->stopped())
-			pioc->restart();
-		pioc->run();
-
+		result = ec;
+		if(ec)
+			return;
+		if(bytes_written == 0)
+			return;
 		if(!ws.got_binary())
-			return {ErrorCode{ERR_PROTOCOL_VIOLATION}};
-		if(
-			result == boost::beast::websocket::error::closed || 
-			result == boost::asio::error::eof ||
-			result == boost::asio::error::operation_aborted
-		)
-			return {ErrorCode{ERR_CONNECTION_CLOSED}};
-		if(result)
-			return {ErrorCode{result}};
-	}
+			return;
 
-	return recvbuffer.GetMsg();
+		unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
+		size_t size = boost::asio::buffer_size(buffer.data());
+
+		result_bytes.assign(first, first + size);
+	});
+
+	if(pioc->stopped())
+		pioc->restart();
+	pioc->run();
+
+	if(!ws.got_binary())
+		return {ErrorCode{ERR_PROTOCOL_VIOLATION}};
+	if(
+		result == boost::beast::websocket::error::closed || 
+		result == boost::asio::error::eof ||
+		result == boost::asio::error::operation_aborted
+	)
+		return {ErrorCode{ERR_CONNECTION_CLOSED}};
+	if(result)
+		return {ErrorCode{result}};
+
+	return result_bytes;
 }
 
-ErrorCode MyWebsocketClient::Send(ByteQueue bytes)
+ErrorCode MyWebsocketClient::SendRaw(const byte* bytes, const size_t &len)
 {
-	ByteQueue capsulated = PacketProcessor::enpackage(bytes);
-	boost::asio::const_buffer buffer(capsulated.data(), capsulated.Size());
+	boost::asio::const_buffer buffer(bytes, len);
 	boost::beast::error_code ec;
 
 	if(!ws.is_open())

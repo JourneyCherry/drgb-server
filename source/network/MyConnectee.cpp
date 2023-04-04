@@ -145,7 +145,7 @@ void MyConnectee::ClientLoop(std::string keyword, int fd)
 			answer.Clear();
 			answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 		}
-		std::vector<byte> msg = PacketProcessor::enpackage(answer);
+		std::vector<byte> msg = PacketProcessor::encapsulate(answer.vector());
 		int sendlen = send(fd, msg.data(), msg.size(), 0);
 		if(sendlen <= 0)
 			throw ErrorCodeExcept(errno, __STACKINFO__);

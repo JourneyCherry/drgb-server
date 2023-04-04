@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include "Invoker.hpp"
+#include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "Thread.hpp"
 #include "Logger.hpp"

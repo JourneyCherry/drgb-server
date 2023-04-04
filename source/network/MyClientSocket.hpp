@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include "Expected.hpp"
+#include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 
 using mylib::utils::Expected;
@@ -23,11 +24,16 @@ class MyClientSocket
 		MyClientSocket& operator=(const MyClientSocket&) = delete;
 		MyClientSocket& operator=(MyClientSocket&&) = delete;
 
-		virtual Expected<ByteQueue, ErrorCode> Recv() = 0;
-		virtual ErrorCode Send(ByteQueue) = 0;
+		Expected<ByteQueue, ErrorCode> Recv();
+		ErrorCode Send(ByteQueue);
 		virtual void Close() = 0;
 
 		std::string ToString();
 
 		static bool isNormalClose(const ErrorCode&);
+
+	protected:
+		virtual Expected<std::vector<byte>, ErrorCode> RecvRaw() = 0;
+		virtual ErrorCode SendRaw(const byte*, const size_t&) = 0;
+		ErrorCode SendRaw(const std::vector<byte>&);
 };

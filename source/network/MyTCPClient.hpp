@@ -20,10 +20,12 @@ class MyTCPClient : public MyClientSocket
 		MyTCPClient(MyTCPClient&&) = delete;
 		~MyTCPClient();
 	public:
-		Expected<ByteQueue, ErrorCode> Recv() override;
-		ErrorCode Send(ByteQueue) override;
 		void Close() override;
 
 		MyTCPClient& operator=(const MyTCPClient&) = delete;
 		MyTCPClient& operator=(MyTCPClient&&) = delete;
+
+	private:
+		Expected<std::vector<byte>, ErrorCode> RecvRaw() override;
+		ErrorCode SendRaw(const byte*, const size_t&) override;
 };

@@ -42,7 +42,7 @@ void PacketProcessor::flush()
 		std::vector<byte> data(recvbuffer.begin(), recvbuffer.begin() + ptr);
 		recvbuffer.erase(recvbuffer.begin(), recvbuffer.begin() + ptr + 2);
 		if(data.size() > 0)
-			msgs.push(depackage(data));
+			msgs.push(decapsulate(data));
 		ptr = split();
 	}
 }
@@ -63,36 +63,29 @@ int PacketProcessor::split()
 	return -1;
 }
 
-ByteQueue PacketProcessor::decapsulate(std::vector<byte> data)
+std::vector<byte> PacketProcessor::decapsulate(std::vector<byte> data)
 {
-	ByteQueue result;
+	std::vector<byte> result;
+	result.reserve(data.size());
 	for (auto i = data.begin(); i != data.end(); i++)
 	{
 		if (*i == pattern)
+		{
 			i++;
-		result.push<byte>(*i);
+			if(*i == eof)
+				return result;
+		}
+		result.push_back(*i);
 	}
 	return result;
 }
 
-ByteQueue PacketProcessor::decrypt(std::vector<byte> data)
-{
-	// TODO : 복호화. 복호화 방식은 별도 const static 멤버변수를 통해 결정한다.
-	return ByteQueue(data);
-}
-
-ByteQueue PacketProcessor::depackage(std::vector<byte> data)
-{
-	return decrypt(decapsulate(data).pops<byte>());
-}
-
-std::vector<byte> PacketProcessor::encapsulate(ByteQueue data)
+std::vector<byte> PacketProcessor::encapsulate(std::vector<byte> data)
 {
 	std::vector<byte> result;
-	data.Reset();
-	while (data.Remain() > 0)
+	result.reserve(data.size() * 2 + 2);	//Maximum Possible Size
+	for(const byte &b : data)
 	{
-		byte b = data.pop<byte>();
 		if (b == pattern)
 			result.push_back(pattern);
 		result.push_back(b);
@@ -101,18 +94,6 @@ std::vector<byte> PacketProcessor::encapsulate(ByteQueue data)
 	result.push_back(eof);
 
 	return result;
-}
-
-std::vector<byte> PacketProcessor::encrypt(ByteQueue data)
-{
-	// TODO : 암호화. 암호화 방식은 별도 const static 멤버변수를 통해 결정한다.
-	data.Reset();
-	return data.pops<byte>();
-}
-
-std::vector<byte> PacketProcessor::enpackage(ByteQueue data)
-{
-	return encapsulate(ByteQueue(encrypt(data)));
 }
 
 void PacketProcessor::Recv(const byte *data, int len)
@@ -125,40 +106,29 @@ void PacketProcessor::Recv(const byte *data, int len)
 		cv.notify_one();	//JoinMsg()는 항상 1개의 thread 에서만 대기해야 한다.
 }
 
-void PacketProcessor::Recv(const ByteQueue &bytes)
-{
-	locker lk(mtx);
-	size_t length = bytes.Size();
-	for (int i = 0; i < length; i++)
-		recvbuffer.push_back(bytes[i]);
-	flush();
-	if(msgs.size() > 0)
-		cv.notify_one();	//JoinMsg()는 항상 1개의 thread 에서만 대기해야 한다.
-}
-
 bool PacketProcessor::isMsgIn()	//TODO : 보통 GetMsg를 호출하기 전에 필수적으로 isMsgIn을 호출하지만, 두 메소드 사이에서 타 스레드의 접근이 있을 수 있으므로, 둘을 합칠 필요가 있을 수 있다. 즉, 분리된 상태는 100% Thread-safe하다고 할 수 없다.
 {
 	return msgs.size() > 0;
 }
 
-ByteQueue PacketProcessor::GetMsg()
+std::vector<byte> PacketProcessor::GetMsg()
 {
 	locker lk(mtx);
 	if (msgs.empty())
 		throw StackTraceExcept("PacketProcessor is Empty", __STACKINFO__);
-	ByteQueue result = msgs.front();
+	auto result = msgs.front();
 	msgs.pop();
 
 	return result;
 }
 
-ByteQueue PacketProcessor::JoinMsg()
+Expected<std::vector<byte>> PacketProcessor::JoinMsg()
 {
 	locker lk(mtx);
 	cv.wait(lk, [&](){return isMsgIn() || !isRunning;});
 	if(!isRunning)
-		throw StackTraceExcept("PacketProcessor::JoinMsg() : system is not working", __STACKINFO__);
-	ByteQueue result = msgs.front();
+		return {};
+	auto result = msgs.front();
 	msgs.pop();
 	lk.unlock();
 

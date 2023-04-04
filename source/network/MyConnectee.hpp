@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include "Invoker.hpp"
+#include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "VariadicPool.hpp"
 #include "Logger.hpp"

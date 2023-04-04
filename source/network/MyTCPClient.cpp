@@ -11,31 +11,29 @@ MyTCPClient::~MyTCPClient()
 	Close();
 }
 
-Expected<ByteQueue, ErrorCode> MyTCPClient::Recv()
+Expected<std::vector<byte>, ErrorCode> MyTCPClient::RecvRaw()
 {
 	unsigned char buf[BUFSIZE];
-	while(!recvbuffer.isMsgIn())
-	{
-		if(socket_fd < 0)
-			return {ErrorCode{ERR_CONNECTION_CLOSED}};
-		int recvlen = read(socket_fd, buf, BUFSIZE);
-		if(recvlen < 0)
-			return {ErrorCode{errno}};
-		if(recvlen == 0)
-			return {ErrorCode{ERR_CONNECTION_CLOSED}};
+	std::vector<byte> result_bytes;
 
-		recvbuffer.Recv(buf, recvlen);
-	}
+	if(socket_fd < 0)
+		return {ErrorCode{ERR_CONNECTION_CLOSED}};
+	int recvlen = read(socket_fd, buf, BUFSIZE);
+	if(recvlen < 0)
+		return {ErrorCode{errno}};
+	if(recvlen == 0)
+		return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
-	return recvbuffer.GetMsg();
+	result_bytes.assign(buf, buf + recvlen);
+
+	return result_bytes;
 }
 
-ErrorCode MyTCPClient::Send(ByteQueue bytes)
+ErrorCode MyTCPClient::SendRaw(const byte* bytes, const size_t &len)
 {
 	if(socket_fd < 0)
 		return {ERR_CONNECTION_CLOSED};
-	ByteQueue capsulated = PacketProcessor::enpackage(bytes);
-	int sendlen = send(socket_fd, capsulated.data(), capsulated.Size(), 0);
+	int sendlen = send(socket_fd, bytes, len, 0);
 	if(sendlen == 0)
 		return {ERR_CONNECTION_CLOSED};
 	if(sendlen < 0)

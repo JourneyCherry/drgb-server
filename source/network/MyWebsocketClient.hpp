@@ -20,10 +20,12 @@ class MyWebsocketClient : public MyClientSocket
 		MyWebsocketClient(MyWebsocketClient&&) = delete;
 		~MyWebsocketClient();
 		
-		Expected<ByteQueue, ErrorCode> Recv() override;
-		ErrorCode Send(ByteQueue) override;
 		void Close() override;
 
 		MyWebsocketClient& operator=(const MyWebsocketClient&) = delete;
 		MyWebsocketClient& operator=(MyWebsocketClient&&) = delete;
+
+	private:
+		Expected<std::vector<byte>, ErrorCode> RecvRaw() override;
+		ErrorCode SendRaw(const byte*, const size_t&) override;
 };

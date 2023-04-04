@@ -182,6 +182,11 @@ const byte* ByteQueue::data()
 	return bytes.data();
 }
 
+const std::vector<byte> ByteQueue::vector()
+{
+	return bytes;
+}
+
 ByteQueue ByteQueue::split(long long int start, long long int end) const
 {
 	ByteQueue result;

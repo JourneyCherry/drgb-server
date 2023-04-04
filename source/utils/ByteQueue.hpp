@@ -50,6 +50,7 @@ class ByteQueue
 		size_t Size() const;
 		size_t Remain();
 		const byte* data();
+		const std::vector<byte> vector();
 		template<typename T> static ByteQueue Create(T);
 		ByteQueue split(long long int = -1, long long int = -1) const;
 };

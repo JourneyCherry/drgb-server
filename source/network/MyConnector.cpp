@@ -164,7 +164,7 @@ ByteQueue MyConnector::Request(ByteQueue data)
 	if (data.Size() <= 0)
 		throw StackTraceExcept("Request data is empty", __STACKINFO__);
 
-	std::vector<byte> msg = PacketProcessor::enpackage(data);
+	std::vector<byte> msg = PacketProcessor::encapsulate(data.vector());
 
 	while (isRunning)
 	{
@@ -178,7 +178,12 @@ ByteQueue MyConnector::Request(ByteQueue data)
 		else if (sendsize < 0)
 			throw StackTraceExcept("MyConnector::Request()::send() : " + std::to_string(errno), __STACKINFO__);	//TODO : 소켓을 상대가 끊었을 때 여기로 오면 예외를 던지는게 맞나?
 
-		return recvbuffer.JoinMsg();	//recvbuffer.isMsgIn()이 true일 때 까지 대기.
+		auto msg = recvbuffer.JoinMsg();	//recvbuffer.isMsgIn()이 true일 때 까지 대기.
+
+		if(!msg)
+			throw StackTraceExcept("MyConnector is not working", __STACKINFO__);
+		
+		return ByteQueue(msg.value());
 	}
 
 	throw StackTraceExcept("MyConnector is not working", __STACKINFO__);
