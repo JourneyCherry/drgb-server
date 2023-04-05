@@ -1,7 +1,7 @@
 #include "MyMatch.hpp"
 
 MyMatch::MyMatch() : 
-	connectee(this), 
+	connectee(ConfigParser::GetInt("Match1_Port"), this), 
 	connector_battle(this, ConfigParser::GetString("Battle1_Addr"), ConfigParser::GetInt("Battle1_Port"), "match"),
 	t_matchmaker(std::bind(&MyMatch::MatchMake, this), this),
 	MyServer(ConfigParser::GetInt("Match1_ClientPort_Web", 54321), ConfigParser::GetInt("Match1_ClientPort_TCP", 54322))
@@ -15,7 +15,7 @@ MyMatch::~MyMatch()
 void MyMatch::Open()
 {
 	MyPostgres::Open();
-	connectee.Open(ConfigParser::GetInt("Match1_Port"));
+	connectee.Open();
 	connectee.Accept("auth", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connectee.Accept("battle", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connector_battle.Connect();

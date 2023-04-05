@@ -7,13 +7,12 @@
 #include <thread>
 #include <memory>
 #include <string>
-#include "Invoker.hpp"
+#include "MyTCPServer.hpp"
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "VariadicPool.hpp"
 #include "Logger.hpp"
 
-using mylib::utils::Invoker;
 using mylib::utils::ByteQueue;
 using mylib::utils::StackTraceExcept;
 using mylib::utils::ErrorCodeExcept;
@@ -30,23 +29,19 @@ class MyConnectee : public ThreadExceptHandler
 		static constexpr byte SUCCESS = 0;
 		static constexpr byte ERR_PROTOCOL_VIOLATION = 11;
 	private:
-		const unsigned int LISTENSIZE = 3;
-		const unsigned int BUFSIZE = 1024;
-		Invoker<int> server_fd;
-		int port;
+		MyTCPServer server_socket;
 		int isRunning;
-		int opt_reuseaddr;
 		Thread t_accept;
 		std::map<std::string, std::function<ByteQueue(ByteQueue)>> KeywordProcessMap;
-		VariadicPool<int> ClientPool;
+		VariadicPool<std::shared_ptr<MyClientSocket>> ClientPool;
 	public:
-		MyConnectee(ThreadExceptHandler*);
+		MyConnectee(int, ThreadExceptHandler*);
 		~MyConnectee();
 	public:
-		void Open(int);
+		void Open();
 		void Close();
 		void Accept(std::string, std::function<ByteQueue(ByteQueue)>);
 	private:
 		void AcceptLoop();
-		void ClientLoop(std::string, int);
+		void ClientLoop(std::shared_ptr<MyClientSocket>);
 };

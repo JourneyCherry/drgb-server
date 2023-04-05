@@ -34,7 +34,7 @@ void MyTCPServer::Close()
 	}
 }
 
-Expected<std::shared_ptr<MyClientSocket>> MyTCPServer::Accept()
+Expected<std::shared_ptr<MyClientSocket>, ErrorCode> MyTCPServer::Accept()
 {
 	struct sockaddr_in client_addr;
 	socklen_t client_addr_len = sizeof((struct sockaddr *)&client_addr);
@@ -45,9 +45,9 @@ Expected<std::shared_ptr<MyClientSocket>> MyTCPServer::Accept()
 		switch(error_code)
 		{
 			case EINVAL:	//shutdown(socket_fd, SHUT_RDWR)로부터 반환됨.
-				return {};
+				return {ERR_CONNECTION_CLOSED};
 		}
-		throw ErrorCodeExcept(error_code, __STACKINFO__);
+		return {error_code};
 	}
 	return {std::make_shared<MyTCPClient>(client_fd, std::string(inet_ntoa(client_addr.sin_addr)) + std::to_string(client_addr.sin_port))};
 }

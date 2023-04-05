@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include "Invoker.hpp"
+#include "MyTCPClient.hpp"
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "Thread.hpp"
@@ -17,7 +17,6 @@ using mylib::utils::ByteQueue;
 using mylib::utils::StackTraceExcept;
 using mylib::utils::PacketProcessor;
 using mylib::utils::Logger;
-using mylib::utils::Invoker;
 using mylib::threads::Thread;
 using mylib::threads::ThreadExceptHandler;
 
@@ -28,26 +27,20 @@ class MyConnector
 		int target_port;
 	
 	private:
-
+		bool isConnecting;
 		bool isRunning;
-		Invoker<bool> isConnected;
-
-		int socket_fd;
-		struct sockaddr_in addr;
+		MyTCPClient client_socket;
 		std::mutex m_req;
-		const int BUFSIZE = 1024;
 		const int RETRY_WAIT_SEC = 3;
 	
 		Thread t_conn;
-		Thread t_recv;
-		PacketProcessor recvbuffer;
 
 	protected:
 		std::string keyword;
 
 	private:
-		void Connect_();
-		void RecvLoop();
+		std::condition_variable cv;
+		void ConnectLoop();
 
 	public:
 		MyConnector(ThreadExceptHandler*, std::string, int, std::string);

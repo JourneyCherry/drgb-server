@@ -15,7 +15,12 @@ Expected<ByteQueue, ErrorCode> MyClientSocket::Recv()
 
 ErrorCode MyClientSocket::Send(ByteQueue bytes)
 {
-	return SendRaw(PacketProcessor::encapsulate(bytes.vector()));
+	return Send(bytes.vector());
+}
+
+ErrorCode MyClientSocket::Send(std::vector<byte> bytes)
+{
+	return SendRaw(PacketProcessor::encapsulate(bytes));
 }
 
 ErrorCode MyClientSocket::SendRaw(const std::vector<byte> &bytes)
@@ -27,5 +32,8 @@ bool MyClientSocket::isNormalClose(const ErrorCode &ec)
 {
 	if(ec)
 		return true;
-	return (ec.typecode() == ErrorCode::TYPE_CUSTOM && ec.code() == ERR_CONNECTION_CLOSED);
+		
+	if(ec.typecode() == ErrorCode::TYPE_ERRNO && ec.code() == EINVAL)	return true;
+	if(ec.typecode() == ErrorCode::TYPE_CUSTOM && ec.code() == ERR_CONNECTION_CLOSED) return true;
+	return false;
 }

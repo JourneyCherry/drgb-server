@@ -10,7 +10,7 @@ MyWebsocketServer::~MyWebsocketServer()
 	Close();
 }
 
-Expected<std::shared_ptr<MyClientSocket>> MyWebsocketServer::Accept()
+Expected<std::shared_ptr<MyClientSocket>, ErrorCode> MyWebsocketServer::Accept()
 {
 	std::shared_ptr<boost::asio::io_context> client_ioc = std::make_shared<boost::asio::io_context>();
 	boost::asio::ip::tcp::socket socket{*client_ioc};
@@ -44,13 +44,13 @@ Expected<std::shared_ptr<MyClientSocket>> MyWebsocketServer::Accept()
 	if(result)
 	{
 		if(result == boost::asio::error::operation_aborted)
-			return {};
-		throw ErrorCodeExcept(result, __STACKINFO__);
+			return {ERR_CONNECTION_CLOSED};
+		return {result};
 	}
 	if(eptr)
 		std::rethrow_exception(eptr);
 	if(!client)		//MyWebsocketServer::Close()의 호출로 종료되면 보통 위의 result에서 걸려 나가지만, 혹시모를 예외사항을 위해 
-		return {};//한번 더 검증을 수행함.
+		return {result};//한번 더 검증을 수행함.
 	return {client, true};
 }
 

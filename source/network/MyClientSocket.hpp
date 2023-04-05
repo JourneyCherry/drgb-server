@@ -16,7 +16,7 @@ class MyClientSocket
 		PacketProcessor recvbuffer;
 
 	public:
-		MyClientSocket(){}
+		MyClientSocket() {}
 		MyClientSocket(const MyClientSocket&) = delete;
 		MyClientSocket(MyClientSocket&&) = delete;
 		virtual ~MyClientSocket() = default;
@@ -26,10 +26,12 @@ class MyClientSocket
 
 		Expected<ByteQueue, ErrorCode> Recv();
 		ErrorCode Send(ByteQueue);
+		ErrorCode Send(std::vector<byte>);
 		virtual void Close() = 0;
 
 		std::string ToString();
 
+		virtual ErrorCode Connect(std::string, int) = 0;
 		static bool isNormalClose(const ErrorCode&);
 
 	protected:

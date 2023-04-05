@@ -25,7 +25,7 @@ class MyTCPServer : public MyServerSocket
 		MyTCPServer(MyTCPServer&&) = delete;
 		~MyTCPServer();
 
-		Expected<std::shared_ptr<MyClientSocket>> Accept() override;
+		Expected<std::shared_ptr<MyClientSocket>, ErrorCode> Accept() override;
 		void Close() override;
 
 		MyTCPServer& operator=(const MyTCPServer&) = delete;

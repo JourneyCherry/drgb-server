@@ -11,15 +11,19 @@ using mylib::utils::ErrorCodeExcept;
 class MyWebsocketClient : public MyClientSocket
 {
 	private:
+		using booststream = boost::beast::websocket::stream<boost::asio::ip::tcp::socket>;
+
 		std::shared_ptr<boost::asio::io_context> pioc;
-		boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws;
+		std::unique_ptr<booststream> ws;
 
 	public:
+		MyWebsocketClient() : MyClientSocket() {}
 		MyWebsocketClient(std::shared_ptr<boost::asio::io_context>, boost::asio::ip::tcp::socket);
 		MyWebsocketClient(const MyWebsocketClient&) = delete;
 		MyWebsocketClient(MyWebsocketClient&&) = delete;
 		~MyWebsocketClient();
 		
+		ErrorCode Connect(std::string, int) override;
 		void Close() override;
 
 		MyWebsocketClient& operator=(const MyWebsocketClient&) = delete;

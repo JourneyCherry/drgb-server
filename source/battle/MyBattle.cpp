@@ -1,7 +1,7 @@
 #include "MyBattle.hpp"
 
 MyBattle::MyBattle() : 
-	connectee(this), 
+	connectee(ConfigParser::GetInt("Battle1_Port"), this), 
 	connector_match(this, ConfigParser::GetString("Match1_Addr"), ConfigParser::GetInt("Match1_Port", 52431), "battle"), 
 	gamepool("GamePool", std::bind(&MyBattle::GameProcess, this, std::placeholders::_1), this),
 	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54321), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54322))
@@ -15,7 +15,7 @@ MyBattle::~MyBattle()
 void MyBattle::Open()
 {
 	MyPostgres::Open();
-	connectee.Open(ConfigParser::GetInt("Battle1_Port"));
+	connectee.Open();
 	connectee.Accept("match", std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1));
 	connector_match.Connect();
 	Logger::log("Battle Server Start", Logger::LogType::info);

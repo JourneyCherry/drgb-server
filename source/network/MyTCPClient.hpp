@@ -15,11 +15,13 @@ class MyTCPClient : public MyClientSocket
 		static constexpr int BUFSIZE = 1024;
 		int socket_fd;
 	public:
-		MyTCPClient(int, std::string);
+		MyTCPClient() : socket_fd(-1), MyClientSocket() {}
+		MyTCPClient(int, std::string);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
 		MyTCPClient(const MyTCPClient&) = delete;
 		MyTCPClient(MyTCPClient&&) = delete;
 		~MyTCPClient();
 	public:
+		ErrorCode Connect(std::string, int) override;
 		void Close() override;
 
 		MyTCPClient& operator=(const MyTCPClient&) = delete;
