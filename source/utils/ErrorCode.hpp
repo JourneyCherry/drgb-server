@@ -28,11 +28,13 @@ class ErrorCode
 		ErrorCode(boost::system::error_code);
 		ErrorCode(int);
 		ErrorCode(errorcode_t);
+		ErrorCode(const ErrorCode&);
 		int code() const;
 		std::string message() const;
 		std::string message_code() const;
 		std::string typestr() const;
 		int typecode() const;
+		ErrorCode &operator=(const ErrorCode&);
 		operator bool() const;
 };
 

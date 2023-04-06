@@ -85,13 +85,13 @@ void MyConnectee::ClientLoop(std::shared_ptr<MyClientSocket> client)
 	Thread::SetThreadName("ConnecteeClientLoop_" + keyword);
 
 	Logger::log("Host <- " + keyword + " is Connected");	//TODO : Remote Address도 로깅 필요
-	ErrorCode ec = client->Send(ByteQueue::Create<byte>(SUCCESS));
+	StackErrorCode ec = StackErrorCode(client->Send(ByteQueue::Create<byte>(SUCCESS)), __STACKINFO__);
 	while(isRunning && ec)
 	{
 		auto msg = client->Recv();
 		if(!msg)
 		{
-			ec = msg.error();
+			ec = StackErrorCode(msg.error(), __STACKINFO__);
 			break;
 		}
 
@@ -106,7 +106,7 @@ void MyConnectee::ClientLoop(std::shared_ptr<MyClientSocket> client)
 			answer.Clear();
 			answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 		}
-		ec = client->Send(answer);
+		ec = StackErrorCode(client->Send(answer), __STACKINFO__);
 	}
 
 	Logger::log("Host <- " + keyword + " is Disconnected");

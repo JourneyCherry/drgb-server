@@ -31,29 +31,43 @@ void MyConnector::ConnectLoop()
 {
 	isConnecting = true;
 	Thread::SetThreadName("Connector");
+
+	auto waitforsec = [&](){
+
+	};
 	
 	while(isRunning)
 	{
-		std::unique_lock<std::mutex>(m_req);
-		ErrorCode ec = client_socket.Connect(target_addr, target_port);
-		if(ec)
+		try
 		{
-			ByteQueue keyword_bytes(keyword.c_str(), keyword.size());
-			ec = client_socket.Send(keyword_bytes);
-			auto result = client_socket.Recv();
-			if(result)
-			{
-				byte header = result->pop<byte>();
-				if(header == SUCCESS)
-				{
-					//Logger::log("MyConnector::Connect(" + target_addr + ") : success as " + keyword, Logger::LogType::debug);
-					Logger::log("Host -> " + target_addr + " is Connected");
-					break;
-				}
-			}
-		}
-		client_socket.Close();
+			std::unique_lock<std::mutex>(m_req);
+			StackErrorCode sec = client_socket.Connect(target_addr, target_port);
+			if(!sec)
+				throw ErrorCodeExcept(sec);
 
+			ByteQueue keyword_bytes(keyword.c_str(), keyword.size());
+			ErrorCode ec = client_socket.Send(keyword_bytes);
+			if(!ec)
+				throw ErrorCodeExcept(ec, __STACKINFO__);
+			auto result = client_socket.Recv();
+			if(!result)
+				throw ErrorCodeExcept(result.error(), __STACKINFO__);
+
+			byte header = result->pop<byte>();
+			if(header != SUCCESS)
+				throw StackTraceExcept("Failed to Authenticate", __STACKINFO__);
+
+			//Logger::log("MyConnector::Connect(" + target_addr + ") : success as " + keyword, Logger::LogType::debug);
+			Logger::log("Host -> " + target_addr + " is Connected");
+			break;
+		}
+		catch(const std::exception &e)
+		{
+			Logger::log(e.what(), Logger::LogType::error);
+		}
+
+		client_socket.Close();
+		
 		Logger::log("MyConnector::Connect() : failed. retry after " + std::to_string(RETRY_WAIT_SEC) + " sec", Logger::LogType::debug);
 		std::this_thread::sleep_for(std::chrono::seconds(RETRY_WAIT_SEC));
 	}
@@ -77,12 +91,12 @@ ByteQueue MyConnector::Request(ByteQueue data)
 	if(!isRunning)
 		throw StackTraceExcept("Connector is Closed", __STACKINFO__);
 	
-	ErrorCode ec(ERR_CONNECTION_CLOSED);
+	StackErrorCode ec(ERR_CONNECTION_CLOSED, __STACKINFO__);
 	while(isRunning)
 	{
 		std::unique_lock<std::mutex> lk(m_req);
 		cv.wait(lk, [&](){return !isConnecting || !isRunning;});	//TODO : Timeout 넣기.
-		ec = client_socket.Send(data);
+		ec = StackErrorCode(client_socket.Send(data), __STACKINFO__);
 		if(!ec)
 		{
 			Connect();
@@ -92,7 +106,7 @@ ByteQueue MyConnector::Request(ByteQueue data)
 		auto msg = client_socket.Recv();
 		if(!msg)
 		{
-			ec = msg.error();
+			ec = StackErrorCode(msg.error(), __STACKINFO__);
 			Connect();
 			continue;
 		}

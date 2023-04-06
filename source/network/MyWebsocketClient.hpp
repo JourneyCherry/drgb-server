@@ -6,6 +6,7 @@
 #include "ErrorCode.hpp"
 
 using mylib::utils::ErrorCode;
+using mylib::utils::StackErrorCode;
 using mylib::utils::ErrorCodeExcept;
 
 class MyWebsocketClient : public MyClientSocket
@@ -23,7 +24,7 @@ class MyWebsocketClient : public MyClientSocket
 		MyWebsocketClient(MyWebsocketClient&&) = delete;
 		~MyWebsocketClient();
 		
-		ErrorCode Connect(std::string, int) override;
+		StackErrorCode Connect(std::string, int) override;
 		void Close() override;
 
 		MyWebsocketClient& operator=(const MyWebsocketClient&) = delete;

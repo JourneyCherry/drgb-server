@@ -7,6 +7,7 @@
 #include "MyClientSocket.hpp"
 
 using mylib::utils::ErrorCode;
+using mylib::utils::StackErrorCode;
 using mylib::utils::ErrorCodeExcept;
 
 class MyTCPClient : public MyClientSocket
@@ -21,7 +22,7 @@ class MyTCPClient : public MyClientSocket
 		MyTCPClient(MyTCPClient&&) = delete;
 		~MyTCPClient();
 	public:
-		ErrorCode Connect(std::string, int) override;
+		StackErrorCode Connect(std::string, int) override;
 		void Close() override;
 
 		MyTCPClient& operator=(const MyTCPClient&) = delete;

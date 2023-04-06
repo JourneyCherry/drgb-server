@@ -14,6 +14,7 @@
 #include "Logger.hpp"
 
 using mylib::utils::ByteQueue;
+using mylib::utils::StackErrorCode;
 using mylib::utils::StackTraceExcept;
 using mylib::utils::PacketProcessor;
 using mylib::utils::Logger;

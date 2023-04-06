@@ -8,6 +8,7 @@ using mylib::utils::Expected;
 using mylib::utils::PacketProcessor;
 using mylib::utils::ByteQueue;
 using mylib::utils::ErrorCode;
+using mylib::utils::StackErrorCode;
 
 class MyClientSocket
 {
@@ -31,7 +32,7 @@ class MyClientSocket
 
 		std::string ToString();
 
-		virtual ErrorCode Connect(std::string, int) = 0;
+		virtual StackErrorCode Connect(std::string, int) = 0;
 		static bool isNormalClose(const ErrorCode&);
 
 	protected:

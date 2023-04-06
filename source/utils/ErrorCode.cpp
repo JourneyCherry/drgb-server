@@ -40,6 +40,11 @@ ErrorCode::ErrorCode(boost::system::error_code ec) : m_type(TYPE_BOOST), m_type_
 	m_message = ec.message();
 }
 
+ErrorCode::ErrorCode(const ErrorCode& copy)
+{
+	(*this) = copy;
+}
+
 int ErrorCode::code() const { return m_code; }
 std::string ErrorCode::message() const { return m_message; }
 std::string ErrorCode::message_code() const { return "(" + std::to_string(m_code) + ") " + m_message; }
@@ -47,6 +52,15 @@ std::string ErrorCode::typestr() const { return m_type_str; }
 int ErrorCode::typecode() const { return m_type; }
 
 ErrorCode::operator bool() const { return m_code == 0; }
+ErrorCode &ErrorCode::operator=(const ErrorCode& copy)
+{
+	m_code = copy.m_code;
+	m_type = copy.m_type;
+	m_type_str = copy.m_type_str;
+	m_message = copy.m_message;
+
+	return *this;
+}
 
 }
 }

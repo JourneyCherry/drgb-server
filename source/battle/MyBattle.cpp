@@ -69,7 +69,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		client->Send(info);
 	}
 
-	ErrorCode ec;
+	StackErrorCode ec;
 	while(isRunning && ec)
 	{
 		auto msg = client->Recv();
@@ -77,7 +77,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		{
 			//Game에 disconnect 메시지 보내기.
 			GameSession->Disconnect(side, client);
-			ec = msg.error();
+			ec = StackErrorCode(msg.error(), __STACKINFO__);
 			break;
 		}
 		byte header = msg->pop<byte>();
@@ -91,12 +91,12 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				}
 				catch(const std::exception &e)
 				{
-					ec = client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+					ec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__);
 					Logger::log(e.what(), Logger::LogType::error);
 				}
 				break;
 			default:
-				ec = client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+				ec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__);
 				break;
 		}
 	}

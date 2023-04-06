@@ -88,7 +88,7 @@ ErrorCode MyWebsocketClient::SendRaw(const byte* bytes, const size_t &len)
 	return {SUCCESS};
 }
 
-ErrorCode MyWebsocketClient::Connect(std::string addr, int port)
+StackErrorCode MyWebsocketClient::Connect(std::string addr, int port)
 {
 	Close();
 
@@ -98,7 +98,7 @@ ErrorCode MyWebsocketClient::Connect(std::string addr, int port)
 
 	auto const results = resolver.resolve(addr, std::to_string(port), ec);
 	if(ec)
-		return {ec};
+		return {ec, __STACKINFO__};
 	boost::asio::ip::tcp::socket socket(*pioc);
 	for(auto &endpoint : results)
 	{
@@ -107,17 +107,17 @@ ErrorCode MyWebsocketClient::Connect(std::string addr, int port)
 			continue;
 	}
 	if(ec)
-		return {ec};
+		return {ec, __STACKINFO__};
 
 	ws = std::make_unique<booststream>(std::move(socket));
 	ws->handshake(addr, "/", ec);
 	if(ec)
-		return {ec};
+		return {ec, __STACKINFO__};
 	
 	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint();
 	Address = ep.address().to_string() + ":" + std::to_string(ep.port());
 
-	return {SUCCESS};
+	return {};
 }
 
 void MyWebsocketClient::Close()

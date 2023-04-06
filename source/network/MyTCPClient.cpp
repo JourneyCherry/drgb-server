@@ -42,13 +42,13 @@ ErrorCode MyTCPClient::SendRaw(const byte* bytes, const size_t &len)
 	return {SUCCESS};
 }
 
-ErrorCode MyTCPClient::Connect(std::string addr, int port)
+StackErrorCode MyTCPClient::Connect(std::string addr, int port)
 {
 	Close();	//이미 열려있는 소켓은 닫기.
 
 	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if(socket_fd < 0)
-		return {errno};
+		return {errno, __STACKINFO__};
 
 	struct sockaddr_in server_addr;
 	server_addr.sin_family = AF_INET;
@@ -67,18 +67,18 @@ ErrorCode MyTCPClient::Connect(std::string addr, int port)
 		hints.ai_socktype = SOCK_STREAM;
 		int result_getaddr = getaddrinfo(addr.c_str(), bport, &hints, &serverinfo);
 		if (result_getaddr != 0)
-			return {result_getaddr};
+			return {result_getaddr, __STACKINFO__};
 		memcpy(&server_addr, serverinfo->ai_addr, sizeof(struct sockaddr));
 
 		freeaddrinfo(serverinfo);
 	}
 
 	if(connect(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-		return {errno};
+		return {errno, __STACKINFO__};
 
 	Address = std::string(inet_ntoa(server_addr.sin_addr)) + ":" + std::to_string(server_addr.sin_port);
 	
-	return {SUCCESS};
+	return {};
 }
 
 void MyTCPClient::Close()
