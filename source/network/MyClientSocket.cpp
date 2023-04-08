@@ -7,10 +7,16 @@ std::string MyClientSocket::ToString()
 
 Expected<ByteQueue, ErrorCode> MyClientSocket::Recv()
 {
-	auto result = RecvRaw();
-	if(!result)
-		return result.error();
-	return ByteQueue(PacketProcessor::decapsulate(*result));
+	while(!recvbuffer.isMsgIn())
+	{
+		auto result = RecvRaw();
+		if(!result)
+			return result.error();
+		
+		recvbuffer.Recv(result->data(), result->size());
+	}
+
+	return ByteQueue(PacketProcessor::decapsulate(recvbuffer.GetMsg()));
 }
 
 ErrorCode MyClientSocket::Send(ByteQueue bytes)
@@ -28,12 +34,22 @@ ErrorCode MyClientSocket::SendRaw(const std::vector<byte> &bytes)
 	return SendRaw(bytes.data(), bytes.size());
 }
 
+ErrorCode MyClientSocket::GetSSLError()
+{
+	return ErrorCode(ERR_get_error());
+}
+
 bool MyClientSocket::isNormalClose(const ErrorCode &ec)
 {
 	if(ec)
 		return true;
-		
-	if(ec.typecode() == ErrorCode::TYPE_ERRNO && ec.code() == EINVAL)	return true;
-	if(ec.typecode() == ErrorCode::TYPE_CUSTOM && ec.code() == ERR_CONNECTION_CLOSED) return true;
+	
+	switch(ec.typecode())
+	{
+		case ErrorCode::TYPE_ERRNO:
+			return (ec.code() == EINVAL);
+		case ErrorCode::TYPE_CUSTOM:
+			return (ec.code() == ERR_CONNECTION_CLOSED);
+	}
 	return false;
 }

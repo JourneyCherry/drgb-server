@@ -3,6 +3,7 @@
 #include <string>
 #include <cerrno>
 #include <boost/asio/error.hpp>
+#include <openssl/err.h>
 #include "MyCodes.hpp"
 
 namespace mylib{
@@ -22,12 +23,14 @@ class ErrorCode
 	public:
 		static constexpr int TYPE_ERRNO = 0;
 		static constexpr int TYPE_BOOST = 1;
-		static constexpr int TYPE_CUSTOM = 2;
+		static constexpr int TYPE_OPENSSL = 2;
+		static constexpr int TYPE_CUSTOM = 3;
 
 		ErrorCode();
 		ErrorCode(boost::system::error_code);
 		ErrorCode(int);
 		ErrorCode(errorcode_t);
+		ErrorCode(unsigned long);
 		ErrorCode(const ErrorCode&);
 		int code() const;
 		std::string message() const;

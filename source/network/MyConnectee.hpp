@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include "MyTCPServer.hpp"
+#include "MyWebsocketServer.hpp"
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "VariadicPool.hpp"
@@ -29,7 +30,8 @@ class MyConnectee : public ThreadExceptHandler
 		static constexpr byte SUCCESS = 0;
 		static constexpr byte ERR_PROTOCOL_VIOLATION = 11;
 	private:
-		MyTCPServer server_socket;
+		//MyTCPServer server_socket;
+		MyWebsocketServer server_socket;
 		int isRunning;
 		Thread t_accept;
 		std::map<std::string, std::function<ByteQueue(ByteQueue)>> KeywordProcessMap;

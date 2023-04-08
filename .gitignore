@@ -85,5 +85,8 @@ _deps
 source/[Bb]uild/
 source/[Ll]ib/
 source/[Bb]in/
+source/[Rr]esources/*.crt
+source/[Rr]esources/*.csr
+source/[Rr]esources/*.key
 docker/[Dd]ata/
 docker/[Cc]lient[Bb]uild/

@@ -120,7 +120,7 @@ std::pair<std::string, std::string> ConfigParser::split(const std::string &src)
 	trim(end);
 	if(end.find_first_of("\"\'") != std::string::npos)
 	{
-		end.erase(0, end.find_first_of("\"\'"));
+		end.erase(0, end.find_first_of("\"\'") + 1);
 		end.erase(end.find_first_of("\'\""));
 	}
 	return {front, end};

@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <openssl/err.h>
 #include "MyClientSocket.hpp"
 
 using mylib::utils::Expected;
@@ -8,6 +9,7 @@ class MyServerSocket
 {
 	protected:
 		int port;
+		static ErrorCode GetSSLError();
 
 	public:
 		MyServerSocket(int p) : port(p){}

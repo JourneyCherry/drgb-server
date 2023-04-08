@@ -4,6 +4,10 @@
 #include <unistd.h>
 #include <errno.h>
 #include <cstring>
+//For SSL
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+////
 #include "MyClientSocket.hpp"
 
 using mylib::utils::ErrorCode;
@@ -14,10 +18,11 @@ class MyTCPClient : public MyClientSocket
 {
 	private:
 		static constexpr int BUFSIZE = 1024;
+		SSL *ssl;
 		int socket_fd;
 	public:
 		MyTCPClient() : socket_fd(-1), MyClientSocket() {}
-		MyTCPClient(int, std::string);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
+		MyTCPClient(int, SSL*, std::string);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
 		MyTCPClient(const MyTCPClient&) = delete;
 		MyTCPClient(MyTCPClient&&) = delete;
 		~MyTCPClient();
@@ -31,4 +36,5 @@ class MyTCPClient : public MyClientSocket
 	private:
 		Expected<std::vector<byte>, ErrorCode> RecvRaw() override;
 		ErrorCode SendRaw(const byte*, const size_t&) override;
+		ErrorCode GetSSLErrorFromRet(int);
 };

@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include "MyTCPClient.hpp"
+#include "MyWebsocketClient.hpp"
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "Thread.hpp"
@@ -30,7 +31,8 @@ class MyConnector
 	private:
 		bool isConnecting;
 		bool isRunning;
-		MyTCPClient client_socket;
+		//MyTCPClient client_socket;
+		MyWebsocketClient client_socket;
 		std::mutex m_req;
 		const int RETRY_WAIT_SEC = 3;
 	

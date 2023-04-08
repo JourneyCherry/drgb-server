@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <string>
 #include <boost/beast/core.hpp>
+#include <openssl/err.h>
 #include <cerrno>
 #include "ErrorCode.hpp"
 
@@ -41,6 +42,7 @@ class StackErrorCode : public ErrorCode
 		StackErrorCode(boost::system::error_code ec, std::string fi, std::string fu, int l) : file(fi), func(fu), line(l), ErrorCode(ec) {}
 		StackErrorCode(int ec, std::string fi, std::string fu, int l) : file(fi), func(fu), line(l), ErrorCode(ec) {}
 		StackErrorCode(errorcode_t ec, std::string fi, std::string fu, int l) : file(fi), func(fu), line(l), ErrorCode(ec) {}
+		StackErrorCode(unsigned long ec, std::string fi, std::string fu, int l) : file(fi), func(fu), line(l), ErrorCode(ec) {}
 		StackErrorCode(ErrorCode ec, std::string fi, std::string fu, int l) : file(fi), func(fu), line(l), ErrorCode(ec) {}
 		StackErrorCode(const StackErrorCode& copy) { (*this) = copy; }
 		StackErrorCode &operator=(const StackErrorCode& copy)

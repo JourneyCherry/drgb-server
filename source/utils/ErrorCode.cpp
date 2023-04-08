@@ -40,6 +40,14 @@ ErrorCode::ErrorCode(boost::system::error_code ec) : m_type(TYPE_BOOST), m_type_
 	m_message = ec.message();
 }
 
+ErrorCode::ErrorCode(unsigned long ec) : m_type(TYPE_OPENSSL), m_type_str("OpenSSL")
+{
+	m_code = ec;
+	char *str = ERR_error_string(ec, nullptr);
+	size_t len = std::strlen(str);
+	m_message = std::string(str, len);
+}
+
 ErrorCode::ErrorCode(const ErrorCode& copy)
 {
 	(*this) = copy;

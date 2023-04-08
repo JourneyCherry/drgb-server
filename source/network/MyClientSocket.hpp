@@ -1,20 +1,25 @@
 #pragma once
 #include <string>
+#include <openssl/err.h>
 #include "Expected.hpp"
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
+#include "ConfigParser.hpp"
 
 using mylib::utils::Expected;
 using mylib::utils::PacketProcessor;
 using mylib::utils::ByteQueue;
 using mylib::utils::ErrorCode;
 using mylib::utils::StackErrorCode;
+using mylib::utils::ConfigParser;
 
 class MyClientSocket
 {
 	protected:
 		std::string Address;
 		PacketProcessor recvbuffer;
+
+		static ErrorCode GetSSLError();
 
 	public:
 		MyClientSocket() {}

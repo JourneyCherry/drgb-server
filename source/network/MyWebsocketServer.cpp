@@ -1,8 +1,23 @@
 #include "MyWebsocketServer.hpp"
 
-MyWebsocketServer::MyWebsocketServer(int p) : ioc(), acceptor{ioc, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), (unsigned short)port)}, MyServerSocket(p)
+MyWebsocketServer::MyWebsocketServer(int p) : ioc(), acceptor{ioc, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), (unsigned short)port)}, sslctx{boost::asio::ssl::context::tlsv12}, MyServerSocket(p)
 {
 	acceptor.set_option(boost::asio::socket_base::reuse_address(true));
+	//sslctx에 인증서, 비밀키 로드
+	boost::beast::error_code ec;
+	sslctx.use_certificate_file(ConfigParser::GetString("SSL_CERT"), boost::asio::ssl::context::pem, ec);
+	if(ec)
+		throw ErrorCodeExcept(ec, __STACKINFO__);
+	sslctx.use_private_key_file(ConfigParser::GetString("SSL_KEY"), boost::asio::ssl::context::pem, ec);
+	if(ec)
+		throw ErrorCodeExcept(ec, __STACKINFO__);
+
+	/*
+	//클라이언트에게 인증서 요구하기.
+	sslctx.set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert, ec);
+	if(ec)
+		throw ErrorCodeExcept(ec, __STACKINFO__);
+	*/
 }
 
 MyWebsocketServer::~MyWebsocketServer()
@@ -24,7 +39,7 @@ Expected<std::shared_ptr<MyClientSocket>, ErrorCode> MyWebsocketServer::Accept()
 			return;
 		try
 		{
-			client = std::make_shared<MyWebsocketClient>(client_ioc, std::move(socket));
+			client = std::make_shared<MyWebsocketClient>(client_ioc, std::ref(sslctx), std::move(socket));
 		}
 		catch(StackTraceExcept e)
 		{
