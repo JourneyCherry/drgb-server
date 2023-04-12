@@ -32,6 +32,13 @@ void MyMatch::Close()
 
 void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 {
+	StackErrorCode sec = client->KeyExchange();
+	if(!sec)
+	{
+		client->Close();
+		if(!client->isNormalClose(sec))
+			throw ErrorCodeExcept(sec, __STACKINFO__);
+	}
 	Account_ID_t account_id = 0;
 	std::shared_ptr<Notifier> noti = nullptr;
 	// Authentication

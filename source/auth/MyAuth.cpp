@@ -29,13 +29,13 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 {
 	bool exit_client = false;
 
-	StackErrorCode ec;
-	while(isRunning && !exit_client && ec)
+	StackErrorCode sec = client->KeyExchange();
+	while(isRunning && !exit_client && sec)
 	{
 		auto recv = client->Recv();
 		if(!recv)
 		{
-			ec = StackErrorCode{recv.error(), __STACKINFO__};
+			sec = StackErrorCode{recv.error(), __STACKINFO__};
 			break;
 		}
 
@@ -73,7 +73,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					}
 					catch(const pqxx::unique_violation &e)
 					{
-						ec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT)), __STACKINFO__};
+						sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT)), __STACKINFO__};
 						continue;
 					}
 				}
@@ -90,18 +90,18 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			}
 			catch(const pqxx::plpgsql_no_data_found &e)
 			{
-				ec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
+				sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
 				continue;
 			}
 			catch(const pqxx::unexpected_rows &e)
 			{
-				ec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
+				sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
 				continue;
 			}
 			catch(const pqxx::pqxx_exception &e)
 			{
 				Logger::log("DB Error : " + std::string(e.base().what()), Logger::LogType::error);
-				ec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__};
+				sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__};
 				continue;
 			}
 
@@ -131,11 +131,11 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 							switch(cookieheader)
 							{
 								case SUCCESS:
-									ec = StackErrorCode{client->Send(ByteQueue::Create<byte>(SUCCESS) + cookie + match_server_byte), __STACKINFO__};
+									sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(SUCCESS) + cookie + match_server_byte), __STACKINFO__};
 									exit_client = true;
 									break;
 								default:	//TODO : ERR_OUT_OF_CAPACITY가 오면 타 Match 서버로 연결해야 함.
-									ec = StackErrorCode{client->Send(ByteQueue::Create<byte>(cookieheader)), __STACKINFO__};
+									sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(cookieheader)), __STACKINFO__};
 									exit_client = true;
 									break;
 							}
@@ -144,7 +144,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					case ERR_EXIST_ACCOUNT_MATCH:	//쿠키와 몇번 매치서버인지(unsigned int)는 뒤에 붙어있다.
 					case ERR_EXIST_ACCOUNT_BATTLE:	//쿠키와 몇번 배틀서버인지(unsigned int)는 뒤에 붙어있다.
 					case ERR_OUT_OF_CAPACITY:		//서버 접속 불가. 단일 byte.
-						ec = StackErrorCode{client->Send(answer), __STACKINFO__};
+						sec = StackErrorCode{client->Send(answer), __STACKINFO__};
 						exit_client = true;
 						break;
 					default:
@@ -156,12 +156,12 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		}
 		catch(const std::exception& e)
 		{
-			ec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__};
+			sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__};
 			Logger::log(e.what(), Logger::LogType::error);
 		}
 	}
 
 	client->Close();
-	if(!client->isNormalClose(ec))
-		throw ErrorCodeExcept(ec, __STACKINFO__);
+	if(!client->isNormalClose(sec))
+		throw ErrorCodeExcept(sec, __STACKINFO__);
 }

@@ -32,24 +32,19 @@ void MyConnector::ConnectLoop()
 	isConnecting = true;
 	Thread::SetThreadName("Connector");
 
-	auto waitforsec = [&](){
-
-	};
-	
 	while(isRunning)
 	{
 		try
 		{
-			std::unique_lock<std::mutex>(m_req);
-			StackErrorCode sec = client_socket.Connect(target_addr, target_port);
-			if(!sec)
-				throw ErrorCodeExcept(sec);
-
 			ByteQueue keyword_bytes(keyword.c_str(), keyword.size());
-			ErrorCode ec = client_socket.Send(keyword_bytes);
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
-			auto result = client_socket.Recv();
+
+			std::unique_lock<std::mutex>(m_req);
+
+			ErrorCodeExcept::ThrowOnFail(socket.Connect(target_addr, target_port), __STACKINFO__);
+			ErrorCodeExcept::ThrowOnFail(socket.KeyExchange(), __STACKINFO__);
+			ErrorCodeExcept::ThrowOnFail(socket.Send(keyword_bytes), __STACKINFO__);
+
+			auto result = socket.Recv();
 			if(!result)
 				throw ErrorCodeExcept(result.error(), __STACKINFO__);
 
@@ -66,7 +61,7 @@ void MyConnector::ConnectLoop()
 			Logger::log(e.what(), Logger::LogType::error);
 		}
 
-		client_socket.Close();
+		socket.Close();
 		
 		Logger::log("MyConnector::Connect() : failed. retry after " + std::to_string(RETRY_WAIT_SEC) + " sec", Logger::LogType::debug);
 		std::this_thread::sleep_for(std::chrono::seconds(RETRY_WAIT_SEC));
@@ -91,27 +86,28 @@ ByteQueue MyConnector::Request(ByteQueue data)
 	if(!isRunning)
 		throw StackTraceExcept("Connector is Closed", __STACKINFO__);
 	
-	StackErrorCode ec(ERR_CONNECTION_CLOSED, __STACKINFO__);
+	StackErrorCode sec(ERR_CONNECTION_CLOSED, __STACKINFO__);
 	while(isRunning)
 	{
 		std::unique_lock<std::mutex> lk(m_req);
 		cv.wait(lk, [&](){return !isConnecting || !isRunning;});	//TODO : Timeout 넣기.
-		ec = StackErrorCode(client_socket.Send(data), __STACKINFO__);
-		if(!ec)
+		sec = StackErrorCode(socket.Send(data), __STACKINFO__);
+		if(!sec)
 		{
 			Connect();
 			continue;
 		}
 
-		auto msg = client_socket.Recv();
+		auto msg = socket.Recv();
 		if(!msg)
 		{
-			ec = StackErrorCode(msg.error(), __STACKINFO__);
+			sec = StackErrorCode(msg.error(), __STACKINFO__);
 			Connect();
 			continue;
 		}
 
 		return ByteQueue(msg.value());
 	}
-	throw ErrorCodeExcept(ec, __STACKINFO__);
+	ErrorCodeExcept::ThrowOnFail(sec, __STACKINFO__);
+	return ByteQueue();
 }

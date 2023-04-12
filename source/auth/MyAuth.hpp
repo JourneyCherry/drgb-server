@@ -9,7 +9,7 @@
 #include "Hasher.hpp"
 
 using mylib::utils::Encoder;
-using mylib::utils::Hasher;
+using mylib::security::Hasher;
 
 class MyAuth : public MyServer
 {

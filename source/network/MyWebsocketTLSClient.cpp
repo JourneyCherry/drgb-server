@@ -1,18 +1,26 @@
-#include "MyWebsocketClient.hpp"
+#include "MyWebsocketTLSClient.hpp"
 
-MyWebsocketClient::MyWebsocketClient(std::shared_ptr<boost::asio::io_context> _pioc, boost::asio::ip::tcp::socket socket)
+MyWebsocketTLSClient::MyWebsocketTLSClient(std::shared_ptr<boost::asio::io_context> _pioc, boost::asio::ssl::context &sslctx, boost::asio::ip::tcp::socket socket)
  : pioc(_pioc), ws(nullptr), MyClientSocket()
 {
-	ws = std::make_unique<booststream>(std::move(socket));
-	auto &sock = ws->next_layer();
+	boost::beast::error_code ec;
+
+	ws = std::make_unique<booststream>(std::move(socket), sslctx);
+	auto &sock = boost::beast::get_lowest_layer(*ws);
 	boost::asio::ip::tcp::endpoint ep = sock.remote_endpoint();
 	Address = ep.address().to_string() + ":" + std::to_string(ep.port());
+
+	ws->next_layer().handshake(boost::asio::ssl::stream_base::server, ec);
+	if(ec)
+	{
+		Close();
+		throw ErrorCodeExcept(ec, __STACKINFO__);
+	}
 
 	ws->set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::response_type& res){
 		res.set(boost::beast::http::field::server, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-server-sync");
 	}));
 
-	boost::beast::error_code ec;
 	ws->accept(ec);
 	if(ec)
 	{
@@ -23,12 +31,12 @@ MyWebsocketClient::MyWebsocketClient(std::shared_ptr<boost::asio::io_context> _p
 	ws->binary(true);
 }
 
-MyWebsocketClient::~MyWebsocketClient()
+MyWebsocketTLSClient::~MyWebsocketTLSClient()
 {
 	Close();
 }
 
-Expected<std::vector<byte>, ErrorCode> MyWebsocketClient::RecvRaw()
+Expected<std::vector<byte>, ErrorCode> MyWebsocketTLSClient::RecvRaw()
 {
 	if(!ws->is_open())
 		return {ErrorCode{ERR_CONNECTION_CLOSED}};
@@ -71,7 +79,7 @@ Expected<std::vector<byte>, ErrorCode> MyWebsocketClient::RecvRaw()
 	return result_bytes;
 }
 
-ErrorCode MyWebsocketClient::SendRaw(const byte* bytes, const size_t &len)
+ErrorCode MyWebsocketTLSClient::SendRaw(const byte* bytes, const size_t &len)
 {
 	boost::asio::const_buffer buffer(bytes, len);
 	boost::beast::error_code ec;
@@ -88,41 +96,60 @@ ErrorCode MyWebsocketClient::SendRaw(const byte* bytes, const size_t &len)
 	return {SUCCESS};
 }
 
-StackErrorCode MyWebsocketClient::Connect(std::string addr, int port)
+StackErrorCode MyWebsocketTLSClient::Connect(std::string addr, int port)
 {
 	Close();
 
-	pioc = std::make_shared<boost::asio::io_context>();
-	boost::asio::ip::tcp::resolver resolver(*pioc);
 	boost::beast::error_code ec;
+
+	pioc = std::make_shared<boost::asio::io_context>();
+	boost::asio::ssl::context sslctx(boost::asio::ssl::context::tlsv12_client);
+
+	/*
+	//sslctx에 인증서, 비밀키 로드
+	sslctx.use_certificate_file(ConfigParser::GetString("CERT_FILE"), boost::asio::ssl::context::pem, ec);
+	if(ec)
+		return {ec, __STACKINFO__};
+	sslctx.use_private_key_file(ConfigParser::GetString("KEY_FILE"), boost::asio::ssl::context::pem, ec);
+	if(ec)
+		return {ec, __STACKINFO__};
+	*/
+
+	boost::asio::ip::tcp::socket socket(*pioc);
+	ws = std::make_unique<booststream>(*pioc, sslctx);
+	//ws = std::make_unique<booststream>(std::move(socket));
+	boost::asio::ip::tcp::resolver resolver(*pioc);
 
 	auto const results = resolver.resolve(addr, std::to_string(port), ec);
 	if(ec)
 		return {ec, __STACKINFO__};
-	boost::asio::ip::tcp::socket socket(*pioc);
-	for(auto &endpoint : results)
-	{
-		socket.connect(endpoint, ec);
-	if(ec)
-			continue;
-	}
+	auto endpoint = boost::beast::net::connect(boost::beast::get_lowest_layer(*ws), results);
+	
+	if(!SSL_set_tlsext_host_name(ws->next_layer().native_handle(), addr.c_str()))
+		return {ErrorCode(ERR_get_error()), __STACKINFO__};
+	
+	ws->next_layer().handshake(boost::asio::ssl::stream_base::client, ec);
 	if(ec)
 		return {ec, __STACKINFO__};
 
-	ws = std::make_unique<booststream>(std::move(socket));
+	ws->set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::response_type& res){
+		res.set(boost::beast::http::field::user_agent, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-client-sync");
+	}));
+
 	ws->handshake(addr, "/", ec);
 	if(ec)
 		return {ec, __STACKINFO__};
 
-	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint();
-	Address = ep.address().to_string() + ":" + std::to_string(ep.port());
-	
+	Address = endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
+
+	ws->binary(true);
+
 	return {};
 }
 
-void MyWebsocketClient::Close()
+void MyWebsocketTLSClient::Close()
 {
-	if(ws->is_open())
+	if(ws && ws->is_open())
 	{
 		boost::beast::error_code ec;
 		ws->close(boost::beast::websocket::close_code::normal, ec);	//TODO : 여기서 Block이 되면 모든 로직이 멈춘다. Timeout이나 비동기 종료가 필요함.

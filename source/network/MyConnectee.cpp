@@ -65,6 +65,8 @@ void MyConnectee::ClientLoop(std::shared_ptr<MyClientSocket> client)
 {
 	Thread::SetThreadName("ConnecteeClientLoop_Authenticating");
 
+	ErrorCodeExcept::ThrowOnFail(client->KeyExchange(), __STACKINFO__);
+
 	//인증용 문자열(즉, 발송지 이름)을 올바르게 받지 못하면 연결을 끊는다.
 	auto authenticate = client->Recv();
 	if(!authenticate)

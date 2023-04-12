@@ -1,7 +1,7 @@
 #include "Hasher.hpp"
 
 namespace mylib{
-namespace utils{
+namespace security{
 
 Hash_t Hasher::sha256(ByteQueue bytes)
 {

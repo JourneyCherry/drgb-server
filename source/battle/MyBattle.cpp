@@ -32,6 +32,14 @@ void MyBattle::Close()
 
 void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 {
+	StackErrorCode ec = client->KeyExchange();
+	if(!ec)
+	{
+		client->Close();
+		if(!client->isNormalClose(ec))
+			throw ErrorCodeExcept(ec, __STACKINFO__);
+	}
+	
 	auto authenticate = client->Recv();
 	if(!authenticate)
 	{
@@ -69,7 +77,6 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		client->Send(info);
 	}
 
-	StackErrorCode ec;
 	while(isRunning && ec)
 	{
 		auto msg = client->Recv();

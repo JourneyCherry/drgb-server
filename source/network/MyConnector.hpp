@@ -32,7 +32,7 @@ class MyConnector
 		bool isConnecting;
 		bool isRunning;
 		//MyTCPClient client_socket;
-		MyWebsocketClient client_socket;
+		MyTCPClient socket;
 		std::mutex m_req;
 		const int RETRY_WAIT_SEC = 3;
 	

@@ -1,5 +1,44 @@
 #include "MyClientSocket.hpp"
 
+MyClientSocket::MyClientSocket() : encryptor(true), decryptor(false), isSecure(false)
+{
+}
+
+StackErrorCode MyClientSocket::KeyExchange(bool useSecure)
+{
+	if(!useSecure)
+		return {};
+
+	ErrorCode ec;
+	KeyExchanger exchanger;
+	isSecure = false;
+
+	auto pkey = exchanger.GetPublicKey();
+	if(!pkey)
+		return pkey.error();
+	ec = Send(*pkey);
+	if(!ec)
+		return {ec, __STACKINFO__};
+	auto peer_key = Recv();
+	if(!peer_key)
+		return {peer_key.error(), __STACKINFO__};
+	auto secret = exchanger.ComputeKey(peer_key->vector());
+	if(!secret)
+		return {secret.error(), __STACKINFO__};
+	auto derived = KeyExchanger::KDF(*secret, 48);
+	if(derived.size() != 48)
+		return {ErrorCode(ERR_PROTOCOL_VIOLATION), __STACKINFO__};
+	
+	auto [key, iv] = Encryptor::SplitKey(derived);
+
+	encryptor.SetKey(key, iv);
+	decryptor.SetKey(key, iv);
+
+	isSecure = true;
+
+	return {};
+}
+
 std::string MyClientSocket::ToString()
 {
 	return Address;
@@ -15,8 +54,10 @@ Expected<ByteQueue, ErrorCode> MyClientSocket::Recv()
 		
 		recvbuffer.Recv(result->data(), result->size());
 	}
-
-	return ByteQueue(PacketProcessor::decapsulate(recvbuffer.GetMsg()));
+	std::vector<byte> result = recvbuffer.GetMsg();
+	if(isSecure)
+		result = decryptor.Crypt(result);
+	return ByteQueue(result);
 }
 
 ErrorCode MyClientSocket::Send(ByteQueue bytes)
@@ -26,17 +67,14 @@ ErrorCode MyClientSocket::Send(ByteQueue bytes)
 
 ErrorCode MyClientSocket::Send(std::vector<byte> bytes)
 {
+	if(isSecure)
+		return SendRaw(PacketProcessor::encapsulate(encryptor.Crypt(bytes)));
 	return SendRaw(PacketProcessor::encapsulate(bytes));
 }
 
 ErrorCode MyClientSocket::SendRaw(const std::vector<byte> &bytes)
 {
 	return SendRaw(bytes.data(), bytes.size());
-}
-
-ErrorCode MyClientSocket::GetSSLError()
-{
-	return ErrorCode(ERR_get_error());
 }
 
 bool MyClientSocket::isNormalClose(const ErrorCode &ec)

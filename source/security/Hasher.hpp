@@ -3,7 +3,9 @@
 #include "ByteQueue.hpp"
 
 namespace mylib{
-namespace utils{
+namespace security{
+
+using utils::ByteQueue;
 
 class Hasher
 {

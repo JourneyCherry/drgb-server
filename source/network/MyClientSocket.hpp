@@ -5,6 +5,8 @@
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "ConfigParser.hpp"
+#include "KeyExchanger.hpp"
+#include "Encryptor.hpp"
 
 using mylib::utils::Expected;
 using mylib::utils::PacketProcessor;
@@ -12,17 +14,21 @@ using mylib::utils::ByteQueue;
 using mylib::utils::ErrorCode;
 using mylib::utils::StackErrorCode;
 using mylib::utils::ConfigParser;
+using mylib::security::Encryptor;
+using mylib::security::KeyExchanger;
 
 class MyClientSocket
 {
+	private:
+		bool isSecure;
+		Encryptor encryptor, decryptor;
+
 	protected:
 		std::string Address;
 		PacketProcessor recvbuffer;
 
-		static ErrorCode GetSSLError();
-
 	public:
-		MyClientSocket() {}
+		MyClientSocket();
 		MyClientSocket(const MyClientSocket&) = delete;
 		MyClientSocket(MyClientSocket&&) = delete;
 		virtual ~MyClientSocket() = default;
@@ -36,6 +42,7 @@ class MyClientSocket
 		virtual void Close() = 0;
 
 		std::string ToString();
+		StackErrorCode KeyExchange(bool = true);
 
 		virtual StackErrorCode Connect(std::string, int) = 0;
 		static bool isNormalClose(const ErrorCode&);

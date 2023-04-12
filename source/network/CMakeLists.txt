@@ -3,10 +3,14 @@ SET ( LIBS
 	MyConnectee
 	MyConnector
 	MyServerSocket
+	MyTCPTLSClient
+	MyTCPTLSServer
 	MyTCPClient
 	MyTCPServer
 	MyWebsocketClient
 	MyWebsocketServer
+	MyWebsocketTLSClient
+	MyWebsocketTLSServer
 )
 
 FOREACH( LIB IN LISTS LIBS )
@@ -19,12 +23,15 @@ ENDFOREACH()
 
 FIND_PACKAGE ( OpenSSL REQUIRED )
 
-TARGET_LINK_LIBRARIES( MyClientSocket PUBLIC Expected ByteQueue PacketProcessor )
+TARGET_LINK_LIBRARIES( MyClientSocket PUBLIC Expected ByteQueue PacketProcessor KeyExchanger Encryptor )
 TARGET_LINK_LIBRARIES( MyConnectee PUBLIC Invoker ByteQueue PacketProcessor VariadicPool Logger MyTCPServer )
 TARGET_LINK_LIBRARIES( MyConnector PUBLIC Invoker ByteQueue PacketProcessor Thread Logger MyTCPClient )
 TARGET_LINK_LIBRARIES( MyServerSocket PUBLIC MyClientSocket )
+TARGET_LINK_LIBRARIES( MyTCPTLSClient PUBLIC MyClientSocket )
+TARGET_LINK_LIBRARIES( MyTCPTLSServer PUBLIC MyServerSocket MyTCPTLSClient )
 TARGET_LINK_LIBRARIES( MyTCPClient PUBLIC MyClientSocket )
-TARGET_INCLUDE_DIRECTORIES ( MyTCPServer PUBLIC ${OPENSSL_INCLUDE_DIR} )
-TARGET_LINK_LIBRARIES( MyTCPServer PUBLIC MyServerSocket MyTCPClient ${OPENSSL_LIBRARIES} )
+TARGET_LINK_LIBRARIES( MyTCPServer PUBLIC MyServerSocket MyTCPClient )
 TARGET_LINK_LIBRARIES( MyWebsocketClient PUBLIC MyClientSocket ErrorCode )
-TARGET_LINK_LIBRARIES( MyWebsocketServer PUBLIC MyServerSocket MyWebsocketClient)
+TARGET_LINK_LIBRARIES( MyWebsocketServer PUBLIC MyServerSocket MyWebsocketClient )
+TARGET_LINK_LIBRARIES( MyWebsocketClient PUBLIC MyClientSocket ErrorCode )
+TARGET_LINK_LIBRARIES( MyWebsocketServer PUBLIC MyServerSocket MyWebsocketClient )
