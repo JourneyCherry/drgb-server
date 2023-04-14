@@ -10,6 +10,7 @@
 
 using mylib::utils::Encoder;
 using mylib::security::Hasher;
+using mylib::utils::ErrorCodeExcept;
 
 class MyAuth : public MyServer
 {

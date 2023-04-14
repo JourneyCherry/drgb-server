@@ -32,6 +32,7 @@ class ErrorCode
 		ErrorCode(errorcode_t);
 		ErrorCode(unsigned long);
 		ErrorCode(const ErrorCode&);
+		void SetMessage(std::string);
 		int code() const;
 		std::string message() const;
 		std::string message_code() const;

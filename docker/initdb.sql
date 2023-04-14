@@ -40,7 +40,7 @@ BEGIN
       access_time TIMESTAMP NOT NULL DEFAULT now(),
       nickname BIGINT DEFAULT 1 REFERENCES achievement(id) ON DELETE SET NULL,
       email VARCHAR(50) NOT NULL UNIQUE,
-      pwd_hash CHAR(64) NOT NULL,    --sha256 == 256bit == 32bytes == 64 letters in hex. IF you use just byte stream, use BYTEA Type.
+      pwd_hash CHAR(43) NOT NULL,    --sha256 == 256bit == 32bytes == 64 letters in hex. Base64 Encoding without padding 32 bytes == 43 bytes. If you use just byte stream, use BYTEA Type.
       win_count BIGINT DEFAULT 0,
       draw_count BIGINT DEFAULT 0,
       loose_count BIGINT DEFAULT 0

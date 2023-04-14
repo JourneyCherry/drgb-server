@@ -11,7 +11,7 @@ const std::map<errorcode_t, std::string> ErrorCode::strerrcode = {
 	{ERR_EXIST_ACCOUNT_MATCH, "There is always existing account in Match Server"},
 	{ERR_EXIST_ACCOUNT_BATTLE, "There is always existing account in Battle Server"},
 	{ERR_OUT_OF_CAPACITY, "The Server is Out of Capacity"},
-	{ERR_DB_FAILED, "DB has Failed"},
+	{ERR_DB_FAILED, "DB Fail"},
 	{ERR_DUPLICATED_ACCESS, "There is another Access already connected"},
 	{ERR_CONNECTION_CLOSED, "Connection is Closed"}
 };
@@ -51,6 +51,11 @@ ErrorCode::ErrorCode(unsigned long ec) : m_type(TYPE_OPENSSL), m_type_str("OpenS
 ErrorCode::ErrorCode(const ErrorCode& copy)
 {
 	(*this) = copy;
+}
+
+void ErrorCode::SetMessage(std::string new_message)
+{
+	m_message = "(" + new_message + ")";
 }
 
 int ErrorCode::code() const { return m_code; }

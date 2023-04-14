@@ -102,6 +102,38 @@ pqxx::row MyPostgres::exec1(const std::string& query)
 	return db_w->exec1(query);
 }
 
+Account_ID_t MyPostgres::RegisterAccount(std::string email, Pwd_Hash_t pwd)
+{
+	auto result = db_w->exec_params1("INSERT INTO userlist (email, pwd_hash) VALUES ($1, $2) RETURNING id, register_time", email, "UnRegistered-temporaryquote");
+	Account_ID_t id = result[0].as<Account_ID_t>();
+	std::string reg_time = result[1].as<std::string>();	//TODO : string 외에 byte 타입으로 넣는 방법을 찾아보자.
+
+	Hash_t pwd_hash = GetPwdHash(id, pwd, reg_time);
+	
+	auto encoded = Encoder::EncodeBase64(pwd_hash.data(), sizeof(pwd_hash));
+	db_w->exec_params0("UPDATE userlist SET pwd_hash = $2 WHERE id = $1", id, encoded);
+
+	return id;
+}
+
+Account_ID_t MyPostgres::FindAccount(std::string email, Pwd_Hash_t pwd)
+{
+	auto result = db_w->exec_params1("SELECT id, pwd_hash, register_time FROM userlist WHERE email = $1", email);
+	Account_ID_t id = result[0].as<Account_ID_t>();
+	std::string encoded = result[1].as<std::string>();
+	std::string reg_time = result[2].as<std::string>();
+
+	auto decoded = Encoder::DecodeBase64(encoded);
+	if(decoded.size() < sizeof(Hash_t))
+		throw StackTraceExcept("Hash in DB size doesn't match : " + std::to_string(decoded.size()), __STACKINFO__);
+	Hash_t answer;
+	std::copy_n(decoded.begin(), sizeof(Hash_t), answer.begin());
+
+	Hash_t pwd_hash = GetPwdHash(id, pwd, reg_time);
+	
+	return (pwd_hash == answer)?id:0;
+}
+
 std::tuple<Achievement_ID_t, int, int, int> MyPostgres::GetInfo(Account_ID_t account_id)
 {
 	auto result = db_w->exec_params1("SELECT nickname, win_count, draw_count, loose_count FROM userlist WHERE id = $1", account_id);
@@ -175,4 +207,16 @@ bool MyPostgres::AchieveProgress(Account_ID_t id, Achievement_ID_t achieve, int 
 		return (require <= c);	//3줄 위에서 require를 넘지않게 막고 있지만 혹시나 모를 경우를 위해 '동일'이 아닌 '이상'조건으로 설정함.
 	}
 	return false;
+}
+
+Hash_t GetPwdHash(Account_ID_t id, Pwd_Hash_t pwd, std::string reg_time)
+{
+	static constexpr int MAX_HASH_ITERATION = 32;
+	ByteQueue result = ByteQueue::Create<Hash_t>(pwd);
+	ByteQueue salt = ByteQueue(reg_time.c_str(), reg_time.size());
+	unsigned long long iterateCount = 1 << (id % MAX_HASH_ITERATION);
+	for(unsigned long long i = 0;i<iterateCount;i++)
+		result = ByteQueue::Create<Hash_t>(Hasher::sha256(result + salt));
+
+	return result.pop<Hash_t>();
 }

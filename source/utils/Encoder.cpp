@@ -7,7 +7,7 @@ const char* Encoder::charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv
 const byte Encoder::mapset[256] = 
 {
 	255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,	//00-0F
-	255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,	//10255F
+	255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,	//10-1F
 	255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,  62, 255, 255, 255,  63,	//20-2F
 	 52,  53,  54,  55,  56,  57,  58,  59,  60,  61, 255, 255, 255, 255, 255, 255,	//30-3F
 	255,   0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,	//40-4F
@@ -102,7 +102,7 @@ std::vector<byte> Encoder::DecodeBase64(std::string str)
 		phase++;
 		prev = uc;
 	}
-	if(phase -1 == 0)
+	if(phase == 1)
 		throw std::runtime_error("Broken Data");
 
 	return result;

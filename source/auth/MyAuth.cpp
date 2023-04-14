@@ -42,51 +42,42 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		try
 		{
 			byte header = recv->pop<byte>();
+
+			std::string email;
+			Pwd_Hash_t pwd_hash;
+
 			switch(header)
 			{
 				case REQ_REGISTER:
 				case REQ_LOGIN:
-				case REQ_CHPWD:
+				//case REQ_CHPWD:
+					pwd_hash = recv->pop<Pwd_Hash_t>();
+					email = recv->popstr();
 					break;
 				default:
 					throw StackTraceExcept("Protocol Violation(Unknown Header \'" + std::to_string(header) + "\')", __STACKINFO__);
 			}
-			Pwd_Hash_t pwd_hash;
-			Pwd_Hash_t new_pwd_hash;
-			std::string email;
 
-			pwd_hash = recv->pop<Pwd_Hash_t>();
-			if(header == REQ_CHPWD)
-				new_pwd_hash = recv->pop<Pwd_Hash_t>();
-			email = recv->popstr();
 			
 			Account_ID_t account_id = 0;
 			try
 			{
-				if(header == REQ_REGISTER)
-				{
-					try
-					{
-						dbsystem reg_db;
-						reg_db.exec("INSERT INTO userlist (email, pwd_hash) VALUES (" + reg_db.quote(email) + ", " + reg_db.quote(Encoder::EncodeBase64(pwd_hash.data(), sizeof(Pwd_Hash_t))) + ")");
-						reg_db.commit();
-					}
-					catch(const pqxx::unique_violation &e)
-					{
-						sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT)), __STACKINFO__};
-						continue;
-					}
-				}
-
 				dbsystem db;
-				std::string search_query = "SELECT id FROM userlist WHERE email = " + db.quote(email) + " AND pwd_hash = " + db.quote(Encoder::EncodeBase64(pwd_hash.data(), sizeof(Pwd_Hash_t)));
-				pqxx::row result = db.exec1(search_query);
-				account_id = result[0].as<Account_ID_t>();
-				if(header == REQ_CHPWD)
+				if(header == REQ_REGISTER)
+					account_id = db.RegisterAccount(email, pwd_hash);
+				else if(header == REQ_LOGIN)
+					account_id = db.FindAccount(email, pwd_hash);
+				if(account_id <= 0)
 				{
-					db.exec("UPDATE userlist SET pwd_hash = " + db.quote(Encoder::EncodeBase64(new_pwd_hash.data(), sizeof(Pwd_Hash_t))) + ", access_time = now() WHERE id = " + std::to_string(account_id) + "");
-					db.commit();
+					sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
+					continue;
 				}
+				db.commit();
+			}
+			catch(const pqxx::unique_violation &e)
+			{
+				sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT)), __STACKINFO__};
+				continue;
 			}
 			catch(const pqxx::plpgsql_no_data_found &e)
 			{
