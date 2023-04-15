@@ -50,6 +50,7 @@ class MyPostgres
 		pqxx::row exec1(const std::string& query);
 		Account_ID_t RegisterAccount(std::string, Pwd_Hash_t);
 		Account_ID_t FindAccount(std::string, Pwd_Hash_t);
+		bool ChangePwd(Account_ID_t, Pwd_Hash_t, Pwd_Hash_t);
 		std::tuple<Achievement_ID_t, int, int, int> GetInfo(Account_ID_t);
 		std::map<Achievement_ID_t, int> GetAllAchieve(Account_ID_t);
 		bool SetNickName(Account_ID_t, Achievement_ID_t);

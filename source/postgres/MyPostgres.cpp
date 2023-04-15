@@ -109,7 +109,7 @@ Account_ID_t MyPostgres::RegisterAccount(std::string email, Pwd_Hash_t pwd)
 	std::string reg_time = result[1].as<std::string>();	//TODO : string 외에 byte 타입으로 넣는 방법을 찾아보자.
 
 	Hash_t pwd_hash = GetPwdHash(id, pwd, reg_time);
-	
+
 	auto encoded = Encoder::EncodeBase64(pwd_hash.data(), sizeof(pwd_hash));
 	db_w->exec_params0("UPDATE userlist SET pwd_hash = $2 WHERE id = $1", id, encoded);
 
@@ -132,6 +132,31 @@ Account_ID_t MyPostgres::FindAccount(std::string email, Pwd_Hash_t pwd)
 	Hash_t pwd_hash = GetPwdHash(id, pwd, reg_time);
 	
 	return (pwd_hash == answer)?id:0;
+}
+
+bool MyPostgres::ChangePwd(Account_ID_t id, Pwd_Hash_t old_pwd, Pwd_Hash_t new_pwd)
+{
+	auto result = db_w->exec_params1("SELECT pwd_hash, register_time FROM userlist WHERE id = $1", id);
+	std::string encoded = result[0].as<std::string>();
+	std::string reg_time = result[1].as<std::string>();
+
+	auto decoded = Encoder::DecodeBase64(encoded);
+	if(decoded.size() < sizeof(Hash_t))
+		throw StackTraceExcept("Hash in DB size doesn't match : " + std::to_string(decoded.size()), __STACKINFO__);
+	Hash_t answer;
+	std::copy_n(decoded.begin(), sizeof(Hash_t), answer.begin());
+
+	Hash_t old_pwd_hash = GetPwdHash(id, old_pwd, reg_time);
+
+	if(old_pwd_hash != answer)
+		return false;
+
+	Hash_t new_pwd_hash = GetPwdHash(id, new_pwd, reg_time);
+	encoded = Encoder::EncodeBase64(new_pwd_hash.data(), sizeof(Hash_t));
+
+	db_w->exec_params0("UPDATE userlist SET pwd_hash = $2 WHERE id = $1", id, encoded);
+
+	return true;
 }
 
 std::tuple<Achievement_ID_t, int, int, int> MyPostgres::GetInfo(Account_ID_t account_id)
@@ -209,7 +234,7 @@ bool MyPostgres::AchieveProgress(Account_ID_t id, Achievement_ID_t achieve, int 
 	return false;
 }
 
-Hash_t GetPwdHash(Account_ID_t id, Pwd_Hash_t pwd, std::string reg_time)
+Hash_t MyPostgres::GetPwdHash(Account_ID_t id, Pwd_Hash_t pwd, std::string reg_time)
 {
 	static constexpr int MAX_HASH_ITERATION = 32;
 	ByteQueue result = ByteQueue::Create<Hash_t>(pwd);

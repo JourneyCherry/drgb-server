@@ -110,7 +110,8 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	}
 
 	bool isAnswered = false;
-	while(isRunning && !isAnswered)
+	StackErrorCode sec;
+	while(isRunning && !isAnswered && sec)
 	{
 		auto message = noti->wait();
 		if(!message)
@@ -125,6 +126,28 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					byte header = data.pop<byte>();
 					switch(header)
 					{
+						case REQ_CHPWD:
+							try
+							{
+								Pwd_Hash_t old_pwd = data.pop<Pwd_Hash_t>();
+								Pwd_Hash_t new_pwd = data.pop<Pwd_Hash_t>();
+								MyPostgres db;
+								if(db.ChangePwd(account_id, old_pwd, new_pwd))
+								{
+									db.commit();
+									sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(SUCCESS)), __STACKINFO__);
+								}
+								else
+								{
+									sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__);
+								}
+							}
+							catch(const pqxx::pqxx_exception & e)
+							{
+								sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__);
+								Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::debug);
+							}
+							break;
 						case REQ_STARTMATCH:	//매치메이커 큐에 넣기.
 							try
 							{
@@ -134,15 +157,13 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 							}
 							catch(const pqxx::pqxx_exception & e)
 							{
-								client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
-								client->Close();
-								throw StackTraceExcept("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
+								sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__);
+								Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::debug);
 							}
 							catch(const std::exception &e)
 							{
-								client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
-								client->Close();
-								throw StackTraceExcept("DB Failed : " + std::string(e.what()), __STACKINFO__);
+								sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__);
+								Logger::log("DB Failed : " + std::string(e.what()), Logger::LogType::debug);
 							}
 							break;
 						case REQ_PAUSEMATCH:	//매치메이커 큐에서 빼기.
@@ -153,7 +174,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 							{
 								Achievement_ID_t nameindex = data.pop<Achievement_ID_t>();
 								MyPostgres db;
-								db.SetNickName(account_id, nameindex);
+								db.SetNickName(account_id, nameindex);	//성공하든, 실패하든 항상 정보를 다시 던져준다.
 
 								ByteQueue infopacket = ByteQueue::Create<byte>(GAME_PLAYER_INFO);
 								auto [nickname, win, draw, loose] = db.GetInfo(account_id);
@@ -167,19 +188,19 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 							}
 							catch(const pqxx::pqxx_exception & e)
 							{
-								client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+								sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__);
 								client->Close();
 								throw StackTraceExcept("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
 							}
 							catch(const std::exception &e)
 							{
-								client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+								sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__);
 								client->Close();
 								throw StackTraceExcept("DB Failed : " + std::string(e.what()), __STACKINFO__);
 							}
 							break;
 						default:
-							client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+							sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__);
 							break;
 					}
 				}
@@ -194,17 +215,19 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					int battle_id = ((MyMatchMakerMessage*)message->get())->BattleServer;
 					ByteQueue answer = ByteQueue::Create<byte>(ANS_MATCHMADE);
 					answer.push<int>(battle_id);
-					client->Send(answer);
+					sec = StackErrorCode(client->Send(answer), __STACKINFO__);
 					isAnswered = true;
 				}
 				break;
 			default:
-				client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+				sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__);
 				break;
 		}
 	}
 	client->Close();
 	receiver.join();
+	if(!client->isNormalClose(sec))
+		throw ErrorCodeExcept(sec, __STACKINFO__);
 }
 
 ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
