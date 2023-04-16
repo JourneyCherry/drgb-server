@@ -32,6 +32,8 @@ services:
   match:
     container_name: match
     image: drgb-match
+    depends_on:
+      - db
     build:
       context: ../
       dockerfile: ./docker/Dockerfile
@@ -46,6 +48,8 @@ services:
   battle:
     container_name: battle
     image: drgb-battle
+    depends_on:
+      - db
     build:
       context: ../
       dockerfile: ./docker/Dockerfile

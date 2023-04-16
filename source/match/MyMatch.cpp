@@ -36,6 +36,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	if(!sec)
 	{
 		client->Close();
+		Logger::log("Client " + client->ToString() + " Failed to KeyExchange", Logger::LogType::auth);
 		if(!client->isNormalClose(sec))
 			throw ErrorCodeExcept(sec, __STACKINFO__);
 	}
@@ -60,9 +61,12 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		{
 			client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 			client->Close();
+			Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
 			return;
 		}
 	}
+
+	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
 
 	noti = std::make_shared<Notifier>();
 	sessions.InsertLKeyValue(account_id, noti);
@@ -94,23 +98,22 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			infopacket.push<Achievement_ID_t>(pair.first);	//achieve id
 			infopacket.push<int>(pair.second);	//achieve count
 		}
-		client->Send(infopacket);
+		sec = StackErrorCode(client->Send(infopacket), __STACKINFO__);
 	}
 	catch(const pqxx::pqxx_exception & e)
 	{
-		client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+		sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__);
 		client->Close();
 		throw StackTraceExcept("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
 	}
 	catch(const std::exception &e)
 	{
-		client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+		sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED)), __STACKINFO__);
 		client->Close();
 		throw StackTraceExcept("DB Failed : " + std::string(e.what()), __STACKINFO__);
 	}
 
 	bool isAnswered = false;
-	StackErrorCode sec;
 	while(isRunning && !isAnswered && sec)
 	{
 		auto message = noti->wait();
@@ -226,6 +229,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	}
 	client->Close();
 	receiver.join();
+	Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
 	if(!client->isNormalClose(sec))
 		throw ErrorCodeExcept(sec, __STACKINFO__);
 }

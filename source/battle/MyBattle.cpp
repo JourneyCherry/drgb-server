@@ -36,6 +36,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	if(!ec)
 	{
 		client->Close();
+		Logger::log("Client " + client->ToString() + " Failed to KeyExchange", Logger::LogType::auth);
 		if(!client->isNormalClose(ec))
 			throw ErrorCodeExcept(ec, __STACKINFO__);
 	}
@@ -44,6 +45,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	if(!authenticate)
 	{
 		client->Close();
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
 		return;
 	}
 	Hash_t cookie = authenticate->pop<Hash_t>();
@@ -51,11 +53,14 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	if(!session)	//세션이 match로부터 오지 않는 경우
 	{
 		client->Close();
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
 		return;
 	}
 
 	Account_ID_t account_id = session->first;
 	std::shared_ptr<MyGame> GameSession = session->second;
+
+	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
 
 	//Game에 접속 보내기.
 	int side = GameSession->Connect(account_id, client);
@@ -109,6 +114,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	}
 
 	client->Close();
+	Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
 	if(!client->isNormalClose(ec))
 		throw ErrorCodeExcept(ec, __STACKINFO__);
 }

@@ -29,7 +29,11 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 {
 	bool exit_client = false;
 
+	Logger::log("Client " + client->ToString() + " Entered", Logger::LogType::auth);
+
 	StackErrorCode sec = client->KeyExchange();
+	if(!sec)
+		Logger::log("Client " + client->ToString() + " Failed to KeyExchange", Logger::LogType::auth);
 	while(isRunning && !exit_client && sec)
 	{
 		auto recv = client->Recv();
@@ -45,6 +49,8 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 
 			std::string email;
 			Pwd_Hash_t pwd_hash;
+			Account_ID_t account_id = 0;
+			Seed_t match_id = 1;
 
 			switch(header)
 			{
@@ -55,13 +61,12 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					email = recv->popstr();
 					break;
 				default:
-					throw StackTraceExcept("Protocol Violation(Unknown Header \'" + std::to_string(header) + "\')", __STACKINFO__);
+					throw StackTraceExcept("Unknown Header \'" + std::to_string(header) + "\'", __STACKINFO__);
 			}
 
-			
-			Account_ID_t account_id = 0;
 			try
 			{
+				account_id = 0;
 				dbsystem db;
 				if(header == REQ_REGISTER)
 					account_id = db.RegisterAccount(email, pwd_hash);
@@ -69,8 +74,14 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					account_id = db.FindAccount(email, pwd_hash);
 				if(account_id <= 0)
 				{
+					account_id = 0;
+					Logger::log("Client " + client->ToString() + " Failed to login \'" + email + "\'", Logger::LogType::auth);
 					sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
 					continue;
+				}
+				else
+				{
+					Logger::log("Client " + client->ToString() + " Success to Login \'" + std::to_string(account_id) + "\'", Logger::LogType::auth);
 				}
 				db.commit();
 			}
@@ -99,7 +110,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			//match/battle 서버에 cookie 확인. battle 서버는 match서버가 확인해 줄 것임.
 			{
 				ByteQueue query = ByteQueue::Create<byte>(INQ_ACCOUNT_CHECK);
-				Seed_t match_id = 1;	//TODO : 추후, connector_match.Request()가 ERR_OUT_OF_CAPACITY를 반환했을 때, 다음 match서버로 넘기는 기능 추가 필요.
+				match_id = 1;	//TODO : 추후, connector_match.Request()가 ERR_OUT_OF_CAPACITY를 반환했을 때, 다음 match서버로 넘기는 기능 추가 필요.
 				ByteQueue account_byte = ByteQueue::Create<Account_ID_t>(account_id);
 				ByteQueue match_server_byte = ByteQueue::Create<Seed_t>(match_id);
 				query += account_byte;
@@ -139,7 +150,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 						exit_client = true;
 						break;
 					default:
-						throw StackTraceExcept("Unknown Header : " + std::to_string(query_header), __STACKINFO__);
+						throw StackTraceExcept("Unknown Header From Match : " + std::to_string(query_header), __STACKINFO__);
 				}
 			}
 
@@ -148,11 +159,13 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		catch(const std::exception& e)
 		{
 			sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__};
-			Logger::log(e.what(), Logger::LogType::error);
+			Logger::log("Client " + client->ToString() + " : " + std::string(e.what()), Logger::LogType::error);
 		}
 	}
 
 	client->Close();
+	Logger::log("Client " + client->ToString() + " Exit", Logger::LogType::auth);
+
 	if(!client->isNormalClose(sec))
 		throw ErrorCodeExcept(sec, __STACKINFO__);
 }
