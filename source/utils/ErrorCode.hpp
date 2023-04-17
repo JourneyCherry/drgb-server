@@ -3,6 +3,7 @@
 #include <string>
 #include <cerrno>
 #include <boost/asio/error.hpp>
+#include <boost/beast/websocket/error.hpp>
 #include <openssl/err.h>
 #include "MyCodes.hpp"
 

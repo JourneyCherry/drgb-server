@@ -37,7 +37,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	{
 		client->Close();
 		Logger::log("Client " + client->ToString() + " Failed to KeyExchange", Logger::LogType::auth);
-		if(!client->isNormalClose(ec))
+		if(!MyClientSocket::isNormalClose(ec))
 			throw ErrorCodeExcept(ec, __STACKINFO__);
 	}
 	
@@ -115,7 +115,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 
 	client->Close();
 	Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
-	if(!client->isNormalClose(ec))
+	if(!MyClientSocket::isNormalClose(ec))
 		throw ErrorCodeExcept(ec, __STACKINFO__);
 }
 

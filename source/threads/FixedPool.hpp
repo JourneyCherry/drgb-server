@@ -8,8 +8,9 @@
 #include <string>
 #include <atomic>
 #include <condition_variable>
+#include <map>
 #include "ThreadExceptHandler.hpp"
-#include "StackTraceExcept.hpp"	//TODO : 상대경로가 아닌 헤더파일만 적으면 vscode에서 인식을 못한다. 단, cmake는 인식함.
+#include "StackTraceExcept.hpp"
 
 using mylib::threads::ThreadExceptHandler;
 using mylib::utils::StackTraceExcept;
@@ -30,15 +31,17 @@ class FixedPool : public ThreadExceptHandler
 		std::atomic<size_t> capacity;
 
 		std::string name;
-		std::function<void(T)> process;
+		std::function<void(T)> work;
 
+		std::mutex m_wt;
+		std::map<size_t, T> workingTable;
 		
 		std::array<std::thread, MAX_POOL> threadpool;
 		std::queue<T> msgqueue;
 
-		void Worker()
+		void Worker(size_t thread_num)
 		{
-			Thread::SetThreadName(name);
+			Thread::SetThreadName(name + "(" + std::to_string(thread_num) + ")");
 			
 			while(isRunning)
 			{
@@ -52,7 +55,14 @@ class FixedPool : public ThreadExceptHandler
 				capacity.fetch_sub(1, std::memory_order_acquire);	//이 이후의 명령이 이 앞으로 오는 것 금지.
 				try
 				{
-					process(arg);
+					ulock lk(m_wt);
+					workingTable.insert({thread_num, arg});
+					lk.unlock();
+
+					work(arg);
+
+					lk.lock();
+					workingTable.erase(thread_num);
 				}
 				catch(...)
 				{
@@ -63,12 +73,12 @@ class FixedPool : public ThreadExceptHandler
 		}
 		
 	public:
-		FixedPool(std::function<void(T)> _process, ThreadExceptHandler *p = nullptr) : FixedPool("FixedPool", _process, p) {}
-		FixedPool(std::string _name, std::function<void(T)> _process, ThreadExceptHandler *p = nullptr) : name(_name), process(_process), isRunning(true), capacity(MAX_POOL)
+		FixedPool(std::function<void(T)> _work, ThreadExceptHandler *p = nullptr) : FixedPool("FixedPool", _work, p) {}
+		FixedPool(std::string _name, std::function<void(T)> _work, ThreadExceptHandler *p = nullptr) : name(_name), work(_work), isRunning(true), capacity(MAX_POOL)
 		{
 			SetParent(p);
 			for(size_t i = 0;i<MAX_POOL;i++)
-				threadpool[i] = std::thread(std::bind(&FixedPool::Worker, this));
+				threadpool[i] = std::thread(std::bind(&FixedPool::Worker, this, i));
 		}
 		~FixedPool()
 		{
@@ -88,6 +98,13 @@ class FixedPool : public ThreadExceptHandler
 			return true;
 		}
 
+		void safe_loop(std::function<void(T)> process)
+		{
+			ulock lk(m_wt);
+			for(auto &[id, t] : workingTable)
+				process(t);
+		}
+
 		void stop()
 		{
 			isRunning = false;
@@ -102,6 +119,11 @@ class FixedPool : public ThreadExceptHandler
 		size_t remain()
 		{
 			return capacity.load(std::memory_order_relaxed);
+		}
+
+		size_t running()
+		{
+			return workingTable.size();
 		}
 };
 

@@ -34,18 +34,24 @@ Expected<std::vector<byte>, ErrorCode> MyWebsocketClient::RecvRaw()
 		return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
 	std::vector<byte> result_bytes;
-	boost::beast::error_code result;
+	ErrorCode ec;
 	boost::beast::flat_buffer buffer;
 
-	ws->async_read(buffer, [&](boost::beast::error_code ec, size_t bytes_written)
+	ws->async_read(buffer, [&](boost::beast::error_code m_ec, size_t bytes_written)
 	{
-		result = ec;
-		if(ec)
+		ec = ErrorCode(m_ec);
+		if(!ec)
 			return;
 		if(bytes_written == 0)
+		{
+			ec = ErrorCode(ERR_CONNECTION_CLOSED);
 			return;
+		}
 		if(!ws->got_binary())
+		{
+			ec = ErrorCode(ERR_PROTOCOL_VIOLATION);
 			return;
+		}
 
 		unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
 		size_t size = boost::asio::buffer_size(buffer.data());
@@ -57,16 +63,12 @@ Expected<std::vector<byte>, ErrorCode> MyWebsocketClient::RecvRaw()
 		pioc->restart();
 	pioc->run();
 
-	if(!ws->got_binary())
-		return {ErrorCode{ERR_PROTOCOL_VIOLATION}};
-	if(
-		result == boost::beast::websocket::error::closed || 
-		result == boost::asio::error::eof ||
-		result == boost::asio::error::operation_aborted
-	)
-		return {ErrorCode{ERR_CONNECTION_CLOSED}};
-	if(result)
-		return {ErrorCode{result}};
+	if(!ec)
+	{
+		if(isNormalClose(ec))
+			return {ErrorCode{ERR_CONNECTION_CLOSED}};
+		return ec;
+	}
 
 	return result_bytes;
 }
@@ -122,20 +124,35 @@ StackErrorCode MyWebsocketClient::Connect(std::string addr, int port)
 
 void MyWebsocketClient::Close()
 {
+	std::exception_ptr eptr = nullptr;
 	if(ws->is_open())
 	{
-		boost::beast::error_code ec;
-		ws->close(boost::beast::websocket::close_code::normal, ec);	//TODO : 여기서 Block이 되면 모든 로직이 멈춘다. Timeout이나 비동기 종료가 필요함.
-		if(
-			ec == boost::beast::websocket::error::closed || 
-			ec == boost::asio::error::eof ||
-			ec == boost::asio::error::operation_aborted
-		)
-			return;
-		if(ec)
-			throw ErrorCodeExcept(ec, __STACKINFO__);
+		ws->async_close(boost::beast::websocket::close_code::normal, [&](boost::beast::error_code err)
+		{
+			ErrorCode ec{err};
+			if(!ec)
+			{
+				if(!isNormalClose(ec))
+					throw ErrorCodeExcept(ec, __STACKINFO__);
+			}
+		});
 	}
 	if(pioc)
-		pioc->stop();
+	{
+		if(pioc->stopped())
+		{
+			try
+			{
+				pioc->restart();
+				pioc->run();
+			}
+			catch(...)
+			{
+				eptr = std::current_exception();
+			}
+		}
+	}
 	recvbuffer.Clear();
+	if(eptr)
+		std::rethrow_exception(eptr);
 }

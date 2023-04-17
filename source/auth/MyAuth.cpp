@@ -75,7 +75,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 				if(account_id <= 0)
 				{
 					account_id = 0;
-					Logger::log("Client " + client->ToString() + " Failed to login \'" + email + "\'", Logger::LogType::auth);
+					Logger::log("Client " + client->ToString() + " Failed to login \'" + email + "\' for Password Mismatch", Logger::LogType::auth);
 					sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
 					continue;
 				}
@@ -87,16 +87,19 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			}
 			catch(const pqxx::unique_violation &e)
 			{
+				Logger::log("Client " + client->ToString() + " Failed to login \'" + email + "\'", Logger::LogType::auth);
 				sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT)), __STACKINFO__};
 				continue;
 			}
 			catch(const pqxx::plpgsql_no_data_found &e)
 			{
+				Logger::log("Client " + client->ToString() + " Failed to login \'" + email + "\'", Logger::LogType::auth);
 				sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
 				continue;
 			}
 			catch(const pqxx::unexpected_rows &e)
 			{
+				Logger::log("Client " + client->ToString() + " Failed to login \'" + email + "\'", Logger::LogType::auth);
 				sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT)), __STACKINFO__};
 				continue;
 			}
@@ -166,6 +169,6 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	client->Close();
 	Logger::log("Client " + client->ToString() + " Exit", Logger::LogType::auth);
 
-	if(!client->isNormalClose(sec))
+	if(!MyClientSocket::isNormalClose(sec))
 		throw ErrorCodeExcept(sec, __STACKINFO__);
 }

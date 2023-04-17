@@ -88,6 +88,15 @@ bool MyClientSocket::isNormalClose(const ErrorCode &ec)
 			return (ec.code() == EINVAL);
 		case ErrorCode::TYPE_CUSTOM:
 			return (ec.code() == ERR_CONNECTION_CLOSED);
+		case ErrorCode::TYPE_BOOST:
+			switch(ec.code())
+			{
+				case (int)boost::beast::websocket::error::closed:	//it is enum class
+				case boost::asio::error::eof:
+				case boost::asio::error::operation_aborted:
+					return true;
+			}
+			return false;
 	}
 	return false;
 }

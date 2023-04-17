@@ -37,7 +37,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	{
 		client->Close();
 		Logger::log("Client " + client->ToString() + " Failed to KeyExchange", Logger::LogType::auth);
-		if(!client->isNormalClose(sec))
+		if(!MyClientSocket::isNormalClose(sec))
 			throw ErrorCodeExcept(sec, __STACKINFO__);
 	}
 	Account_ID_t account_id = 0;
@@ -77,7 +77,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			noti->push(std::make_shared<MyClientMessage>(*result));
 
 		noti->push(std::make_shared<MyDisconnectMessage>());
-		if(!client->isNormalClose(result.error()))
+		if(!MyClientSocket::isNormalClose(result.error()))
 			throw ErrorCodeExcept(result.error(), __STACKINFO__);
 	});
 
@@ -230,7 +230,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	client->Close();
 	receiver.join();
 	Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
-	if(!client->isNormalClose(sec))
+	if(!MyClientSocket::isNormalClose(sec))
 		throw ErrorCodeExcept(sec, __STACKINFO__);
 }
 

@@ -4,9 +4,9 @@ bool MyPostgres::isRunning = false;
 std::unique_ptr<pqxx::connection> MyPostgres::db_c = nullptr;
 std::mutex MyPostgres::db_mtx;
 
-MyPostgres::MyPostgres() : db_lk(db_mtx)	//TODO : pqxx::connection 한개당 pqxx::work(즉, transaction)은 동시에 1개만 가능하다.
-{											//		 즉, connection은 재사용가능하지만 transaction 자체는 single thread에서만 접근해야 한다.
-	if(!isRunning)							//		 multi-thread query를 하려면 connection pool을 만들자.
+MyPostgres::MyPostgres() : db_lk(db_mtx)	//pqxx::connection 한개당 pqxx::work(즉, transaction)은 동시에 1개만 가능하다.
+{											//즉, connection은 재사용가능하지만 transaction 자체는 single thread에서만 접근해야 한다.
+	if(!isRunning)							//multi-thread query를 하려면 connection pool을 만들자.
 		throw StackTraceExcept("Postgres is not running", __STACKINFO__);
 	db_w = std::make_unique<pqxx::work>(*db_c);
 }

@@ -113,6 +113,6 @@ void MyConnectee::ClientLoop(std::shared_ptr<MyClientSocket> client)
 
 	Logger::log("Host <- " + keyword + " is Disconnected");
 	client->Close();
-	if(MyClientSocket::isNormalClose(ec))
+	if(!MyClientSocket::isNormalClose(ec))
 		throw ErrorCodeExcept(ec, __STACKINFO__);
 }
