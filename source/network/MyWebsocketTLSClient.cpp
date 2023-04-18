@@ -10,6 +10,7 @@ MyWebsocketTLSClient::MyWebsocketTLSClient(std::shared_ptr<boost::asio::io_conte
 	boost::asio::ip::tcp::endpoint ep = sock.remote_endpoint();
 	Address = ep.address().to_string() + ":" + std::to_string(ep.port());
 
+	SetTimeout(TIME_HANDSHAKE);
 	ws->next_layer().handshake(boost::asio::ssl::stream_base::server, ec);
 	if(ec)
 	{
@@ -22,6 +23,8 @@ MyWebsocketTLSClient::MyWebsocketTLSClient(std::shared_ptr<boost::asio::io_conte
 	}));
 
 	ws->accept(ec);
+	SetTimeout();
+
 	if(ec)
 	{
 		Close();
@@ -42,39 +45,46 @@ Expected<std::vector<byte>, ErrorCode> MyWebsocketTLSClient::RecvRaw()
 		return {ErrorCode{ERR_CONNECTION_CLOSED}};
 
 	std::vector<byte> result_bytes;
-	boost::beast::error_code result;
-	boost::beast::flat_buffer buffer;
+	ErrorCode ec;
 
-	ws->async_read(buffer, [&](boost::beast::error_code ec, size_t bytes_written)
+	if(isAsyncDone)
 	{
-		result = ec;
-		if(ec)
-			return;
-		if(bytes_written == 0)
-			return;
-		if(!ws->got_binary())
-			return;
+		isAsyncDone = false;
+		ws->async_read(buffer, [&](boost::beast::error_code m_ec, size_t bytes_written)
+		{
+			isAsyncDone = true;
+			ec = ErrorCode(m_ec);
+			if(!ec)
+				return;
+			if(bytes_written == 0)
+			{
+				ec = ErrorCode(ERR_CONNECTION_CLOSED);
+				return;
+			}
+			if(!ws->got_binary())
+			{
+				ec = ErrorCode(ERR_PROTOCOL_VIOLATION);
+				return;
+			}
 
-		unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
-		size_t size = boost::asio::buffer_size(buffer.data());
+			unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
+			size_t size = boost::asio::buffer_size(buffer.data());
+			buffer.clear();
 
-		result_bytes.assign(first, first + size);
-	});
+			result_bytes.assign(first, first + size);
+		});
+	}
 
 	if(pioc->stopped())
 		pioc->restart();
 	pioc->run();
 
-	if(!ws->got_binary())
-		return {ErrorCode{ERR_PROTOCOL_VIOLATION}};
-	if(
-		result == boost::beast::websocket::error::closed || 
-		result == boost::asio::error::eof ||
-		result == boost::asio::error::operation_aborted
-	)
-		return {ErrorCode{ERR_CONNECTION_CLOSED}};
-	if(result)
-		return {ErrorCode{result}};
+	if(!ec)
+	{
+		if(isNormalClose(ec))
+			return {ErrorCode{ERR_CONNECTION_CLOSED}};
+		return ec;
+	}
 
 	return result_bytes;
 }
@@ -128,7 +138,9 @@ StackErrorCode MyWebsocketTLSClient::Connect(std::string addr, int port)
 	if(!SSL_set_tlsext_host_name(ws->next_layer().native_handle(), addr.c_str()))
 		return {ErrorCode(ERR_get_error()), __STACKINFO__};
 	
+	SetTimeout(TIME_HANDSHAKE);
 	ws->next_layer().handshake(boost::asio::ssl::stream_base::client, ec);
+	SetTimeout();
 	if(ec)
 		return {ec, __STACKINFO__};
 
@@ -147,22 +159,53 @@ StackErrorCode MyWebsocketTLSClient::Connect(std::string addr, int port)
 	return {};
 }
 
+void MyWebsocketTLSClient::SetTimeout(float sec)
+{
+	auto timeout = boost::beast::websocket::stream_base::none();
+	if(sec > 0.0f)
+	{
+		long millisec = std::floor(sec * 1000);
+		timeout = std::chrono::milliseconds(millisec);
+	}
+	boost::beast::websocket::stream_base::timeout opt;
+	opt.handshake_timeout = timeout;
+	opt.idle_timeout = timeout;
+	opt.keep_alive_pings = true;
+	ws->set_option(opt);
+}
+
 void MyWebsocketTLSClient::Close()
 {
-	if(ws && ws->is_open())
+	std::exception_ptr eptr = nullptr;
+	if(ws->is_open())
 	{
-		boost::beast::error_code ec;
-		ws->close(boost::beast::websocket::close_code::normal, ec);	//TODO : 여기서 Block이 되면 모든 로직이 멈춘다. Timeout이나 비동기 종료가 필요함.
-		if(
-			ec == boost::beast::websocket::error::closed || 
-			ec == boost::asio::error::eof ||
-			ec == boost::asio::error::operation_aborted
-		)
-			return;
-		if(ec)
-			throw ErrorCodeExcept(ec, __STACKINFO__);
+		SetTimeout(TIME_CLOSE);
+		ws->async_close(boost::beast::websocket::close_code::normal, [&](boost::beast::error_code err)
+		{
+			ErrorCode ec{err};
+			if(!ec)
+			{
+				if(!isNormalClose(ec))
+					throw ErrorCodeExcept(ec, __STACKINFO__);
+			}
+		});
 	}
 	if(pioc)
-		pioc->stop();
+	{
+		if(pioc->stopped())
+		{
+			try
+			{
+				pioc->restart();
+				pioc->run();
+			}
+			catch(...)
+			{
+				eptr = std::current_exception();
+			}
+		}
+	}
 	recvbuffer.Clear();
+	if(eptr)
+		std::rethrow_exception(eptr);
 }

@@ -22,6 +22,7 @@ class MyClientSocket
 	private:
 		bool isSecure;
 		Encryptor encryptor, decryptor;
+		static constexpr float TIME_KEYEXCHANGE = 2.0f;
 
 	protected:
 		std::string Address;
@@ -33,18 +34,20 @@ class MyClientSocket
 		MyClientSocket(MyClientSocket&&) = delete;
 		virtual ~MyClientSocket() = default;
 
+		virtual StackErrorCode Connect(std::string, int) = 0;
+		virtual void Close() = 0;
+		virtual void SetTimeout(float = 0.0f) = 0;	//seconds
+
 		MyClientSocket& operator=(const MyClientSocket&) = delete;
 		MyClientSocket& operator=(MyClientSocket&&) = delete;
 
-		Expected<ByteQueue, ErrorCode> Recv();
+		Expected<ByteQueue, ErrorCode> Recv(float = 0.0f);
 		ErrorCode Send(ByteQueue);
 		ErrorCode Send(std::vector<byte>);
-		virtual void Close() = 0;
 
 		std::string ToString();
 		StackErrorCode KeyExchange(bool = true);
 
-		virtual StackErrorCode Connect(std::string, int) = 0;
 		static bool isNormalClose(const ErrorCode&);
 
 	protected:

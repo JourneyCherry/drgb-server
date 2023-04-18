@@ -134,6 +134,17 @@ StackErrorCode MyTCPTLSClient::Connect(std::string addr, int port)
 	return {};
 }
 
+void MyTCPTLSClient::SetTimeout(float sec)
+{
+	if(socket_fd < 0)
+		throw ErrorCodeExcept(ERR_CONNECTION_CLOSED, __STACKINFO__);
+	struct timeval time;
+	time.tv_usec = std::modf(sec, &sec) * 1000000;	//micro seconds
+	time.tv_sec = sec;	//seconds
+	if(setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &time, sizeof(time)) < 0)
+		throw ErrorCodeExcept(errno, __STACKINFO__);
+}
+
 void MyTCPTLSClient::Close()
 {
 	if(ssl)

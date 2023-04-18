@@ -1,7 +1,7 @@
 #include "MyWebsocketClient.hpp"
 
 MyWebsocketClient::MyWebsocketClient(std::shared_ptr<boost::asio::io_context> _pioc, boost::asio::ip::tcp::socket socket)
- : pioc(_pioc), ws(nullptr), MyClientSocket()
+ : pioc(_pioc), ws(nullptr), isAsyncDone(true), MyClientSocket()
 {
 	ws = std::make_unique<booststream>(std::move(socket));
 	auto &sock = ws->next_layer();
@@ -13,7 +13,11 @@ MyWebsocketClient::MyWebsocketClient(std::shared_ptr<boost::asio::io_context> _p
 	}));
 
 	boost::beast::error_code ec;
+
+	SetTimeout(TIME_HANDSHAKE);
 	ws->accept(ec);
+	SetTimeout();
+
 	if(ec)
 	{
 		Close();
@@ -35,33 +39,38 @@ Expected<std::vector<byte>, ErrorCode> MyWebsocketClient::RecvRaw()
 
 	std::vector<byte> result_bytes;
 	ErrorCode ec;
-	boost::beast::flat_buffer buffer;
 
-	ws->async_read(buffer, [&](boost::beast::error_code m_ec, size_t bytes_written)
+	if(isAsyncDone)
 	{
-		ec = ErrorCode(m_ec);
-		if(!ec)
-			return;
-		if(bytes_written == 0)
+		isAsyncDone = false;
+		ws->async_read(buffer, [&](boost::beast::error_code m_ec, size_t bytes_written)
 		{
-			ec = ErrorCode(ERR_CONNECTION_CLOSED);
-			return;
-		}
-		if(!ws->got_binary())
-		{
-			ec = ErrorCode(ERR_PROTOCOL_VIOLATION);
-			return;
-		}
+			isAsyncDone = true;
+			ec = ErrorCode(m_ec);
+			if(!ec)
+				return;
+			if(bytes_written == 0)
+			{
+				ec = ErrorCode(ERR_CONNECTION_CLOSED);
+				return;
+			}
+			if(!ws->got_binary())
+			{
+				ec = ErrorCode(ERR_PROTOCOL_VIOLATION);
+				return;
+			}
 
-		unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
-		size_t size = boost::asio::buffer_size(buffer.data());
+			unsigned char *first = boost::asio::buffer_cast<unsigned char*>(buffer.data());
+			size_t size = boost::asio::buffer_size(buffer.data());
+			buffer.clear();
 
-		result_bytes.assign(first, first + size);
-	});
+			result_bytes.assign(first, first + size);
+		});
+	}
 
 	if(pioc->stopped())
 		pioc->restart();
-	pioc->run();
+	pioc->run_one();	//set_option(timeout)으로 인해 deadline_timer가 io_context에 같이 붙게 되므로, 가장 먼저 호출되는 handler만 처리하고 blocking에서 빠져나와야 한다.
 
 	if(!ec)
 	{
@@ -112,14 +121,33 @@ StackErrorCode MyWebsocketClient::Connect(std::string addr, int port)
 		return {ec, __STACKINFO__};
 
 	ws = std::make_unique<booststream>(std::move(socket));
+	SetTimeout(TIME_HANDSHAKE);
 	ws->handshake(addr, "/", ec);
+	SetTimeout();
 	if(ec)
 		return {ec, __STACKINFO__};
 
 	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint();
 	Address = ep.address().to_string() + ":" + std::to_string(ep.port());
+
+	ws->binary(true);
 	
 	return {};
+}
+
+void MyWebsocketClient::SetTimeout(float sec)
+{
+	auto timeout = boost::beast::websocket::stream_base::none();
+	if(sec > 0.0f)
+	{
+		long millisec = std::floor(sec * 1000);
+		timeout = std::chrono::milliseconds(millisec);
+	}
+	boost::beast::websocket::stream_base::timeout opt;
+	opt.handshake_timeout = timeout;
+	opt.idle_timeout = timeout;
+	opt.keep_alive_pings = false;
+	ws->set_option(opt);
 }
 
 void MyWebsocketClient::Close()
@@ -127,6 +155,7 @@ void MyWebsocketClient::Close()
 	std::exception_ptr eptr = nullptr;
 	if(ws->is_open())
 	{
+		SetTimeout(TIME_CLOSE);
 		ws->async_close(boost::beast::websocket::close_code::normal, [&](boost::beast::error_code err)
 		{
 			ErrorCode ec{err};

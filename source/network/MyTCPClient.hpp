@@ -24,6 +24,7 @@ class MyTCPClient : public MyClientSocket
 	public:
 		StackErrorCode Connect(std::string, int) override;
 		void Close() override;
+		void SetTimeout(float = 0.0f) override;
 
 		MyTCPClient& operator=(const MyTCPClient&) = delete;
 		MyTCPClient& operator=(MyTCPClient&&) = delete;

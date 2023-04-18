@@ -94,14 +94,17 @@ ByteQueue MyConnector::Request(ByteQueue data)
 		sec = StackErrorCode(socket.Send(data), __STACKINFO__);
 		if(!sec)
 		{
+			socket.Close();
 			Connect();
 			continue;
 		}
 
-		auto msg = socket.Recv();
+		auto msg = socket.Recv(TIME_WAIT_ANSWER);
+
 		if(!msg)
 		{
 			sec = StackErrorCode(msg.error(), __STACKINFO__);
+			socket.Close();
 			Connect();
 			continue;
 		}

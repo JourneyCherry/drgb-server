@@ -13,13 +13,16 @@ StackErrorCode MyClientSocket::KeyExchange(bool useSecure)
 	KeyExchanger exchanger;
 	isSecure = false;
 
+
 	auto pkey = exchanger.GetPublicKey();
 	if(!pkey)
 		return pkey.error();
 	ec = Send(*pkey);
 	if(!ec)
 		return {ec, __STACKINFO__};
-	auto peer_key = Recv();
+
+	auto peer_key = Recv(TIME_KEYEXCHANGE);
+	
 	if(!peer_key)
 		return {peer_key.error(), __STACKINFO__};
 	auto secret = exchanger.ComputeKey(peer_key->vector());
@@ -44,8 +47,11 @@ std::string MyClientSocket::ToString()
 	return Address;
 }
 
-Expected<ByteQueue, ErrorCode> MyClientSocket::Recv()
+Expected<ByteQueue, ErrorCode> MyClientSocket::Recv(float timeout)
 {
+	if(timeout > 0.0f)
+		SetTimeout(timeout);
+
 	while(!recvbuffer.isMsgIn())
 	{
 		auto result = RecvRaw();
@@ -54,6 +60,10 @@ Expected<ByteQueue, ErrorCode> MyClientSocket::Recv()
 		
 		recvbuffer.Recv(result->data(), result->size());
 	}
+
+	if(timeout > 0.0f)
+		SetTimeout();
+		
 	std::vector<byte> result = recvbuffer.GetMsg();
 	if(isSecure)
 		result = decryptor.Crypt(result);

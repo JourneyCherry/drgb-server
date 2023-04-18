@@ -29,6 +29,7 @@ class MyConnector
 		int target_port;
 	
 	private:
+		static constexpr float TIME_WAIT_ANSWER = 1.0f;
 		bool isConnecting;
 		bool isRunning;
 		//MyTCPClient client_socket;

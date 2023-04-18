@@ -62,9 +62,12 @@ void Logger::OpenLog_(bool _verbose)
 		
 	Logger::ports[default_type] |= LOG_INFO;
 
-	openlog(service_name.c_str(), LOG_PID, ports[default_type]);
-	
-	isOpened = true;
+	if(ports[default_type] >= 0)
+	{
+		openlog(service_name.c_str(), LOG_PID, ports[default_type]);
+		
+		isOpened = true;
+	}
 }
 
 void Logger::ConfigPort_(LogType type, int port)
@@ -107,7 +110,8 @@ void Logger::log_(std::string content, LogType type)
 		std::unique_lock<std::mutex> lk(verbose_mtx);
 		std::cout << "[" << type2str[type] << "] " << content << std::endl;
 	}
-	syslog(ports[type], "%s", content.c_str());
+	if(isOpened)
+		syslog(ports[type], "%s", content.c_str());
 }
 
 int Logger::GetLogPort(int port)

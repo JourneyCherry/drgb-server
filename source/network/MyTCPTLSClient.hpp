@@ -33,6 +33,8 @@ class MyTCPTLSClient : public MyClientSocket
 		MyTCPTLSClient& operator=(const MyTCPTLSClient&) = delete;
 		MyTCPTLSClient& operator=(MyTCPTLSClient&&) = delete;
 
+		void SetTimeout(float = 0.0f) override;
+
 	private:
 		Expected<std::vector<byte>, ErrorCode> RecvRaw() override;
 		ErrorCode SendRaw(const byte*, const size_t&) override;
