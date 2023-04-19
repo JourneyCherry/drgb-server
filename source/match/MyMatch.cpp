@@ -335,6 +335,7 @@ void MyMatch::MatchMake()
 					byte result = ans.pop<byte>();
 					if(result == SUCCESS)
 					{
+						Logger::log("Match made : " + std::to_string(lpid) + " vs " + std::to_string(rpid) + " onto " + std::to_string(battle_server), Logger::LogType::info);
 						lpnotifier->push(std::make_shared<MyMatchMakerMessage>(battle_server));
 						rpnotifier->push(std::make_shared<MyMatchMakerMessage>(battle_server));
 						matchmaker.PopMatch();

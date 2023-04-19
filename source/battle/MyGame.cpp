@@ -109,6 +109,7 @@ int MyGame::GetWinner()
 
 void MyGame::Work()
 {
+	std::string logtitlestr = "Game (" + std::to_string(players[0].id) + " vs " + std::to_string(players[1].id) + ")";
 	std::function<bool()> isAllIn = [&](){
 		for(int i = 0;i<MAX_PLAYER;i++)
 		{
@@ -143,6 +144,7 @@ void MyGame::Work()
 				{
 					for(int i = 0;i<MAX_PLAYER;i++)
 						players[i].result = GAME_CRASHED;
+					Logger::log(logtitlestr + " : Crashed by disconnect", Logger::LogType::info);
 					return;
 				}
 				break;	//여기서 나가면 접속해있는 쪽에 win을 주게 된다.
@@ -181,11 +183,15 @@ void MyGame::Work()
 
 	//DB에 경기결과 기록 및 사용자들에게 경기결과 전달 + 연결 종료.
 	int winner = GetWinner();
-	if(winner < 0 && now_round == MAX_ROUND)
+	if(winner < 0 && now_round == MAX_ROUND)	//무승부의 경우. round가 MAX_ROUND보다 적으면 게임이 터진 경우이다.
 	{
 		for(int i = 0;i<MAX_PLAYER;i++)
 			AchieveCount(players[i].id, ACHIEVE_AREYAWINNINGSON, players[i].socket);
+		Logger::log(logtitlestr + " : Draw", Logger::LogType::info);
 	}
+	else
+		Logger::log(logtitlestr + " : " + std::to_string(players[winner].id) + " Win", Logger::LogType::info);
+
 	try
 	{
 		MyPostgres db;
