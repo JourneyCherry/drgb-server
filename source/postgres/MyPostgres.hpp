@@ -54,9 +54,9 @@ class MyPostgres
 		std::tuple<Achievement_ID_t, int, int, int> GetInfo(Account_ID_t);
 		std::map<Achievement_ID_t, int> GetAllAchieve(Account_ID_t);
 		bool SetNickName(Account_ID_t, Achievement_ID_t);
-		void IncreaseScore(Account_ID_t, int);
 		bool Achieve(Account_ID_t, Achievement_ID_t);
 		bool AchieveProgress(Account_ID_t, Achievement_ID_t, int);
+		void ArchiveBattle(Account_ID_t, Account_ID_t, bool, bool);
 
 	private:
 		std::tuple<int, int> GetAchieve(Account_ID_t, Achievement_ID_t);

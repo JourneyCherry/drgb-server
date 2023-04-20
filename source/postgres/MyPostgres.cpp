@@ -161,13 +161,15 @@ bool MyPostgres::ChangePwd(Account_ID_t id, Pwd_Hash_t old_pwd, Pwd_Hash_t new_p
 
 std::tuple<Achievement_ID_t, int, int, int> MyPostgres::GetInfo(Account_ID_t account_id)
 {
-	auto result = db_w->exec_params1("SELECT nickname, win_count, draw_count, loose_count FROM userlist WHERE id = $1", account_id);
-	return {
-		result[0].as<Achievement_ID_t>(), 
-		result[1].as<int>(), 
-		result[2].as<int>(), 
-		result[3].as<int>()
-	};
+	auto nick_result = db_w->exec_params1("SELECT nickname FROM userlist WHERE id = $1", account_id);
+	Achievement_ID_t nick = nick_result[0].as<Achievement_ID_t>();
+	//auto result = db_w->exec_params1("SELECT nickname, win_count, draw_count, loose_count FROM userlist WHERE id = $1", account_id);
+	auto result = db_w->exec_params1("SELECT COUNT(CASE WHEN win = $1 AND flags&2 = 0 THEN 1 END), COUNT(CASE WHEN flags&2 > 0 AND flags&1 = 0 THEN 1 END), COUNT(CASE WHEN loose = $1 AND flags&2 = 0 THEN 1 END) FROM battlelog WHERE win = $1 OR loose = $1", account_id);
+	int win = result[0].as<int>();
+	int draw = result[1].as<int>();
+	int loose = result[2].as<int>();
+
+	return { nick, win, draw, loose };
 }
 
 std::tuple<int, int> MyPostgres::GetAchieve(Account_ID_t account_id, Achievement_ID_t achieve_id)
@@ -195,19 +197,6 @@ bool MyPostgres::SetNickName(Account_ID_t account_id, Achievement_ID_t achieve_i
 	return true;
 }
 
-void MyPostgres::IncreaseScore(Account_ID_t id, int result)
-{
-	std::string query = "UPDATE userlist SET ";
-	if(result > 0)
-		query += "win_count = win_count + 1 ";
-	else if(result < 0)
-		query += "loose_count = loose_count + 1 ";
-	else
-		query += "draw_count = draw_count + 1 ";
-	query += "WHERE id = $1";
-	db_w->exec_params0(query.c_str(), id);
-}
-
 bool MyPostgres::Achieve(Account_ID_t id, Achievement_ID_t achieve)
 {
 	auto [count, require] = GetAchieve(id, achieve);
@@ -232,6 +221,14 @@ bool MyPostgres::AchieveProgress(Account_ID_t id, Achievement_ID_t achieve, int 
 		return (require <= c);	//3줄 위에서 require를 넘지않게 막고 있지만 혹시나 모를 경우를 위해 '동일'이 아닌 '이상'조건으로 설정함.
 	}
 	return false;
+}
+
+void MyPostgres::ArchiveBattle(Account_ID_t winner, Account_ID_t looser, bool draw, bool crashed)
+{
+	short flags = 0;	//SMALLINT
+	flags |= draw?0b10:0;
+	flags |= crashed?0b01:0;
+	db_w->exec_params0("INSERT INTO battlelog (win, loose, flags) VALUES ($1, $2, $3)", winner, looser, flags);
 }
 
 Hash_t MyPostgres::GetPwdHash(Account_ID_t id, Pwd_Hash_t pwd, std::string reg_time)

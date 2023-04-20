@@ -127,7 +127,7 @@ void MyGame::Work()
 	{
 		ulock lk(mtx);
 		bool allIn = cv.wait_for(lk, Dis_Time, isAllIn);
-		if(!allIn)
+		if(!allIn)	//시작 전에 튕기면 게임 자체를 기록하지 않는다. 단, 1라운드라도 지나고 나가면 무효게임이라 하더라도 닷지로 처리한다.
 		{
 			for(int i = 0;i<MAX_PLAYER;i++)
 				players[i].result = GAME_CRASHED;
@@ -140,8 +140,9 @@ void MyGame::Work()
 
 	//실제 플레이 내용
 	int now_round = 0;
-	bool isGameOver = false;
-	for(;now_round < MAX_ROUND && !isGameOver;now_round++)
+	bool drawed = true;
+	bool crashed = false;
+	for(;now_round < MAX_ROUND;now_round++)
 	{
 		ulock lk(mtx);
 		bool isSomeoneOut = cv.wait_for(lk, Round_Time, [&](){return !isAllIn();});	//cv.wait_for()는 시간이 다된&Notify된 시점의 Predicate값을 return 한다.
@@ -152,15 +153,10 @@ void MyGame::Work()
 			lk.unlock();
 			if(!isAllConnected)	//Disconnection Time이 지날떄까지 들어오지 못하면 해당 게임은 종료된다.
 			{
-				isGameOver = true;
-				if(now_round <= DODGE_ROUND || GetWinner() < 0)	//일정 라운드 이내거나 둘다 연결이 종료되면 무효. 그 외엔 나간 쪽이 loose
-				{
-					for(int i = 0;i<MAX_PLAYER;i++)
-						players[i].result = GAME_CRASHED;
-					Logger::log(logtitlestr + " : Crashed by disconnect", Logger::LogType::info);
-					return;
-				}
-				break;	//여기서 나가면 접속해있는 쪽에 win을 주게 된다.
+				crashed = true;	//drawed가 false면 dis로 승리했음을 의미한다.
+				if(now_round > DODGE_ROUND && GetWinner() >= 0)	//일정 라운드 이내거나 둘다 연결이 종료되면 무효. 그 외엔 나간 쪽이 loose
+					drawed = false;
+				break;
 			}
 			else
 			{
@@ -181,7 +177,7 @@ void MyGame::Work()
 		}
 		else
 		{
-			isGameOver = process();
+			bool isGameOver = process();
 			//라운드 결과 전달하기.
 			ByteQueue result = ByteQueue::Create<byte>(GAME_ROUND_RESULT);
 			result.push<int>(now_round);
@@ -192,37 +188,37 @@ void MyGame::Work()
 				players[i].action = MEDITATE;
 
 			lk.unlock();
+
+			if(isGameOver)
+			{
+				drawed = false;
+				break;
+			}
 		}
 	}
 
 	//DB에 경기결과 기록 및 사용자들에게 경기결과 전달 + 연결 종료.
 	int winner = GetWinner();
-	if(winner < 0 && now_round == MAX_ROUND)	//무승부의 경우. round가 MAX_ROUND보다 적으면 게임이 터진 경우이다.
+	if(drawed && !crashed)	//무승부의 경우.
 	{
 		for(int i = 0;i<MAX_PLAYER;i++)
 			AchieveCount(players[i].id, ACHIEVE_AREYAWINNINGSON, players[i].socket);
 		Logger::log(logtitlestr + " : Draw", Logger::LogType::info);
 	}
+	else if(drawed && crashed)	//게임이 취소된 경우.
+		Logger::log(logtitlestr + " : Crashed by disconnect", Logger::LogType::info);
 	else
 		Logger::log(logtitlestr + " : " + std::to_string(players[winner].id) + " Win", Logger::LogType::info);
 
 	try
 	{
 		MyPostgres db;
-		for(int i = 0;i<MAX_PLAYER;i++)
-		{
-			int result = 0;
-			if(winner < 0)
-				result = 0;
-			else if(winner == i)
-			{
-				result = 1;
-			}
-			else
-				result = -1;
+		Account_ID_t winner_id = players[0].id;
+		Account_ID_t looser_id = players[1].id;
+		if(winner == 1)
+			std::swap(winner_id, looser_id);
 
-			db.IncreaseScore(players[i].id, result);
-		}
+		db.ArchiveBattle(winner_id, looser_id, drawed, crashed);
 		db.commit();
 	}
 	catch(const pqxx::pqxx_exception &e)
@@ -251,7 +247,10 @@ void MyGame::Work()
 	ulock lock(mtx);
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
-		players[i].result = (winner<0)?GAME_FINISHED_DRAW:(winner==i?GAME_FINISHED_WIN:GAME_FINISHED_LOOSE);
+		if(crashed && drawed)	players[i].result = GAME_CRASHED;
+		else if(drawed)			players[i].result = GAME_FINISHED_DRAW;
+		else if(winner == i)	players[i].result = GAME_FINISHED_WIN;
+		else					players[i].result = GAME_FINISHED_LOOSE;
 		//결과를 보낼 때, match server에 세션을 넘겨주면서 match server 정보도 넘겨야 하므로, 이것은 MyBattle::pool_manage에서 처리한다.
 		//if(players[i].socket->Send(ByteQueue::Create<byte>(result)))
 		//	players[i].socket->Close();	//여기서 연결을 종료하면 MyBattle::ClientProcess()에서 연결끊김을 감지하여 알아서 스레드를 종료하게 된다.
