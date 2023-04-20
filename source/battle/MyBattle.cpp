@@ -41,7 +41,8 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			throw ErrorCodeExcept(ec, __STACKINFO__);
 	}
 	
-	auto authenticate = client->Recv();
+	//Authentication
+	auto authenticate = client->Recv(TIME_AUTHENTICATE);
 	if(!authenticate)
 	{
 		client->Close();
@@ -114,7 +115,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	}
 
 	client->Close();
-	Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
+	Logger::log("Account " + std::to_string(account_id) + " logged out from " + client->ToString(), Logger::LogType::auth);
 	if(!MyClientSocket::isNormalClose(ec))
 		throw ErrorCodeExcept(ec, __STACKINFO__);
 }

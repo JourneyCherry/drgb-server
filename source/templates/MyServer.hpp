@@ -19,6 +19,7 @@ class MyServer : public ThreadExceptHandler
 	protected:
 		bool isRunning;
 		static constexpr int MAX_CLIENTS = 5;		//최대 수용 가능 클라이언트 수. //TODO : 추후 확장 필요.
+		static constexpr float TIME_AUTHENTICATE = 2.0f;	//인증(쿠키) 대기 시간.
 
 	private:
 		static constexpr int MAX_SOCKET = 2;

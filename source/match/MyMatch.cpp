@@ -44,7 +44,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	std::shared_ptr<Notifier> noti = nullptr;
 	// Authentication
 	{
-		auto answer = client->Recv();
+		auto answer = client->Recv(TIME_AUTHENTICATE);
 		if(!answer)
 		{
 			client->Close();
@@ -56,6 +56,8 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		{
 			account_id = result->first;
 			noti = result->second;
+			if(noti != nullptr)
+				noti->push(std::make_shared<MyDupAccessMessage>(client->ToString()));
 		}
 		if(account_id <= 0)
 		{
@@ -65,8 +67,6 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			return;
 		}
 	}
-
-	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
 
 	noti = std::make_shared<Notifier>();
 	sessions.InsertLKeyValue(account_id, noti);
@@ -80,6 +80,8 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		if(!MyClientSocket::isNormalClose(result.error()))
 			throw ErrorCodeExcept(result.error(), __STACKINFO__);
 	});
+
+	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
 
 	//사용자에게 정보 전달.
 	try
@@ -222,6 +224,15 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 					isAnswered = true;
 				}
 				break;
+			case MyDupAccessMessage::Message_ID:
+				{
+					matchmaker.Exit(account_id);
+					std::string access_addr = ((MyDupAccessMessage*)message->get())->access_addr;
+					Logger::log("Account " + std::to_string(account_id) + " has dup access : " + client->ToString() + " -> " + access_addr, Logger::LogType::auth);
+					sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_DUPLICATED_ACCESS)), __STACKINFO__);
+					isAnswered = true;
+				}
+				break;
 			default:
 				sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__);
 				break;
@@ -229,7 +240,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client)
 	}
 	client->Close();
 	receiver.join();
-	Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
+	Logger::log("Account " + std::to_string(account_id) + " logged out from " + client->ToString(), Logger::LogType::auth);
 	if(!MyClientSocket::isNormalClose(sec))
 		throw ErrorCodeExcept(sec, __STACKINFO__);
 }

@@ -32,3 +32,13 @@ class MyMatchMakerMessage : public NotifyTarget
 		~MyMatchMakerMessage() = default;
 		int Type() override { return Message_ID;}
 };
+
+class MyDupAccessMessage : public NotifyTarget
+{
+	public:
+		static constexpr int Message_ID = 3;
+		std::string access_addr;
+		MyDupAccessMessage(std::string addr) : access_addr(addr){}
+		~MyDupAccessMessage() = default;
+		int Type() override { return Message_ID;}
+};

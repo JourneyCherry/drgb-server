@@ -8,6 +8,7 @@ const std::map<int, int> MyGame::required_energy =
 	{PUNCH, 1},
 	{FIRE, 2}
 };
+const std::chrono::seconds MyGame::StartAnim_Time = std::chrono::seconds(2);
 const std::chrono::seconds MyGame::Round_Time = std::chrono::seconds(2);
 const std::chrono::seconds MyGame::Dis_Time = std::chrono::seconds(15);
 
@@ -53,16 +54,20 @@ int MyGame::Connect(Account_ID_t id, std::shared_ptr<MyClientSocket> socket)
 	{
 		if(players[i].id == id)
 		{
-			auto existing = players[i].socket;
-			players[i].socket = socket;
-			if(existing != nullptr)
-			{
-				existing->Send(ByteQueue::Create<byte>(ERR_DUPLICATED_ACCESS));
-				existing->Close();
-			}
-			cv.notify_all();
 			if(players[i].result != 0)	//초기값이 아닌 경우 이미 게임이 종료된 것.
 				return -1;
+			auto existing = players[i].socket;
+			if(existing != nullptr)
+			{
+				lk.unlock();
+				Disconnect(i, existing);
+				existing->Send(ByteQueue::Create<byte>(ERR_DUPLICATED_ACCESS));
+				existing->Close();
+				Logger::log("Account " + std::to_string(id) + " has duplicate access : " + existing->ToString() + " -> " + socket->ToString(), Logger::LogType::auth);
+				lk.lock();
+			}
+			players[i].socket = socket;
+			cv.notify_all();
 			return i;
 		}
 	}
@@ -73,7 +78,7 @@ int MyGame::Connect(Account_ID_t id, std::shared_ptr<MyClientSocket> socket)
 void MyGame::Disconnect(int side, std::shared_ptr<MyClientSocket> socket)
 {
 	ulock lk(mtx);
-	if(players[side].socket == socket)	//Duplicated Access로 인해 변경됬을 경우엔 적용하지 않는다.
+	if(players[side].socket == socket)
 	{
 		players[side].socket = nullptr;
 		cv.notify_all();
@@ -118,11 +123,19 @@ void MyGame::Work()
 		}
 		return true;
 	};
-	//Player 최초 접속 기다리기.(대기시간 : 무한대)
+	//Player 최초 접속 기다리기.
 	{
 		ulock lk(mtx);
-		cv.wait(lk, isAllIn);
+		bool allIn = cv.wait_for(lk, Dis_Time, isAllIn);
+		if(!allIn)
+		{
+			for(int i = 0;i<MAX_PLAYER;i++)
+				players[i].result = GAME_CRASHED;
+			Logger::log(logtitlestr + " : Crashed by disconnect", Logger::LogType::info);
+			return;
+		}
 		SendAll(ByteQueue::Create<byte>(GAME_PLAYER_ALL_CONNECTED) + ByteQueue::Create<int>(-1));
+		std::this_thread::sleep_for(StartAnim_Time);
 	}
 
 	//실제 플레이 내용
@@ -163,6 +176,7 @@ void MyGame::Work()
 					for(int i = 0;i<MAX_PLAYER;i++)
 						players[i].action = MEDITATE;
 				}
+				std::this_thread::sleep_for(StartAnim_Time);
 			}
 		}
 		else

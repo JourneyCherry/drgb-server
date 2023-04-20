@@ -21,6 +21,7 @@ class MyGame
 		std::mutex mtx;
 		std::condition_variable cv;
 
+		static const std::chrono::seconds StartAnim_Time;	//경기 시작/재개 시, 애니메이션 시간.
 		static const std::chrono::seconds Round_Time;
 		static const std::chrono::seconds Dis_Time;	//디스 시간.
 		static const std::map<int, int> required_energy;
