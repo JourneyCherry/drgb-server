@@ -49,5 +49,5 @@ Expected<std::shared_ptr<MyClientSocket>, ErrorCode> MyTCPServer::Accept()
 	}
 		return {error_code};
 	}
-	return {std::make_shared<MyTCPClient>(client_fd, std::string(inet_ntoa(client_addr.sin_addr)) + std::to_string(client_addr.sin_port))};
+	return {std::make_shared<MyTCPClient>(client_fd, std::string(inet_ntoa(client_addr.sin_addr)), client_addr.sin_port)};
 }

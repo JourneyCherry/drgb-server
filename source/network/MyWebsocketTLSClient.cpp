@@ -8,7 +8,8 @@ MyWebsocketTLSClient::MyWebsocketTLSClient(std::shared_ptr<boost::asio::io_conte
 	ws = std::make_unique<booststream>(std::move(socket), sslctx);
 	auto &sock = boost::beast::get_lowest_layer(*ws);
 	boost::asio::ip::tcp::endpoint ep = sock.remote_endpoint();
-	Address = ep.address().to_string() + ":" + std::to_string(ep.port());
+	Address = ep.address().to_string();
+	Port = ep.port();
 
 	SetTimeout(TIME_HANDSHAKE);
 	ws->next_layer().handshake(boost::asio::ssl::stream_base::server, ec);
@@ -152,7 +153,8 @@ StackErrorCode MyWebsocketTLSClient::Connect(std::string addr, int port)
 	if(ec)
 		return {ec, __STACKINFO__};
 
-	Address = endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
+	Address = endpoint.address().to_string();
+	Port = endpoint.port();
 
 	ws->binary(true);
 

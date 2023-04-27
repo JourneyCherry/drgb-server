@@ -17,7 +17,7 @@ class MyTCPClient : public MyClientSocket
 		int socket_fd;
 	public:
 		MyTCPClient() : socket_fd(-1), MyClientSocket() {}
-		MyTCPClient(int, std::string);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
+		MyTCPClient(int, std::string, int);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
 		MyTCPClient(const MyTCPClient&) = delete;
 		MyTCPClient(MyTCPClient&&) = delete;
 		~MyTCPClient();

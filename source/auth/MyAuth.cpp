@@ -1,7 +1,7 @@
 #include "MyAuth.hpp"
 
 MyAuth::MyAuth() : 
-	connector_match(this, ConfigParser::GetString("Match1_Addr"), ConfigParser::GetInt("Match1_Port"), "auth"),
+	connector_match(this, ConfigParser::GetString("Match1_Addr"), ConfigParser::GetInt("Match1_Port"), "auth", std::bind(&MyAuth::AuthInquiry, this, std::placeholders::_1)),
 	MyServer(ConfigParser::GetInt("Auth_ClientPort_Web", 54321), ConfigParser::GetInt("Auth_ClientPort_TCP", 54322))
 {
 }
@@ -20,7 +20,7 @@ void MyAuth::Open()
 
 void MyAuth::Close()
 {
-	connector_match.Disconnect();
+	connector_match.Close();
 	MyPostgres::Close();
 	Logger::log("Auth Server Stop", Logger::LogType::info);
 }
@@ -50,7 +50,6 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			std::string email;
 			Pwd_Hash_t pwd_hash;
 			Account_ID_t account_id = 0;
-			Seed_t match_id = 1;
 
 			switch(header)
 			{
@@ -113,11 +112,17 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 			//match/battle 서버에 cookie 확인. battle 서버는 match서버가 확인해 줄 것임.
 			{
 				ByteQueue query = ByteQueue::Create<byte>(INQ_ACCOUNT_CHECK);
-				match_id = 1;	//TODO : 추후, connector_match.Request()가 ERR_OUT_OF_CAPACITY를 반환했을 때, 다음 match서버로 넘기는 기능 추가 필요.
+				//Seed_t match_id = 1;	//TODO : 추후, match 서버가 distributed 될 때, Load Balancing 하도록 변경 필요.
 				ByteQueue account_byte = ByteQueue::Create<Account_ID_t>(account_id);
-				ByteQueue match_server_byte = ByteQueue::Create<Seed_t>(match_id);
 				query += account_byte;
-				ByteQueue answer = connector_match.Request(query);
+				auto req_result = connector_match.Request(query);
+				if(!req_result)
+				{
+					sec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_OUT_OF_CAPACITY)), __STACKINFO__);
+					exit_client = true;
+					continue;
+				}
+				ByteQueue answer = *req_result;
 				byte query_header = answer.pop<byte>();
 				switch(query_header)
 				{
@@ -131,23 +136,25 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 								cookie = ByteQueue::Create<Hash_t>(Hasher::sha256(seed));
 								ByteQueue cookiereq = ByteQueue::Create<byte>(INQ_COOKIE_TRANSFER) + account_byte + cookie;
 								auto cookieres = connector_match.Request(cookiereq);
-								cookieheader = cookieres.pop<byte>();
+								if(!cookieres)
+									continue;
+								cookieheader = cookieres->pop<byte>();
 							}
 							switch(cookieheader)
 							{
 								case SUCCESS:
-									sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(SUCCESS) + cookie + match_server_byte), __STACKINFO__};
+									sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(SUCCESS) + cookie), __STACKINFO__};
 									exit_client = true;
 									break;
-								default:	//TODO : ERR_OUT_OF_CAPACITY가 오면 타 Match 서버로 연결해야 함.
+								default:
 									sec = StackErrorCode{client->Send(ByteQueue::Create<byte>(cookieheader)), __STACKINFO__};
 									exit_client = true;
 									break;
 							}
 						}
 						break;
-					case ERR_EXIST_ACCOUNT_MATCH:	//쿠키와 몇번 매치서버인지(unsigned int)는 뒤에 붙어있다.
-					case ERR_EXIST_ACCOUNT_BATTLE:	//쿠키와 몇번 배틀서버인지(unsigned int)는 뒤에 붙어있다.
+					case ERR_EXIST_ACCOUNT_MATCH:	//쿠키는 뒤에 붙어있다.
+					case ERR_EXIST_ACCOUNT_BATTLE:	//쿠키와 몇번 배틀서버인지(Seed_t)는 뒤에 붙어있다.
 					case ERR_OUT_OF_CAPACITY:		//서버 접속 불가. 단일 byte.
 						sec = StackErrorCode{client->Send(answer), __STACKINFO__};
 						exit_client = true;
@@ -156,8 +163,6 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 						throw StackTraceExcept("Unknown Header From Match : " + std::to_string(query_header), __STACKINFO__);
 				}
 			}
-
-			break;
 		}
 		catch(const std::exception& e)
 		{
@@ -171,4 +176,17 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client)
 
 	if(!MyClientSocket::isNormalClose(sec))
 		throw ErrorCodeExcept(sec, __STACKINFO__);
+}
+
+ByteQueue MyAuth::AuthInquiry(ByteQueue request)
+{
+	ByteQueue answer;
+	byte header = request.pop<byte>();
+	switch(header)
+	{
+		default:
+			answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
+			break;
+	}
+	return answer;
 }

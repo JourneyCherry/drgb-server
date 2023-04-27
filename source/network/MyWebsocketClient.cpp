@@ -6,7 +6,8 @@ MyWebsocketClient::MyWebsocketClient(std::shared_ptr<boost::asio::io_context> _p
 	ws = std::make_unique<booststream>(std::move(socket));
 	auto &sock = ws->next_layer();
 	boost::asio::ip::tcp::endpoint ep = sock.remote_endpoint();
-	Address = ep.address().to_string() + ":" + std::to_string(ep.port());
+	Address = ep.address().to_string();
+	Port = ep.port();
 
 	ws->set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::response_type& res){
 		res.set(boost::beast::http::field::server, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-server-sync");
@@ -128,7 +129,8 @@ StackErrorCode MyWebsocketClient::Connect(std::string addr, int port)
 		return {ec, __STACKINFO__};
 
 	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint();
-	Address = ep.address().to_string() + ":" + std::to_string(ep.port());
+	Address = ep.address().to_string();
+	Port = ep.port();
 
 	ws->binary(true);
 	

@@ -1,9 +1,10 @@
 #include "MyTCPClient.hpp"
 
-MyTCPClient::MyTCPClient(int fd, std::string addr) : MyClientSocket()
+MyTCPClient::MyTCPClient(int fd, std::string addr, int port)
+ : socket_fd(fd), MyClientSocket()
 {
-	socket_fd = fd;
 	Address = addr;
+	Port = port;
 }
 
 MyTCPClient::~MyTCPClient()
@@ -76,8 +77,8 @@ StackErrorCode MyTCPClient::Connect(std::string addr, int port)
 	if(connect(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
 		return {errno, __STACKINFO__};
 
-	Address = std::string(inet_ntoa(server_addr.sin_addr)) + ":" + std::to_string(server_addr.sin_port);
-
+	Address = std::string(inet_ntoa(server_addr.sin_addr));
+	Port = server_addr.sin_port;
 	
 	return {};
 }

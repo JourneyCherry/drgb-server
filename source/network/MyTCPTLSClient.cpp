@@ -1,11 +1,10 @@
 #include "MyTCPTLSClient.hpp"
 
-MyTCPTLSClient::MyTCPTLSClient(int fd, SSL* sl, std::string addr) : MyClientSocket()
+MyTCPTLSClient::MyTCPTLSClient(int fd, SSL* sl, std::string addr, int port)
+ : socket_fd(fd), ssl(sl), MyClientSocket()
 {
-	socket_fd = fd;
 	Address = addr;
-	ssl = sl;
-
+	Port = port;
 	if(!ssl)
 		throw ErrorCodeExcept(ErrorCode(ERR_get_error()), __STACKINFO__);
 	if(!SSL_set_fd(ssl, socket_fd))

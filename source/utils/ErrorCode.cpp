@@ -13,7 +13,8 @@ const std::map<errorcode_t, std::string> ErrorCode::strerrcode = {
 	{ERR_OUT_OF_CAPACITY, "The Server is Out of Capacity"},
 	{ERR_DB_FAILED, "DB Fail"},
 	{ERR_DUPLICATED_ACCESS, "There is another Access already connected"},
-	{ERR_CONNECTION_CLOSED, "Connection is Closed"}
+	{ERR_CONNECTION_CLOSED, "Connection is Closed"},
+	{ERR_TIMEOUT, "Time out"}
 };
 
 ErrorCode::ErrorCode() : ErrorCode(SUCCESS) {}

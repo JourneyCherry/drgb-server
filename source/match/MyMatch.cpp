@@ -1,8 +1,7 @@
 #include "MyMatch.hpp"
 
 MyMatch::MyMatch() : 
-	connectee(ConfigParser::GetInt("Match1_Port"), this), 
-	connector_battle(this, ConfigParser::GetString("Battle1_Addr"), ConfigParser::GetInt("Battle1_Port"), "match"),
+	connectee("match", ConfigParser::GetInt("Match1_Port"), this), 
 	t_matchmaker(std::bind(&MyMatch::MatchMake, this), this),
 	MyServer(ConfigParser::GetInt("Match1_ClientPort_Web", 54321), ConfigParser::GetInt("Match1_ClientPort_TCP", 54322))
 {
@@ -15,16 +14,14 @@ MyMatch::~MyMatch()
 void MyMatch::Open()
 {
 	MyPostgres::Open();
-	connectee.Open();
 	connectee.Accept("auth", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connectee.Accept("battle", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
-	connector_battle.Connect();
+	connectee.Open();
 	Logger::log("Match Server Start", Logger::LogType::info);
 }
 
 void MyMatch::Close()
 {
-	connector_battle.Disconnect();
 	connectee.Close();
 	MyPostgres::Close();
 	Logger::log("Match Server Stop", Logger::LogType::info);
@@ -261,25 +258,30 @@ ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
 					{
 						ByteQueue answer = ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
 						answer.push<Hash_t>(cookie->first);
-						answer.push<Seed_t>(MACHINE_ID);
 						return answer;
 					}
 				}
 
-				//battle 서버에 요청하여 cookie 찾기.	//TODO : 추후, battle 서버가 늘어날 경우, 모든 battle서버에 요청하도록 변경 필요.
+				//battle 서버에 요청하여 cookie 찾기.
 				{
 					ByteQueue query = ByteQueue::Create<byte>(INQ_ACCOUNT_CHECK);
 					query.push<Account_ID_t>(account_id);
-					ByteQueue answer = connector_battle.Request(query);
-					byte query_header = answer.pop<byte>();
-					switch(query_header)
+					Hash_t cookie;
+					Seed_t battle_id = -1;
+					connectee.Request("battle", query, [&](std::shared_ptr<MyConnector> connector, ByteQueue answer)
 					{
-						case ERR_NO_MATCH_ACCOUNT:
-							return ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT);
-						case ERR_EXIST_ACCOUNT_BATTLE:	//쿠키와 몇번 배틀서버인지(unsigned int)는 뒤에 붙어있다.
-						case ERR_OUT_OF_CAPACITY:		//서버 접속 불가. 단일 byte.
-							return answer;
-					}
+						if(answer.pop<byte>() == ERR_EXIST_ACCOUNT_BATTLE)	//ERR_EXIST_ACCOUNT_BATTLE을 주는 클라이언트 찾기.
+						{
+							cookie = answer.pop<Hash_t>();
+							battle_id = answer.pop<Seed_t>();
+						}
+					});
+					if(battle_id < 0)
+						return ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT);
+					ByteQueue answer = ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE);
+					answer.push<Hash_t>(cookie);
+					answer.push<Seed_t>(battle_id);
+					return answer;
 				}
 			}
 			break;
@@ -333,19 +335,54 @@ void MyMatch::MatchMake()
 			
 			if(lpresult && rpresult)	//둘다 정상접속 상태이면
 			{
-				//battle서버에 battle 등록.
-				ByteQueue req = ByteQueue::Create<byte>(INQ_MATCH_TRANSFER);
-				req.push<Account_ID_t>(lpid);
-				req.push<Hash_t>(sessions.FindLKey(lpid)->first);
-				req.push<Account_ID_t>(rpid);
-				req.push<Hash_t>(sessions.FindLKey(rpid)->first);
-				
 				{
-					int battle_server = 1;	//TODO : 모든 Battle 서버에 쿼리 날려보기. battle서버가 늘어날 경우, 해당 서버 번호를 넣어야 한다.
-					ByteQueue ans = connector_battle.Request(req);
+					//모든 Battle 서버에 허용량 확인하기.
+					std::mutex req_mtx;
+					std::map<std::shared_ptr<MyConnector>, int> capacities;
+
+					connectee.Request("battle", ByteQueue::Create<byte>(INQ_AVAILABLE), [&](std::shared_ptr<MyConnector> connector, ByteQueue answer)
+					{
+						byte header = answer.pop<byte>();
+						switch(header)
+						{
+							case SUCCESS:
+								{
+									int capacity = answer.pop<int>();
+									std::unique_lock<std::mutex> lk(req_mtx);
+									capacities.insert({connector, capacity});
+								}
+								break;
+							case ERR_OUT_OF_CAPACITY:
+								break;
+						}
+					});
+
+					//가장 capacity가 많은 Connector를 찾아 request 하기.
+					auto maxiter = std::max_element(capacities.begin(), capacities.end(), [](std::pair<std::shared_ptr<MyConnector>, int> const &lhs, std::pair<std::shared_ptr<MyConnector>, int> const &rhs){ return lhs.second < rhs.second; });
+					if(maxiter == capacities.end() || maxiter->second <= 0)
+					{
+						Logger::log("Battle Server Cannot Accept Battle : " + ErrorCode(ERR_OUT_OF_CAPACITY).message_code(), Logger::LogType::error);
+						break;
+					}
+
+					//battle서버에 battle 등록.
+					ByteQueue req = ByteQueue::Create<byte>(INQ_MATCH_TRANSFER);
+					req.push<Account_ID_t>(lpid);
+					req.push<Hash_t>(sessions.FindLKey(lpid)->first);
+					req.push<Account_ID_t>(rpid);
+					req.push<Hash_t>(sessions.FindLKey(rpid)->first);
+
+					auto req_result = maxiter->first->Request(req);
+					if(!req_result)
+					{
+						Logger::log("Battle Server Cannot Accept Battle : " + req_result.error().message_code(), Logger::LogType::error);
+						break;
+					}
+					ByteQueue ans = *req_result;
 					byte result = ans.pop<byte>();
 					if(result == SUCCESS)
 					{
+						int battle_server = ans.pop<Seed_t>();
 						Logger::log("Match made : " + std::to_string(lpid) + " vs " + std::to_string(rpid) + " onto " + std::to_string(battle_server), Logger::LogType::info);
 						lpnotifier->push(std::make_shared<MyMatchMakerMessage>(battle_server));
 						rpnotifier->push(std::make_shared<MyMatchMakerMessage>(battle_server));
@@ -356,8 +393,8 @@ void MyMatch::MatchMake()
 					}
 					else	//battle서버에서 매치 전달에 실패한 경우
 					{
-						Logger::log("Battle Server Cannot Accept Battle : " + std::to_string(result), Logger::LogType::error);
-						break;	//TODO : 다른 가용 battle서버를 찾아야 한다.
+						Logger::log("Battle Server Cannot Accept Battle : " + ErrorCode(result).message_code(), Logger::LogType::error);
+						break;
 					}
 				}
 			}

@@ -1,8 +1,9 @@
 #include "MyConnectee.hpp"
 
-MyConnectee::MyConnectee(int port, ThreadExceptHandler *parent)
- : t_accept(std::bind(&MyConnectee::AcceptLoop, this), this, false), ClientPool(this), 
+MyConnectee::MyConnectee(std::string keyword, int port, ThreadExceptHandler *parent)
+ : t_accept(std::bind(&MyConnectee::AcceptLoop, this), this, false),
 	server_socket(port),
+	identify_keyword(keyword),
  	ThreadExceptHandler(parent)
 {
 	isRunning = false;
@@ -24,13 +25,17 @@ void MyConnectee::Close()
 	isRunning = false;
 	server_socket.Close();
 	t_accept.join();
-	ClientPool.safe_loop([&](std::shared_ptr<MyClientSocket> fd){ fd->Close(); });
-	ClientPool.Stop();
+	for(auto iter = ConnectorsMap.begin();iter != ConnectorsMap.end();iter++)
+	{
+		iter->second->safe_loop([&](std::shared_ptr<MyConnector> connector){ connector->Close(); });
+		iter->second->Stop();
+	}
 }
 
 void MyConnectee::Accept(std::string keyword, std::function<ByteQueue(ByteQueue)> process)
 {	
 	KeywordProcessMap.insert_or_assign(keyword, process);
+	ConnectorsMap.insert_or_assign(keyword, std::make_shared<VariadicPool<std::shared_ptr<MyConnector>>>(this));
 }
 
 void MyConnectee::AcceptLoop()
@@ -41,8 +46,9 @@ void MyConnectee::AcceptLoop()
 	{
 		try
 		{
-			ClientPool.flush();	//주기적으로(여기선 새 Connector가 들어왔을 때) flush 해줌.
-			
+			for(auto iter = ConnectorsMap.begin();iter != ConnectorsMap.end();iter++)
+				iter->second->flush();
+
 			auto client = server_socket.Accept();	
 			if (!client)
 			{
@@ -51,7 +57,18 @@ void MyConnectee::AcceptLoop()
 				else
 					throw ErrorCodeExcept(client.error(), __STACKINFO__);
 			}
-			ClientPool.insert(*client, std::bind(&MyConnectee::ClientLoop, this, *client));
+			auto connector = std::make_shared<MyConnector>(this, *client);
+			std::string keyword = connector->keyword;
+			if(KeywordProcessMap.find(keyword) == KeywordProcessMap.end())
+			{
+				connector->Reject(ERR_NO_MATCH_KEYWORD);
+				Logger::log("Connectee : Unknwon Keyword(" + keyword + ") " + connector->ToString(), Logger::LogType::info);
+				continue;
+			}
+			connector->SetInquiry(KeywordProcessMap[keyword]);
+			ConnectorsMap[keyword]->insert(connector, std::bind(&MyConnector::RecvLoop, connector));
+			connector->Accept(identify_keyword);
+			Logger::log(identify_keyword + " <- " + keyword + " : " + connector->ToString(), Logger::LogType::info);
 		}
 		catch(const std::exception &e)
 		{
@@ -61,58 +78,15 @@ void MyConnectee::AcceptLoop()
 	}
 }
 
-void MyConnectee::ClientLoop(std::shared_ptr<MyClientSocket> client)
+void MyConnectee::Request(std::string keyword, ByteQueue request, std::function<void(std::shared_ptr<MyConnector>, ByteQueue)> process)
 {
-	Thread::SetThreadName("ConnecteeClientLoop_Authenticating");
-
-	ErrorCodeExcept::ThrowOnFail(client->KeyExchange(), __STACKINFO__);
-
-	//인증용 문자열(즉, 발송지 이름)을 올바르게 받지 못하면 연결을 끊는다.
-	auto authenticate = client->Recv();
-	if(!authenticate)
-	{
-		client->Close();
-		if(!MyClientSocket::isNormalClose(authenticate.error()))
-			throw ErrorCodeExcept(authenticate.error(), __STACKINFO__);
+	if(ConnectorsMap.find(keyword) == ConnectorsMap.end())
 		return;
-	}
-	std::string keyword = authenticate->popstr();
-	if(KeywordProcessMap.find(keyword) == KeywordProcessMap.end())
+	auto connectors = ConnectorsMap[keyword];
+	connectors->safe_loop([&](std::shared_ptr<MyConnector> connector)
 	{
-		Logger::log("Host <- " + keyword + " Failed(Unknown keyword)");
-		client->Close();
-		return;
-	}
-
-	Thread::SetThreadName("ConnecteeClientLoop_" + keyword);
-
-	Logger::log("Host <- " + keyword + " is Connected");	//TODO : Remote Address도 로깅 필요
-	StackErrorCode ec = StackErrorCode(client->Send(ByteQueue::Create<byte>(SUCCESS)), __STACKINFO__);
-	while(isRunning && ec)
-	{
-		auto msg = client->Recv();
-		if(!msg)
-		{
-			ec = StackErrorCode(msg.error(), __STACKINFO__);
-			break;
-		}
-
-		ByteQueue answer;
-		try
-		{
-			ByteQueue data = *msg;
-			answer = KeywordProcessMap[keyword](data);
-		}
-		catch(const std::exception &e)
-		{
-			answer.Clear();
-			answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
-		}
-		ec = StackErrorCode(client->Send(answer), __STACKINFO__);
-	}
-
-	Logger::log("Host <- " + keyword + " is Disconnected");
-	client->Close();
-	if(!MyClientSocket::isNormalClose(ec))
-		throw ErrorCodeExcept(ec, __STACKINFO__);
+		auto req_result = connector->Request(request);
+		if(req_result)
+			process(connector, *req_result);
+	});
 }

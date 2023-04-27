@@ -22,18 +22,21 @@ class MyClientSocket
 	private:
 		bool isSecure;
 		Encryptor encryptor, decryptor;
-		static constexpr float TIME_KEYEXCHANGE = 2.0f;
 
 	protected:
 		std::string Address;
+		int Port;
 		PacketProcessor recvbuffer;
 
 	public:
+		static constexpr float TIME_KEYEXCHANGE = 2.0f;
+		
 		MyClientSocket();
 		MyClientSocket(const MyClientSocket&) = delete;
 		MyClientSocket(MyClientSocket&&) = delete;
 		virtual ~MyClientSocket() = default;
 
+		StackErrorCode Connect();
 		virtual StackErrorCode Connect(std::string, int) = 0;
 		virtual void Close() = 0;
 		virtual void SetTimeout(float = 0.0f) = 0;	//seconds

@@ -22,7 +22,7 @@ class MyTCPTLSClient : public MyClientSocket
 		int socket_fd;
 	public:
 		MyTCPTLSClient() : socket_fd(-1), MyClientSocket() {}
-		MyTCPTLSClient(int, SSL*, std::string);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
+		MyTCPTLSClient(int, SSL*, std::string, int);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
 		MyTCPTLSClient(const MyTCPTLSClient&) = delete;
 		MyTCPTLSClient(MyTCPTLSClient&&) = delete;
 		~MyTCPTLSClient();

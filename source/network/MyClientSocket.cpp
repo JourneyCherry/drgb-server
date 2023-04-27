@@ -44,7 +44,12 @@ StackErrorCode MyClientSocket::KeyExchange(bool useSecure)
 
 std::string MyClientSocket::ToString()
 {
-	return Address;
+	return Address + ":" + std::to_string(Port);
+}
+
+StackErrorCode MyClientSocket::Connect()
+{
+	return Connect(Address, Port);
 }
 
 Expected<ByteQueue, ErrorCode> MyClientSocket::Recv(float timeout)

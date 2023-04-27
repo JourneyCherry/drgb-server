@@ -12,6 +12,7 @@
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "VariadicPool.hpp"
+#include "MyConnector.hpp"
 #include "Logger.hpp"
 
 using mylib::utils::ByteQueue;
@@ -35,15 +36,16 @@ class MyConnectee : public ThreadExceptHandler
 		int isRunning;
 		Thread t_accept;
 		std::map<std::string, std::function<ByteQueue(ByteQueue)>> KeywordProcessMap;
-		VariadicPool<std::shared_ptr<MyClientSocket>> ClientPool;
+		std::map<std::string, std::shared_ptr<VariadicPool<std::shared_ptr<MyConnector>>>> ConnectorsMap;	//TODO : VariadicPool을 Coroutine으로 변경하기.
+		std::string identify_keyword;
 	public:
-		MyConnectee(int, ThreadExceptHandler*);
+		MyConnectee(std::string, int, ThreadExceptHandler*);
 		~MyConnectee();
 	public:
 		void Open();
 		void Close();
 		void Accept(std::string, std::function<ByteQueue(ByteQueue)>);
+		void Request(std::string, ByteQueue, std::function<void(std::shared_ptr<MyConnector>, ByteQueue)>);
 	private:
 		void AcceptLoop();
-		void ClientLoop(std::shared_ptr<MyClientSocket>);
 };

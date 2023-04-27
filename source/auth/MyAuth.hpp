@@ -28,4 +28,5 @@ class MyAuth : public MyServer
 		void Open() override;
 		void Close() override;
 		void ClientProcess(std::shared_ptr<MyClientSocket>) override;
+		ByteQueue AuthInquiry(ByteQueue);
 };

@@ -1,8 +1,7 @@
 #include "MyBattle.hpp"
 
 MyBattle::MyBattle() : 
-	connectee(ConfigParser::GetInt("Battle1_Port"), this), 
-	connector_match(this, ConfigParser::GetString("Match1_Addr"), ConfigParser::GetInt("Match1_Port", 52431), "battle"), 
+	connector_match(this, ConfigParser::GetString("Match1_Addr"), ConfigParser::GetInt("Match1_Port", 52431), "battle", std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1)), 
 	gamepool("GamePool", std::bind(&MyBattle::GameProcess, this, std::placeholders::_1), this),
 	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54321), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54322))
 {
@@ -15,17 +14,14 @@ MyBattle::~MyBattle()
 void MyBattle::Open()
 {
 	MyPostgres::Open();
-	connectee.Open();
-	connectee.Accept("match", std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1));
 	connector_match.Connect();
 	Logger::log("Battle Server Start", Logger::LogType::info);
 }
 
 void MyBattle::Close()
 {
-	connectee.Close();
 	gamepool.stop();
-	connector_match.Disconnect();
+	connector_match.Close();
 	MyPostgres::Close();
 	Logger::log("Battle Server Stop", Logger::LogType::info);
 }
@@ -165,7 +161,9 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 				cookies.Insert(rpid, rpcookie, new_game);
 				gamepool.insert(new_game);
 
-				return ByteQueue::Create<byte>(SUCCESS);
+				auto answer = ByteQueue::Create<byte>(SUCCESS);
+				answer.push<Seed_t>(MACHINE_ID);
+				return answer;
 			}
 			break;
 	}
@@ -189,7 +187,7 @@ void MyBattle::GameProcess(std::shared_ptr<MyGame> game)
 
 		while(!players.empty())
 		{
-			Seed_t match_server_seed = 1;	//TODO : match server load balancing 하기.
+			//Seed_t match_server_seed = 1;	//TODO : 추후, Match Server가 distributed되면 Load Balancing 하도록 변경 필요
 
 			auto player = players.front();
 			players.pop();
@@ -205,22 +203,27 @@ void MyBattle::GameProcess(std::shared_ptr<MyGame> game)
 			req.push<Account_ID_t>(id);
 			req.push<Hash_t>(cookie);
 
-			ByteQueue msg = connector_match.Request(req);
-			byte header = msg.pop<byte>();
-
-			switch(header)
+			auto req_result = connector_match.Request(req);
+			if(req_result)
 			{
-				case SUCCESS:
-				case ERR_EXIST_ACCOUNT_MATCH:	//이미 해당 쿠키가 Match서버에 있으면 Match 서버에 주도권을 준다.(즉, 정상동작)
-					break;
-				default:
-					Logger::log("Cookie Transfer Failed : " + std::to_string(header), Logger::LogType::error);
-					match_server_seed = -1;
-					break;
+				byte header = req_result->pop<byte>();
+
+				switch(header)
+				{
+					case SUCCESS:
+					case ERR_EXIST_ACCOUNT_MATCH:	//이미 해당 쿠키가 Match서버에 있으면 Match 서버에 주도권을 준다.(즉, 정상동작)
+						break;
+					default:
+						Logger::log("Cookie Transfer Failed : " + ErrorCode(header).message_code(), Logger::LogType::error);
+						break;
+				}
+			}
+			else
+			{
+				Logger::log("Cookie Transfer Failed : " + req_result.error().message_code(), Logger::LogType::error);
 			}
 
 			ByteQueue packet = ByteQueue::Create<byte>(player.result);
-			packet.push<Seed_t>(match_server_seed);
 			socket->Send(packet);
 			socket->Close();
 		}

@@ -1,116 +1,201 @@
 #include "MyConnector.hpp"
 
-MyConnector::MyConnector(ThreadExceptHandler* parent, std::string addr, int port, std::string key)
-	: t_conn(std::bind(&MyConnector::ConnectLoop, this), parent, false)
+MyConnector::MyConnector(ThreadExceptHandler* parent, std::string addr, int port, std::string key, std::function<ByteQueue(ByteQueue)> inquiry)
+	: t_recv(std::bind(&MyConnector::ConnectLoop, this), parent, false), 
+	keepTryConnect(true),
+	keyword(key),
+	target_addr(addr),
+	target_port(port),
+	inquiry_process(inquiry)
 {
-	isRunning = false;
-	isConnecting = false;
-	target_addr = addr;
-	target_port = port;
-	keyword = key;
+	socket = std::make_shared<MyTCPClient>(-1, addr, port);
+}
+
+MyConnector::MyConnector(ThreadExceptHandler* parent, std::shared_ptr<MyClientSocket> sock)
+	: keepTryConnect(false), socket(sock)	//MyConnectee에서 Accept한 Connector는 ThreadPool에서 RecvLoop를 돌리므로, 별도의 자체 스레드를 돌리지 않는다.
+{
+	ErrorCodeExcept::ThrowOnFail(socket->KeyExchange(), __STACKINFO__);
+	auto authenticate = socket->Recv(MyClientSocket::TIME_KEYEXCHANGE);
+	if(!authenticate)
+		throw ErrorCodeExcept(authenticate.error(), __STACKINFO__);
+	keyword = authenticate->popstr();
 }
 
 MyConnector::~MyConnector()
 {
-	Disconnect();
-}
-
-void MyConnector::Connect()
-{
-	if(!isRunning)
-	{
-		isRunning = true;
-		if(keyword.length() <= 0)
-			throw StackTraceExcept("MyConnector::Create_Socket() : keyword is null", __STACKINFO__);
-		if(!isConnecting)
-			t_conn.start();
-	}
+	Close();
 }
 
 void MyConnector::ConnectLoop()
 {
-	isConnecting = true;
-	Thread::SetThreadName("Connector");
-
-	while(isRunning)
+	while(keepTryConnect)
 	{
+		isConnected = false;
+
 		try
 		{
-			ByteQueue keyword_bytes(keyword.c_str(), keyword.size());
+			ErrorCodeExcept::ThrowOnFail(socket->Connect(target_addr, target_port), __STACKINFO__);
+			ErrorCodeExcept::ThrowOnFail(socket->KeyExchange(), __STACKINFO__);
 
-			std::unique_lock<std::mutex>(m_req);
+			ByteQueue keywordbyte(keyword.c_str(), keyword.size());
+			ErrorCodeExcept::ThrowOnFail(socket->Send(keywordbyte), __STACKINFO__);
+			auto authenticate = socket->Recv(MyClientSocket::TIME_KEYEXCHANGE);
+			if(!authenticate)
+				throw ErrorCodeExcept(authenticate.error(), __STACKINFO__);
+			byte authenticate_result = authenticate->pop<byte>();
+			if(authenticate_result != SUCCESS)
+				throw ErrorCodeExcept(authenticate_result, __STACKINFO__);
+			
+			target_keyword = authenticate->popstr();
 
-			ErrorCodeExcept::ThrowOnFail(socket.Connect(target_addr, target_port), __STACKINFO__);
-			ErrorCodeExcept::ThrowOnFail(socket.KeyExchange(), __STACKINFO__);
-			ErrorCodeExcept::ThrowOnFail(socket.Send(keyword_bytes), __STACKINFO__);
+			Logger::log(keyword + " -> " + target_keyword + " : " + socket->ToString(), Logger::LogType::info);
+			isConnected = true;
 
-			auto result = socket.Recv();
-			if(!result)
-				throw ErrorCodeExcept(result.error(), __STACKINFO__);
+			RecvLoop();
+		}
+		catch(StackTraceExcept sec)
+		{
+			isConnected = false;
+			Logger::log("Connector(" + keyword + ") Failed : " + sec.what(), Logger::LogType::error);
+		}
 
-			byte header = result->pop<byte>();
-			if(header != SUCCESS)
-				throw StackTraceExcept("Failed to Authenticate", __STACKINFO__);
+		std::unique_lock<std::mutex> temp(m_req);
+		cv_req.wait_for(temp, std::chrono::seconds(RETRY_WAIT_SEC), [&](){return !keepTryConnect;});
+	}
+}
 
-			//Logger::log("MyConnector::Connect(" + target_addr + ") : success as " + keyword, Logger::LogType::debug);
-			Logger::log("Host -> " + target_addr + " is Connected");
+void MyConnector::RecvLoop()
+{
+	StackErrorCode sec;
+	while(sec)
+	{
+		Expected<ByteQueue, ErrorCode> result = socket->Recv();
+		if(!result)
+		{
+			sec = StackErrorCode(result.error(), __STACKINFO__);
 			break;
 		}
-		catch(const std::exception &e)
+
+		try
+		{
+			byte header = result->pop<byte>();
+			unsigned int id = result->pop<unsigned int>();
+			ByteQueue msg = result->split();
+			
+			switch(header)
+			{
+				case INQ_REQUEST:
+					{
+						ByteQueue answer = inquiry_process(msg);
+						answer.push_head<unsigned int>(id);
+						answer.push_head<byte>(INQ_ANSWER);
+						sec = StackErrorCode(socket->Send(answer), __STACKINFO__);
+					}
+					break;
+				case INQ_ANSWER:
+					{
+						std::unique_lock<std::mutex> lk(m_req);
+						if(answer_map.find(id) != answer_map.end())
+							answer_map[id] = msg;
+						lk.unlock();
+
+						cv_req.notify_all();
+					}
+					break;
+			}
+		}
+		catch(const std::exception& e)
 		{
 			Logger::log(e.what(), Logger::LogType::error);
 		}
-
-		socket.Close();
-		
-		Logger::log("MyConnector::Connect() : failed. retry after " + std::to_string(RETRY_WAIT_SEC) + " sec", Logger::LogType::debug);
-		std::this_thread::sleep_for(std::chrono::seconds(RETRY_WAIT_SEC));
 	}
-	isConnecting = false;
-	cv.notify_all();
+
+	if(MyClientSocket::isNormalClose(sec))
+		Logger::log("Connector(" + keyword + ") Closed.", Logger::LogType::info);
+	else
+		Logger::log("Connector(" + keyword + ") Failed : " + sec.message_code(), Logger::LogType::error);
+	
+	isConnected = false;
 }
 
-void MyConnector::Disconnect()
+void MyConnector::Accept(std::string host_keyword)
 {
-	isRunning = false;
-	t_conn.join();
-	cv.notify_all();
-	//TODO : t_conn의 exception 처리하기. 단, rethrow를 하면 소멸자에서 예외를 던질 수 있으므로, Logging을 통해서 처리하자.
+	ByteQueue answer = ByteQueue::Create<byte>(SUCCESS);
+	answer += ByteQueue(host_keyword.c_str(), host_keyword.size());
+	ErrorCodeExcept::ThrowOnFail(socket->Send(answer), __STACKINFO__);
+	isConnected = true;
 }
 
-ByteQueue MyConnector::Request(ByteQueue data)
+void MyConnector::Reject(errorcode_t ec)
+{
+	socket->Send(ByteQueue::Create<byte>(ec));
+	socket->Close();
+	isConnected = false;
+}
+
+void MyConnector::Connect()
+{
+	if(!t_recv.isRunning())
+		t_recv.start();
+}
+
+void MyConnector::SetInquiry(std::function<ByteQueue(ByteQueue)> inquiry)
+{
+	inquiry_process = inquiry;
+}
+
+void MyConnector::Close()
+{
+	keepTryConnect = false;
+	socket->Close();
+	cv_req.notify_all();
+	t_recv.join();
+}
+
+Expected<ByteQueue, StackErrorCode> MyConnector::Request(ByteQueue data)
 {
 	if (data.Size() <= 0)
-		throw StackTraceExcept("Request data is empty", __STACKINFO__);
+		return StackErrorCode(ERR_OUT_OF_CAPACITY, __STACKINFO__);
 
-	if(!isRunning)
-		throw StackTraceExcept("Connector is Closed", __STACKINFO__);
+	if(!isConnected)
+		return StackErrorCode(ERR_CONNECTION_CLOSED, __STACKINFO__);
+
+	ByteQueue answer;
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<unsigned int> dist(1, std::numeric_limits<unsigned int>::max());
+
+	std::unique_lock<std::mutex> lk(m_req);
+	unsigned int id = dist(gen);	//Random Value
+	while(answer_map.find(id) != answer_map.end())
+		id = dist(gen);	//Random Value
 	
-	StackErrorCode sec(ERR_CONNECTION_CLOSED, __STACKINFO__);
-	while(isRunning)
+	answer_map.insert({id, ByteQueue()});
+	lk.unlock();
+
+	data.push_head<unsigned int>(id);
+	data.push_head<byte>(INQ_REQUEST);
+	auto sec = StackErrorCode(socket->Send(data), __STACKINFO__);
+	if(!sec)
 	{
-		std::unique_lock<std::mutex> lk(m_req);
-		cv.wait(lk, [&](){return !isConnecting || !isRunning;});	//TODO : Timeout 넣기.
-		sec = StackErrorCode(socket.Send(data), __STACKINFO__);
-		if(!sec)
-		{
-			socket.Close();
-			Connect();
-			continue;
-		}
-
-		auto msg = socket.Recv(TIME_WAIT_ANSWER);
-
-		if(!msg)
-		{
-			sec = StackErrorCode(msg.error(), __STACKINFO__);
-			socket.Close();
-			Connect();
-			continue;
-		}
-
-		return ByteQueue(msg.value());
+		lk.lock();
+		answer_map.erase(id);
+		return sec;
 	}
-	ErrorCodeExcept::ThrowOnFail(sec, __STACKINFO__);
-	return ByteQueue();
+
+	lk.lock();	//lock이 된 상태에서 cv에서 호출해야함.
+	bool isMsgIn = cv_req.wait_for(lk, std::chrono::seconds(TIME_WAIT_ANSWER), [&](){ return answer_map[id].Size() > 0; });
+	answer = answer_map[id];
+	answer_map.erase(id);
+	lk.unlock();
+
+	if(!isMsgIn)
+		return StackErrorCode(ERR_TIMEOUT, __STACKINFO__);
+
+	return answer;
+}
+
+std::string MyConnector::ToString() const
+{
+	return socket->ToString();
 }

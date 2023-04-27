@@ -28,6 +28,8 @@ static constexpr errorcode_t ERR_OUT_OF_CAPACITY = 15;			//대상 서버의 수�
 static constexpr errorcode_t ERR_DB_FAILED = 16;				//DB 관련 에러. 클라이언트 측에선 연결끊기 외엔 할 수 있는게 없다.
 static constexpr errorcode_t ERR_DUPLICATED_ACCESS = 17;		//중복 접근. 보통 기존에 있는 세션에 보내지는 에러.
 static constexpr errorcode_t ERR_CONNECTION_CLOSED = 18;
+static constexpr errorcode_t ERR_TIMEOUT = 19;
+static constexpr errorcode_t ERR_NO_MATCH_KEYWORD = ERR_NO_MATCH_ACCOUNT;
 
 //Request from Client
 static constexpr byte REQ_REGISTER = 20;
@@ -53,8 +55,10 @@ static constexpr byte GAME_PLAYER_INFO_NAME = 39;	//플레이어의 이름 정�
 static constexpr byte GAME_PLAYER_ACHIEVE = 40;		//도전과제 달성 알림. 요구 횟수를 충족했을 때만 온다.
 
 //Inquiry among Servers
-static constexpr byte INQ_COOKIE_CHECK = 50;	//쿠키 존재/만료 여부 확인.
-static constexpr byte INQ_ACCOUNT_CHECK = 51;	//계정 접속/만료 여부 확인.
-static constexpr byte INQ_COOKIE_TRANSFER = 52;	//쿠키 전달. 
-static constexpr byte INQ_AVAILABLE = 53;		//가용량 확인.
-static constexpr byte INQ_MATCH_TRANSFER = 54;	//매치 전달. Account_ID_t, Hash_t(cookie), Account_ID_t, Hash_t(cookie) 순으로 따라온다.
+static constexpr byte INQ_REQUEST = 50;			//Inquiry애 대한 질문 헤더.
+static constexpr byte INQ_ANSWER = 51;			//Inquiry에 대한 답 헤더.
+static constexpr byte INQ_COOKIE_CHECK = 52;	//쿠키 존재/만료 여부 확인.
+static constexpr byte INQ_ACCOUNT_CHECK = 53;	//계정 접속/만료 여부 확인.
+static constexpr byte INQ_COOKIE_TRANSFER = 54;	//쿠키 전달. 
+static constexpr byte INQ_AVAILABLE = 55;		//가용량 확인.
+static constexpr byte INQ_MATCH_TRANSFER = 56;	//매치 전달. Account_ID_t, Hash_t(cookie), Account_ID_t, Hash_t(cookie) 순으로 따라온다.
