@@ -33,7 +33,7 @@ class ByteQueue
 		template <typename T> void push(T, bool);
 		template <typename T> void push_head(T);
 		template <typename T> void push_head(T, bool);
-		void push(const byte*, int);
+		void pushraw(const byte*, size_t);
 		template <typename T> T pop(bool = false);
 		template <typename T> T pop(bool, bool);
 		template <typename T> std::vector<T> pops(bool = false);

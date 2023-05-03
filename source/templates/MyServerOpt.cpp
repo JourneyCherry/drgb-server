@@ -23,6 +23,7 @@ void MyServerOpt::ClearOpt()
 	pid_path = "";
 	conf_path = "";
 	verbose_flag = false;
+	optind = 1;	//getopt_long에서 사용하는 Global Variable 초기화.
 }
 
 void MyServerOpt::GetArgs(int argc, char *argv[])

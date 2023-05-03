@@ -106,9 +106,16 @@ ByteQueue::~ByteQueue()
 	bytes.clear();
 }
 
-void ByteQueue::push(const byte* datas, int len)
+template <>
+void ByteQueue::push<std::string>(std::string data)
 {
-	for(int i = 0;i<len;i++)
+	
+	pushraw((byte*)data.c_str(), data.length());
+}
+
+void ByteQueue::pushraw(const byte* datas, size_t len)
+{
+	for(size_t i = 0;i<len;i++)
 		bytes.push_back(datas[i]);
 }
 
@@ -196,7 +203,7 @@ ByteQueue ByteQueue::split(long long int start, long long int end) const
 		end = bytes.size();
 	result.bytes.insert(result.bytes.begin(), bytes.begin() + start, bytes.begin() + end);
 	result.defaultEndian = defaultEndian;
-	result.ptr = ptr - start;
+	result.ptr = 0;
 
 	return result;
 }

@@ -1,17 +1,14 @@
 CMAKE_MINIMUM_REQUIRED ( VERSION 3.12 )
 project( drgb VERSION 0.1.0 )
 
-include(CTest)
-enable_testing()
-
 SET ( CMAKE_VERBOSE_MAKEFILE false )
 
-SET ( SYSTEM_SERVICE_NAME systemd)
+SET ( SYSTEM_SERVICE_NAME systemd )
 
 SET ( CONFIG_FILENAME ${PROJECT_NAME}.conf )
-SET ( CONFIG_DIR "/etc/${PROJECT_NAME}")
+SET ( CONFIG_DIR "/etc/${PROJECT_NAME}" )
 SET ( SERVICE_FILENAME ${PROJECT_NAME}-${SYSTEM_SERVICE_NAME}.sh )
-SET ( SERVICE_DIR "/etc/init.d")
+SET ( SERVICE_DIR "/etc/init.d" )
 SET ( SYSLOGCONF_FILENAME ${PROJECT_NAME}-syslog-ng.conf )
 SET ( SYSLOGCONF_DIR /etc/syslog-ng/conf.d/ )
 SET ( SSL_FILENAME ${PROJECT_NAME}.key ${PROJECT_NAME}.crt )
@@ -31,9 +28,16 @@ SET ( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${RELEASE_MACRO}")
 
 ADD_COMPILE_OPTIONS ( -std=c++17 )
 
+#별도의 BUILD_TARGET이 설정되면 TEST_TARGET은 사라진다.
+SET ( TEST_TARGET )
+
 IF( NOT BUILD_TARGET )
-	SET ( BUILD_TARGET auth match battle)
+	SET ( BUILD_TARGET auth match battle )
+	LIST ( APPEND TEST_TARGET test )
+	include(CTest)
+	enable_testing()
 ENDIF()
+
 
 SET ( DIRS
 	utils
@@ -42,8 +46,9 @@ SET ( DIRS
 	postgres
 	network
 	templates
-
+	
 	${BUILD_TARGET}
+	${TEST_TARGET}
 )
 
 INCLUDE_DIRECTORIES ( ${DIRS} )

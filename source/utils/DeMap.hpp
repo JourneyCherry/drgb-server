@@ -97,7 +97,7 @@ class DeMap
 			if(rlm.find(rkey) == rlm.end())
 				return {};
 			
-			LKey  lkey = rlm[lkey];
+			LKey  lkey = rlm[rkey];
 			Value value = kvm[lkey];
 
 			lrm.erase(lkey);
