@@ -1,6 +1,6 @@
 #include "MyTCPTLSServer.hpp"
 
-MyTCPTLSServer::MyTCPTLSServer(int p) : MyServerSocket(p)
+MyTCPTLSServer::MyTCPTLSServer(int p, const char* cert_path, const char* key_path) : MyServerSocket(p)
 {
 	int opt_reuseaddr = 1;
 
@@ -27,9 +27,9 @@ MyTCPTLSServer::MyTCPTLSServer(int p) : MyServerSocket(p)
 	if(!ctx)
 		throw ErrorCodeExcept(ErrorCode(ERR_get_error()), __STACKINFO__);
 	SSL_CTX_set_ecdh_auto(ctx, 1);	//적절한 Elliptic Curve Diffie-Hellman 그룹 자동으로 고르기.
-	if(SSL_CTX_use_certificate_file(ctx, ConfigParser::GetString("SSL_CERT").c_str(), SSL_FILETYPE_PEM) <= 0)
+	if(SSL_CTX_use_certificate_file(ctx, cert_path, SSL_FILETYPE_PEM) <= 0)
 		throw ErrorCodeExcept(ErrorCode(ERR_get_error()), __STACKINFO__);
-	if(SSL_CTX_use_PrivateKey_file(ctx, ConfigParser::GetString("SSL_KEY").c_str(), SSL_FILETYPE_PEM) <= 0)
+	if(SSL_CTX_use_PrivateKey_file(ctx, key_path, SSL_FILETYPE_PEM) <= 0)
 		throw ErrorCodeExcept(ErrorCode(ERR_get_error()), __STACKINFO__);
 	if(!SSL_CTX_check_private_key(ctx))
 		throw ErrorCodeExcept(ErrorCode(ERR_get_error()), __STACKINFO__);

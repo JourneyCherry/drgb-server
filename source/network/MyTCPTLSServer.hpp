@@ -14,11 +14,9 @@
 ////
 #include "MyServerSocket.hpp"
 #include "MyTCPTLSClient.hpp"
-#include "ConfigParser.hpp"
 
 using mylib::utils::ErrorCodeExcept;
 using mylib::utils::Expected;
-using mylib::utils::ConfigParser;
 
 class MyTCPTLSServer : public MyServerSocket
 {
@@ -28,7 +26,7 @@ class MyTCPTLSServer : public MyServerSocket
 
 		int server_fd;
 	public:
-		MyTCPTLSServer(int);
+		MyTCPTLSServer(int, const char*, const char*);
 		MyTCPTLSServer(const MyTCPTLSServer&) = delete;
 		MyTCPTLSServer(MyTCPTLSServer&&) = delete;
 		~MyTCPTLSServer();

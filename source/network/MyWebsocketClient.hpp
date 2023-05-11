@@ -12,20 +12,25 @@ using mylib::utils::ErrorCodeExcept;
 class MyWebsocketClient : public MyClientSocket
 {
 	private:
-		using booststream = boost::beast::websocket::stream<boost::asio::ip::tcp::socket>;
+		using booststream = boost::beast::websocket::stream<boost::beast::tcp_stream>;
 		static constexpr float TIME_HANDSHAKE = 1.5f;
 		static constexpr float TIME_CLOSE = 1.5f;
 
 		//TODO : Asynchronous function을 synchronous 하게 동작하기 위한 변수. 추후 async로 변경되면 삭제 필요.
 		bool isAsyncDone;
 		boost::beast::flat_buffer buffer;
+		std::vector<byte> recv_bytes;
+		ErrorCode recv_ec;
 		////
 
 		std::shared_ptr<boost::asio::io_context> pioc;
-		std::unique_ptr<booststream> ws;
+		booststream ws;
+
+		std::chrono::steady_clock::duration timeout;
+		boost::asio::steady_timer deadline;
 
 	public:
-		MyWebsocketClient() : MyClientSocket() {}
+		MyWebsocketClient() : isAsyncDone(true), pioc(std::make_shared<boost::asio::io_context>()), timeout(0), deadline(*pioc), ws(*pioc), MyClientSocket() {}
 		MyWebsocketClient(std::shared_ptr<boost::asio::io_context>, boost::asio::ip::tcp::socket);
 		MyWebsocketClient(const MyWebsocketClient&) = delete;
 		MyWebsocketClient(MyWebsocketClient&&) = delete;

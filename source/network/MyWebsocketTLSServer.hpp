@@ -4,12 +4,9 @@
 #include <boost/beast/ssl.hpp>
 #include "MyServerSocket.hpp"
 #include "MyWebsocketTLSClient.hpp"
-#include "ConfigParser.hpp"
 
 using mylib::utils::ErrorCodeExcept;
 using mylib::utils::StackTraceExcept;
-using mylib::utils::ConfigParser;
-
 class MyWebsocketTLSServer : public MyServerSocket
 {
 	private:
@@ -18,7 +15,7 @@ class MyWebsocketTLSServer : public MyServerSocket
 		boost::asio::ssl::context sslctx;
 
 	public:
-		MyWebsocketTLSServer(int);
+		MyWebsocketTLSServer(int, std::string, std::string);
 		MyWebsocketTLSServer(const MyWebsocketTLSServer&) = delete;
 		MyWebsocketTLSServer(MyWebsocketTLSServer&&) = delete;
 		~MyWebsocketTLSServer();

@@ -1,23 +1,8 @@
 #include "MyTCPServer.hpp"
 
-MyTCPServer::MyTCPServer(int p) : MyServerSocket(p)
+MyTCPServer::MyTCPServer(int p) : ioc{}, acceptor{ioc, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), (unsigned short)p)}, MyServerSocket(p)
 {
-	int opt_reuseaddr = 1;
-
-	server_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if(server_fd < 0)
-		throw ErrorCodeExcept(errno, __STACKINFO__);
-	if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const int*)&opt_reuseaddr, sizeof(opt_reuseaddr)) < 0)
-		throw ErrorCodeExcept(errno, __STACKINFO__);
-
-	struct sockaddr_in server_addr;
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(port);
-	server_addr.sin_addr.s_addr = INADDR_ANY;
-	if(bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-		throw ErrorCodeExcept(errno, __STACKINFO__);
-	if(listen(server_fd, LISTEN_SIZE) < 0)
-		throw ErrorCodeExcept(errno, __STACKINFO__);
+	acceptor.set_option(boost::asio::socket_base::reuse_address(true));
 }
 
 MyTCPServer::~MyTCPServer()
@@ -27,27 +12,49 @@ MyTCPServer::~MyTCPServer()
 
 void MyTCPServer::Close()
 {
-	if(server_fd >= 0)
-	{
-		shutdown(server_fd, SHUT_RDWR);
-		server_fd = -1;
-	}
+	ioc.stop();
 }
 
 Expected<std::shared_ptr<MyClientSocket>, ErrorCode> MyTCPServer::Accept()
 {
-	struct sockaddr_in client_addr;
-	socklen_t client_addr_len = sizeof((struct sockaddr *)&client_addr);
-	int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_addr_len);
-	if(client_fd < 0)
-	{
-		int error_code = errno;
-		switch(error_code)
+	std::shared_ptr<boost::asio::io_context> client_ioc = std::make_shared<boost::asio::io_context>();
+	boost::asio::ip::tcp::socket socket{*client_ioc};
+	std::shared_ptr<MyTCPClient> client = nullptr;
+	boost::system::error_code result = boost::asio::error::operation_aborted;
+	std::exception_ptr eptr = nullptr;
+
+	acceptor.async_accept(socket, [&](boost::system::error_code ec){
+		result = ec;
+		if(ec)
+			return;
+		try
 		{
-			case EINVAL:	//shutdown(socket_fd, SHUT_RDWR)로부터 반환됨.
-				return {ERR_CONNECTION_CLOSED};
+			client = std::make_shared<MyTCPClient>(client_ioc, std::move(socket));
+		}
+		catch(StackTraceExcept e)
+		{
+			e.stack(__STACKINFO__);
+			eptr = std::make_exception_ptr(e);
+		}
+		catch(const std::exception &e)
+		{
+			eptr = std::make_exception_ptr(StackTraceExcept(e.what(), __STACKINFO__));
+		}
+	});
+
+	if(ioc.stopped())
+		ioc.restart();
+	ioc.run();
+
+	if(result)
+	{
+		if(result == boost::asio::error::operation_aborted)
+			return {ERR_CONNECTION_CLOSED};
+		return {result};
 	}
-		return {error_code};
-	}
-	return {std::make_shared<MyTCPClient>(client_fd, std::string(inet_ntoa(client_addr.sin_addr)), client_addr.sin_port)};
+	if(eptr)
+		std::rethrow_exception(eptr);
+	if(!client)		//MyTCPServer::Close()의 호출로 종료되면 보통 위의 result에서 걸려 나가지만, 혹시모를 예외사항을 위해 
+		return {result};//한번 더 검증을 수행함.
+	return {client, true};
 }

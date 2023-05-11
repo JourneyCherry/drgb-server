@@ -13,20 +13,26 @@ using mylib::utils::ErrorCodeExcept;
 class MyWebsocketTLSClient : public MyClientSocket
 {
 	private:
-		using booststream = boost::beast::websocket::stream<boost::beast::ssl_stream<boost::asio::ip::tcp::socket>>;
+		using booststream = boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>;
 		static constexpr float TIME_HANDSHAKE = 1.5f;
 		static constexpr float TIME_CLOSE = 1.5f;
 
 		//TODO : Asynchronous function을 synchronous 하게 동작하기 위한 변수. 추후 async로 변경되면 삭제 필요.
 		bool isAsyncDone;
 		boost::beast::flat_buffer buffer;
+		std::vector<byte> recv_bytes;
+		ErrorCode recv_ec;
 		////
 
 		std::shared_ptr<boost::asio::io_context> pioc;
-		std::unique_ptr<booststream> ws;
+		boost::asio::ssl::context sslctx;
+		booststream ws;
+
+		std::chrono::steady_clock::duration timeout;
+		boost::asio::steady_timer deadline;
 
 	public:
-		MyWebsocketTLSClient() : MyClientSocket() {}
+		MyWebsocketTLSClient() : isAsyncDone(true), sslctx{boost::asio::ssl::context::tlsv12}, pioc(std::make_shared<boost::asio::io_context>()), ws(*pioc, std::ref(sslctx)), timeout(0), deadline(*pioc), MyClientSocket() {}
 		MyWebsocketTLSClient(std::shared_ptr<boost::asio::io_context>, boost::asio::ssl::context&, boost::asio::ip::tcp::socket);
 		MyWebsocketTLSClient(const MyWebsocketTLSClient&) = delete;
 		MyWebsocketTLSClient(MyWebsocketTLSClient&&) = delete;

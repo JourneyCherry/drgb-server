@@ -20,8 +20,10 @@ class MyTCPTLSClient : public MyClientSocket
 		static constexpr int BUFSIZE = 1024;
 		SSL *ssl;
 		int socket_fd;
+		bool isErrorOccurred;
+
 	public:
-		MyTCPTLSClient() : socket_fd(-1), MyClientSocket() {}
+		MyTCPTLSClient() : isErrorOccurred(false), socket_fd(-1), ssl(nullptr), MyClientSocket() {}
 		MyTCPTLSClient(int, SSL*, std::string, int);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
 		MyTCPTLSClient(const MyTCPTLSClient&) = delete;
 		MyTCPTLSClient(MyTCPTLSClient&&) = delete;

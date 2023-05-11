@@ -41,6 +41,7 @@ class ErrorCode
 		int typecode() const;
 		ErrorCode &operator=(const ErrorCode&);
 		operator bool() const;
+		bool isSuccessed() const;
 };
 
 }

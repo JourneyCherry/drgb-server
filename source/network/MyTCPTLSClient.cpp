@@ -1,7 +1,7 @@
 #include "MyTCPTLSClient.hpp"
 
 MyTCPTLSClient::MyTCPTLSClient(int fd, SSL* sl, std::string addr, int port)
- : socket_fd(fd), ssl(sl), MyClientSocket()
+ : isErrorOccurred(false), socket_fd(fd), ssl(sl), MyClientSocket()
 {
 	Address = addr;
 	Port = port;
@@ -148,7 +148,8 @@ void MyTCPTLSClient::Close()
 {
 	if(ssl)
 	{
-		SSL_shutdown(ssl);
+		if(!isErrorOccurred)
+			SSL_shutdown(ssl);
 		SSL_free(ssl);
 		ssl = nullptr;
 	}
@@ -158,6 +159,7 @@ void MyTCPTLSClient::Close()
 		socket_fd = -1;
 	}
 	recvbuffer.Clear();
+	isErrorOccurred = false;
 }
 
 ErrorCode MyTCPTLSClient::GetSSLErrorFromRet(int ret)
@@ -167,11 +169,14 @@ ErrorCode MyTCPTLSClient::GetSSLErrorFromRet(int ret)
 		case SSL_ERROR_NONE:
 			return {};
 		case SSL_ERROR_SYSCALL:
+			isErrorOccurred = true;
 			return {errno};
 		case SSL_ERROR_ZERO_RETURN:
+			isErrorOccurred = true;
 			return {ERR_CONNECTION_CLOSED};
-		case SSL_ERROR_SSL:
+		case SSL_ERROR_SSL:	//non-recoverable fatal error
 		default:
+			isErrorOccurred = true;
 			return ErrorCode(ERR_get_error());
 	}
 }

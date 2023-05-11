@@ -1,14 +1,14 @@
 #include "MyWebsocketTLSServer.hpp"
 
-MyWebsocketTLSServer::MyWebsocketTLSServer(int p) : ioc(), acceptor{ioc, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), (unsigned short)port)}, sslctx{boost::asio::ssl::context::tlsv12}, MyServerSocket(p)
+MyWebsocketTLSServer::MyWebsocketTLSServer(int p, std::string cert_path, std::string key_path) : ioc(), acceptor{ioc, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), (unsigned short)port)}, sslctx{boost::asio::ssl::context::tlsv12}, MyServerSocket(p)
 {
 	acceptor.set_option(boost::asio::socket_base::reuse_address(true));
 	//sslctx에 인증서, 비밀키 로드
 	boost::beast::error_code ec;
-	sslctx.use_certificate_file(ConfigParser::GetString("SSL_CERT"), boost::asio::ssl::context::pem, ec);
+	sslctx.use_certificate_file(cert_path, boost::asio::ssl::context::pem, ec);
 	if(ec)
 		throw ErrorCodeExcept(ec, __STACKINFO__);
-	sslctx.use_private_key_file(ConfigParser::GetString("SSL_KEY"), boost::asio::ssl::context::pem, ec);
+	sslctx.use_private_key_file(key_path, boost::asio::ssl::context::pem, ec);
 	if(ec)
 		throw ErrorCodeExcept(ec, __STACKINFO__);
 

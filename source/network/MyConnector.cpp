@@ -8,7 +8,7 @@ MyConnector::MyConnector(ThreadExceptHandler* parent, std::string addr, int port
 	target_port(port),
 	inquiry_process(inquiry)
 {
-	socket = std::make_shared<MyTCPClient>(-1, addr, port);
+	socket = std::make_shared<MyTCPClient>();
 }
 
 MyConnector::MyConnector(ThreadExceptHandler* parent, std::shared_ptr<MyClientSocket> sock)

@@ -65,7 +65,7 @@ std::string ErrorCode::message_code() const { return "(" + std::to_string(m_code
 std::string ErrorCode::typestr() const { return m_type_str; }
 int ErrorCode::typecode() const { return m_type; }
 
-ErrorCode::operator bool() const { return m_code == 0; }
+ErrorCode::operator bool() const { return isSuccessed(); }
 ErrorCode &ErrorCode::operator=(const ErrorCode& copy)
 {
 	m_code = copy.m_code;
@@ -74,6 +74,11 @@ ErrorCode &ErrorCode::operator=(const ErrorCode& copy)
 	m_message = copy.m_message;
 
 	return *this;
+}
+
+bool ErrorCode::isSuccessed() const
+{
+	return m_code == 0;
 }
 
 }

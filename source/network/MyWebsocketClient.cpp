@@ -1,23 +1,26 @@
 #include "MyWebsocketClient.hpp"
 
 MyWebsocketClient::MyWebsocketClient(std::shared_ptr<boost::asio::io_context> _pioc, boost::asio::ip::tcp::socket socket)
- : pioc(_pioc), ws(nullptr), isAsyncDone(true), MyClientSocket()
+ : pioc(_pioc), ws(std::move(socket)), isAsyncDone(true), timeout(0), deadline(*pioc), MyClientSocket()
 {
-	ws = std::make_unique<booststream>(std::move(socket));
-	auto &sock = ws->next_layer();
+	auto &sock = ws.next_layer().socket();
 	boost::asio::ip::tcp::endpoint ep = sock.remote_endpoint();
 	Address = ep.address().to_string();
 	Port = ep.port();
 
-	ws->set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::response_type& res){
+	boost::beast::websocket::stream_base::timeout handshake_timeout;
+	handshake_timeout.handshake_timeout = std::chrono::milliseconds((int)std::floor(TIME_HANDSHAKE * 1000));
+	handshake_timeout.idle_timeout = boost::beast::websocket::stream_base::none();
+	handshake_timeout.keep_alive_pings = false;
+	ws.set_option(handshake_timeout);
+
+	ws.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::response_type& res){
 		res.set(boost::beast::http::field::server, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-server-sync");
 	}));
 
 	boost::beast::error_code ec;
 
-	SetTimeout(TIME_HANDSHAKE);
-	ws->accept(ec);
-	SetTimeout();
+	ws.accept(ec);
 
 	if(ec)
 	{
@@ -25,7 +28,8 @@ MyWebsocketClient::MyWebsocketClient(std::shared_ptr<boost::asio::io_context> _p
 		throw ErrorCodeExcept(ec, __STACKINFO__);
 	}
 
-	ws->binary(true);
+	ws.binary(true);
+	ws.next_layer().socket().non_blocking(false);
 }
 
 MyWebsocketClient::~MyWebsocketClient()
@@ -35,29 +39,41 @@ MyWebsocketClient::~MyWebsocketClient()
 
 Expected<std::vector<byte>, ErrorCode> MyWebsocketClient::RecvRaw()
 {
-	if(!ws->is_open())
+	if(!ws.is_open())
 		return {ErrorCode{ERR_CONNECTION_CLOSED}};
-
-	std::vector<byte> result_bytes;
-	ErrorCode ec;
 
 	if(isAsyncDone)
 	{
 		isAsyncDone = false;
-		ws->async_read(buffer, [&](boost::beast::error_code m_ec, size_t bytes_written)
+		recv_bytes.clear();
+		recv_ec = ErrorCode(SUCCESS);
+		if(timeout.count() > 0)
+		{
+			deadline.expires_after(timeout);
+			deadline.async_wait([&](boost::beast::error_code error)
+			{
+				if(error == boost::asio::error::operation_aborted)
+					return;
+				ws.next_layer().cancel();
+			});
+		}
+		ws.async_read(buffer, [&](boost::beast::error_code m_ec, size_t bytes_written)
 		{
 			isAsyncDone = true;
-			ec = ErrorCode(m_ec);
-			if(!ec)
+			if(m_ec == boost::asio::error::operation_aborted)	//operation aborted가 발생하는 경우 : Timeout(from deadline), close(from MyWebsocketClient::Close())
+				recv_ec = ErrorCode(ERR_TIMEOUT);
+			else
+				recv_ec = ErrorCode(m_ec);
+			if(!recv_ec)
 				return;
 			if(bytes_written == 0)
 			{
-				ec = ErrorCode(ERR_CONNECTION_CLOSED);
+				recv_ec = ErrorCode(ERR_CONNECTION_CLOSED);
 				return;
 			}
-			if(!ws->got_binary())
+			if(!ws.got_binary())
 			{
-				ec = ErrorCode(ERR_PROTOCOL_VIOLATION);
+				recv_ec = ErrorCode(ERR_PROTOCOL_VIOLATION);
 				return;
 			}
 
@@ -65,22 +81,30 @@ Expected<std::vector<byte>, ErrorCode> MyWebsocketClient::RecvRaw()
 			size_t size = boost::asio::buffer_size(buffer.data());
 			buffer.clear();
 
-			result_bytes.assign(first, first + size);
+			recv_bytes.assign(first, first + size);
+
+			boost::system::error_code cancel_ec;
+			deadline.cancel(cancel_ec);
+			if(cancel_ec)
+				recv_ec = ErrorCode(cancel_ec);
 		});
 	}
 
 	if(pioc->stopped())
 		pioc->restart();
-	pioc->run_one();	//set_option(timeout)으로 인해 deadline_timer가 io_context에 같이 붙게 되므로, 가장 먼저 호출되는 handler만 처리하고 blocking에서 빠져나와야 한다.
+	pioc->run();
 
-	if(!ec)
+	if(!recv_ec)
 	{
-		if(isNormalClose(ec))
+		if(isNormalClose(recv_ec))
 			return {ErrorCode{ERR_CONNECTION_CLOSED}};
-		return ec;
+		return recv_ec;
 	}
 
-	return result_bytes;
+	if(recv_bytes.size() <= 0)
+		return ErrorCode{ERR_TIMEOUT};
+
+	return recv_bytes;
 }
 
 ErrorCode MyWebsocketClient::SendRaw(const byte* bytes, const size_t &len)
@@ -88,10 +112,10 @@ ErrorCode MyWebsocketClient::SendRaw(const byte* bytes, const size_t &len)
 	boost::asio::const_buffer buffer(bytes, len);
 	boost::beast::error_code ec;
 
-	if(!ws->is_open())
+	if(!ws.is_open())
 		return {ERR_CONNECTION_CLOSED};
 		
-	size_t sendlen = ws->write(buffer, ec);
+	size_t sendlen = ws.write(buffer, ec);
 	if(ec)
 		return {ec};
 	if(sendlen == 0)
@@ -104,7 +128,6 @@ StackErrorCode MyWebsocketClient::Connect(std::string addr, int port)
 {
 	Close();
 
-	pioc = std::make_shared<boost::asio::io_context>();
 	boost::asio::ip::tcp::resolver resolver(*pioc);
 	boost::beast::error_code ec;
 
@@ -121,45 +144,54 @@ StackErrorCode MyWebsocketClient::Connect(std::string addr, int port)
 	if(ec)
 		return {ec, __STACKINFO__};
 
-	ws = std::make_unique<booststream>(std::move(socket));
-	SetTimeout(TIME_HANDSHAKE);
-	ws->handshake(addr, "/", ec);
-	SetTimeout();
+	ws.next_layer().socket() = std::move(socket);
+
+	boost::beast::websocket::stream_base::timeout handshake_timeout;
+	handshake_timeout.handshake_timeout = std::chrono::milliseconds((int)std::floor(TIME_HANDSHAKE * 1000));
+	handshake_timeout.idle_timeout = boost::beast::websocket::stream_base::none();
+	handshake_timeout.keep_alive_pings = false;
+	ws.set_option(handshake_timeout);
+
+	ws.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::response_type& res){
+		res.set(boost::beast::http::field::user_agent, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-client-sync");
+	}));
+
+	ws.handshake(addr, "/", ec);
 	if(ec)
 		return {ec, __STACKINFO__};
 
-	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint();
+	boost::asio::ip::tcp::endpoint ep = ws.next_layer().socket().remote_endpoint();
 	Address = ep.address().to_string();
 	Port = ep.port();
 
-	ws->binary(true);
+	ws.binary(true);
+	ws.next_layer().socket().non_blocking(false);
 	
 	return {};
 }
 
 void MyWebsocketClient::SetTimeout(float sec)
 {
-	auto timeout = boost::beast::websocket::stream_base::none();
+	int time = 0;
 	if(sec > 0.0f)
 	{
 		long millisec = std::floor(sec * 1000);
-		timeout = std::chrono::milliseconds(millisec);
+		time = (int)millisec;
 	}
-	boost::beast::websocket::stream_base::timeout opt;
-	opt.handshake_timeout = timeout;
-	opt.idle_timeout = timeout;
-	opt.keep_alive_pings = false;
-	ws->set_option(opt);
+	timeout = std::chrono::milliseconds(time);
 }
 
 void MyWebsocketClient::Close()
 {
 	std::exception_ptr eptr = nullptr;
-	if(ws->is_open())
+	deadline.cancel();
+	if(ws.is_open())
 	{
-		SetTimeout(TIME_CLOSE);
-		ws->async_close(boost::beast::websocket::close_code::normal, [&](boost::beast::error_code err)
+		ws.next_layer().cancel();
+		ws.async_close(boost::beast::websocket::close_code::normal, [&](boost::beast::error_code err)
 		{
+			if(err == boost::asio::error::broken_pipe)	//SIGPIPE를 ignore해도 발생한다. Websocket은 Close Signal을 별도로 전송해야 되기 때문.
+				return;
 			ErrorCode ec{err};
 			if(!ec)
 			{
@@ -170,6 +202,7 @@ void MyWebsocketClient::Close()
 	}
 	if(pioc)
 	{
+		pioc->stop();
 		if(pioc->stopped())
 		{
 			try
@@ -186,4 +219,5 @@ void MyWebsocketClient::Close()
 	recvbuffer.Clear();
 	if(eptr)
 		std::rethrow_exception(eptr);
+	isAsyncDone = true;
 }

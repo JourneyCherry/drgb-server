@@ -1,24 +1,19 @@
 #pragma once
-#include <mutex>
-#include <thread>
-#include <memory>
-#include <string>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <cerrno>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include "MyServerSocket.hpp"
 #include "MyTCPClient.hpp"
 
 using mylib::utils::ErrorCodeExcept;
+using mylib::utils::StackTraceExcept;
 using mylib::utils::Expected;
 
 class MyTCPServer : public MyServerSocket
 {
 	private:
-		static constexpr int LISTEN_SIZE = 5;
+		boost::asio::io_context ioc;
+		boost::asio::ip::tcp::acceptor acceptor;
 
-		int server_fd;
 	public:
 		MyTCPServer(int);
 		MyTCPServer(const MyTCPServer&) = delete;
