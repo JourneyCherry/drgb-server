@@ -55,6 +55,14 @@ class ByteQueue
 		ByteQueue split(long long int = -1, long long int = -1) const;
 };
 
+//Specialization
+template <>
+void ByteQueue::push<std::string>(std::string);
+
+template <>
+ByteQueue ByteQueue::Create<std::string>(std::string);
+////
+
 template <typename T>
 void ByteQueue::push(T data)
 {

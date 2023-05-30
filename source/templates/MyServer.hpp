@@ -19,14 +19,14 @@ class MyServer : public ThreadExceptHandler
 	protected:
 		bool isRunning;
 		static constexpr int MAX_CLIENTS = 5;		//최대 수용 가능 클라이언트 수. //TODO : 추후 확장 필요.
-		static constexpr float TIME_AUTHENTICATE = 2.0f;	//인증(쿠키) 대기 시간.
+		static constexpr int TIME_AUTHENTICATE = 2000;	//인증(쿠키) 대기 시간.(ms)
 
 	private:
 		static constexpr int MAX_SOCKET = 2;
-		std::array<std::shared_ptr<MyServerSocket>, MAX_SOCKET> sockets;
-		std::array<Thread, MAX_SOCKET> acceptors;
-
-		FixedPool<std::shared_ptr<MyClientSocket>, MAX_CLIENTS> workerpool;
+		int port_web;
+		int port_tcp;
+		MyTCPServer tcp_server;
+		MyWebsocketServer web_server;
 
 	public:
 		MyServer(int, int);
@@ -38,8 +38,5 @@ class MyServer : public ThreadExceptHandler
 	protected:
 		virtual void Open() = 0;
 		virtual void Close() = 0;
-		virtual void ClientProcess(std::shared_ptr<MyClientSocket>) = 0;
-	
-	private:
-		void Accept(std::shared_ptr<MyServerSocket>);
+		virtual void AcceptProcess(std::shared_ptr<MyClientSocket>, ErrorCode) = 0;
 };

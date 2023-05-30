@@ -1,182 +1,132 @@
 #include "MyTCPTLSClient.hpp"
 
-MyTCPTLSClient::MyTCPTLSClient(int fd, SSL* sl, std::string addr, int port)
- : isErrorOccurred(false), socket_fd(fd), ssl(sl), MyClientSocket()
+MyTCPTLSClient::MyTCPTLSClient(boost::asio::ssl::context &sslctx_, boost::asio::ip::tcp::socket socket)
+ : sslctx(boost::asio::ssl::context::tlsv12), ws(std::move(socket), sslctx_), MyClientSocket()
 {
-	Address = addr;
-	Port = port;
-	if(!ssl)
-		throw ErrorCodeExcept(ErrorCode(ERR_get_error()), __STACKINFO__);
-	if(!SSL_set_fd(ssl, socket_fd))
-		throw ErrorCodeExcept(ErrorCode(ERR_get_error()), __STACKINFO__);
-	int ret_accept = 0;
-	if((ret_accept = SSL_accept(ssl)) <= 0)
-		throw ErrorCodeExcept(GetSSLErrorFromRet(ret_accept), __STACKINFO__);
+	ioc_ref = ws.get_executor();
+	timer = std::make_unique<timer_t>(ioc_ref);
+	
+	boost::system::error_code error_code;
+	auto ep = ws.lowest_layer().remote_endpoint(error_code);
+	if(error_code.failed())
+	{
+		Address = "";
+		Port = 0;
+		return;
+	}
+	
+	Address = ep.address().to_string();
+	Port = ep.port();
 }
 
 MyTCPTLSClient::~MyTCPTLSClient()
 {
-	Close();
+	Shutdown();
 }
 
-Expected<std::vector<byte>, ErrorCode> MyTCPTLSClient::RecvRaw()
+void MyTCPTLSClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
-	unsigned char buf[BUFSIZE];
-	std::vector<byte> result_bytes;
-
-	if(socket_fd < 0)
-		return {ErrorCode{ERR_CONNECTION_CLOSED}};
-	//int recvlen = read(socket_fd, buf, BUFSIZE);
-	int recvlen = SSL_read(ssl, buf, BUFSIZE);
-	if(recvlen == 0)
-		return {ErrorCode{ERR_CONNECTION_CLOSED}};
-	if(recvlen < 0)
-	//	return {ErrorCode{errno}};
-		return {GetSSLErrorFromRet(recvlen)};
-
-	result_bytes.assign(buf, buf + recvlen);
-
-	return result_bytes;
-}
-
-ErrorCode MyTCPTLSClient::SendRaw(const byte* bytes, const size_t &len)
-{
-	if(socket_fd < 0)
-		return {ERR_CONNECTION_CLOSED};
-	//int sendlen = send(socket_fd, bytes, len, 0);
-	int sendlen = SSL_write(ssl, bytes, len);
-	if(sendlen == 0)
-		return {ERR_CONNECTION_CLOSED};
-	if(sendlen < 0)
-	//	return {errno};
-		return {GetSSLErrorFromRet(sendlen)};
-
-	return {SUCCESS};
-}
-
-StackErrorCode MyTCPTLSClient::Connect(std::string addr, int port)
-{
-	Close();	//이미 열려있는 소켓은 닫기.
-
-	SSL_CTX *ctx = nullptr;
-
-	try	//TODO : certificate, key를 파일이 아닌 직접 생성하는 방법도 찾아보자. 파일을 사용하면 Connector, Connectee가 같은 인증서/키를 사용하게됨.
-	{
-		ctx = SSL_CTX_new(TLS_client_method());
-		if(!ctx)
-			throw StackErrorCode(ErrorCode(ERR_get_error()), __STACKINFO__);
-
-		SSL_CTX_set_ecdh_auto(ctx, 1);	//적절한 Elliptic Curve Diffie-Hellman 그룹 자동으로 고르기.
-		/*
-		//클라이언트에 인증서, 비밀키 불러오기.
-		if(SSL_CTX_use_certificate_file(ctx, ConfigParser::GetString("SSL_CERT").c_str(), SSL_FILETYPE_PEM) <= 0)
-			throw StackErrorCode(ErrorCode(ERR_get_error()), __STACKINFO__);
-		if(SSL_CTX_use_PrivateKey_file(ctx, ConfigParser::GetString("SSL_KEY").c_str(), SSL_FILETYPE_PEM) <= 0)
-			throw StackErrorCode(ErrorCode(ERR_get_error()), __STACKINFO__);
-		if(!SSL_CTX_check_private_key(ctx))
-			throw StackErrorCode(ErrorCode(ERR_get_error()), __STACKINFO__);
-		*/
-	}
-	catch(StackErrorCode sec)
-	{
-		SSL_CTX_free(ctx);
-		return sec;
-	}
-
-	ssl = SSL_new(ctx);
-	SSL_CTX_free(ctx);
-	if(!ssl)
-		return StackErrorCode(ErrorCode(ERR_get_error()), __STACKINFO__);
-
-	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if(socket_fd < 0)
-		return {errno, __STACKINFO__};
-
-	struct sockaddr_in server_addr;
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(port);
-	if(inet_pton(AF_INET, addr.c_str(), &(server_addr.sin_addr.s_addr)) <= 0)
-	{
-		struct addrinfo hints;
-		struct addrinfo *serverinfo;
-
-		char bport[6];
-
-		memset(bport, 0, sizeof(port));
-		sprintf(bport, "%hu", port);
-
-		memset(&hints, 0, sizeof(hints));
-		hints.ai_socktype = SOCK_STREAM;
-		int result_getaddr = getaddrinfo(addr.c_str(), bport, &hints, &serverinfo);
-		if (result_getaddr != 0)
-			return {result_getaddr, __STACKINFO__};
-		memcpy(&server_addr, serverinfo->ai_addr, sizeof(struct sockaddr));
-
-		freeaddrinfo(serverinfo);
-	}
-
-	if(connect(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-		return {errno, __STACKINFO__};
-
-	if(!SSL_set_fd(ssl, socket_fd))
-		return StackErrorCode(ErrorCode(ERR_get_error()), __STACKINFO__);
-
-	int ret_connect = 0;
-	if((ret_connect = SSL_connect(ssl)) < 0)
-		return StackErrorCode(GetSSLErrorFromRet(ret_connect), __STACKINFO__);
-
-	//if(connect(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-	//	return {errno, __STACKINFO__};
-
-	Address = std::string(inet_ntoa(server_addr.sin_addr)) + ":" + std::to_string(server_addr.sin_port);
+	connHandler = callback;
 	
-	return {};
+	auto self_ptr = shared_from_this();
+	ws.async_handshake(boost::asio::ssl::stream_base::server, [this, self_ptr](boost::system::error_code error_code)
+	{
+		this->connHandler(self_ptr, ErrorCode(error_code));
+	});
 }
 
-void MyTCPTLSClient::SetTimeout(float sec)
+void MyTCPTLSClient::DoRecv(std::function<void(boost::system::error_code, size_t)> handler)
 {
-	if(socket_fd < 0)
-		throw ErrorCodeExcept(ERR_CONNECTION_CLOSED, __STACKINFO__);
-	struct timeval time;
-	time.tv_usec = std::modf(sec, &sec) * 1000000;	//micro seconds
-	time.tv_sec = sec;	//seconds
-	if(setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &time, sizeof(time)) < 0)
-		throw ErrorCodeExcept(errno, __STACKINFO__);
+	ws.async_read_some(boost::asio::buffer(buffer.data(), BUF_SIZE), handler);
 }
 
-void MyTCPTLSClient::Close()
+void MyTCPTLSClient::GetRecv(size_t bytes_written)
 {
-	if(ssl)
-	{
-		if(!isErrorOccurred)
-			SSL_shutdown(ssl);
-		SSL_free(ssl);
-		ssl = nullptr;
-	}
-	if(socket_fd >= 0)
-	{
-		shutdown(socket_fd, SHUT_RDWR);
-		socket_fd = -1;
-	}
-	recvbuffer.Clear();
-	isErrorOccurred = false;
+	bytes_written = std::min(bytes_written, BUF_SIZE);
+	recvbuffer.Recv(buffer.data(), bytes_written);
 }
 
-ErrorCode MyTCPTLSClient::GetSSLErrorFromRet(int ret)
+ErrorCode MyTCPTLSClient::DoSend(const byte* bytes, const size_t &len)
 {
-	switch(SSL_get_error(ssl, ret))	//For SSL_connect(), SSL_accept(), SSL_do_handshake(), SSL_read_ex(), SSL_read(), SSL_peek_ex(), SSL_peek(), SSL_shutdown(), SSL_write_ex(), SSL_write()
+	boost::asio::const_buffer send_buffer(bytes, len);
+
+	boost::system::error_code ec;
+	ws.write_some(send_buffer, ec);
+	return ErrorCode(ec);
+
+	//ws.async_write_some(send_buffer, std::bind(&MyTCPTLSClient::Send_Handle, this, std::placeholders::_1, std::placeholders::_2));
+}
+
+void MyTCPTLSClient::Connect_Handle(const boost::system::error_code& error_code)
+{
+	if(!error_code.failed())
 	{
-		case SSL_ERROR_NONE:
-			return {};
-		case SSL_ERROR_SYSCALL:
-			isErrorOccurred = true;
-			return {errno};
-		case SSL_ERROR_ZERO_RETURN:
-			isErrorOccurred = true;
-			return {ERR_CONNECTION_CLOSED};
-		case SSL_ERROR_SSL:	//non-recoverable fatal error
-		default:
-			isErrorOccurred = true;
-			return ErrorCode(ERR_get_error());
+		/*
+		//sslctx에 인증서, 비밀키 로드
+		sslctx.use_certificate_file(ConfigParser::GetString("CERT_FILE"), boost::asio::ssl::context::pem, ec);
+		if(ec)
+			return {ec, __STACKINFO__};
+		sslctx.use_private_key_file(ConfigParser::GetString("KEY_FILE"), boost::asio::ssl::context::pem, ec);
+		if(ec)
+			return {ec, __STACKINFO__};
+		*/
+	
+		boost::asio::ip::tcp::endpoint ep = ws.next_layer().remote_endpoint();
+		Address = ep.address().to_string();
+		Port = ep.port();
+
+		auto self_ptr = shared_from_this();
+		ws.async_handshake(boost::asio::ssl::stream_base::client, [this, self_ptr](boost::system::error_code handshake_code)
+		{
+			if(handshake_code.failed())
+				this->Connect_Handle(handshake_code);
+			else
+				this->connHandler(self_ptr, ErrorCode(handshake_code));
+		});
 	}
+	else
+	{
+		if(endpoints.empty())
+		{
+			connHandler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
+			return;
+		}
+		auto ep = endpoints.front();
+		endpoints.pop();
+
+		ws.next_layer().async_connect(ep, std::bind(&MyTCPTLSClient::Connect_Handle, this, std::placeholders::_1));
+	}
+}
+
+void MyTCPTLSClient::Cancel()
+{
+	boost::system::error_code error_code;
+	ws.next_layer().cancel(error_code);
+	//ErrorCode ec(error_code);
+	//if(!isNormalClose(ec))
+	//	throw ErrorCodeExcept(ec, __STACKINFO__);
+}
+
+void MyTCPTLSClient::Shutdown()
+{
+	boost::system::error_code error_code;
+	ws.next_layer().close(error_code);
+	//ErrorCode ec(error_code);
+	//if(!isNormalClose(ec))
+	//	throw ErrorCodeExcept(ec, __STACKINFO__);
+}
+
+boost::asio::any_io_executor MyTCPTLSClient::GetContext()
+{
+	return ws.get_executor();
+}
+
+bool MyTCPTLSClient::is_open() const
+{
+	return ws.next_layer().is_open();
+}
+
+bool MyTCPTLSClient::isReadable() const
+{
+	return is_open();
 }

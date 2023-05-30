@@ -1,11 +1,19 @@
 #include "MyTCPClient.hpp"
 
-MyTCPClient::MyTCPClient() : isAsyncDone(true), timeout(0), pioc(std::make_shared<boost::asio::io_context>()), socket(*pioc), deadline(*pioc), MyClientSocket() {}
-
-MyTCPClient::MyTCPClient(std::shared_ptr<boost::asio::io_context> _pioc, boost::asio::ip::tcp::socket sock)
- : isAsyncDone(true), timeout(0), pioc(_pioc), socket(std::move(sock)), deadline(*pioc), MyClientSocket()
+MyTCPClient::MyTCPClient(boost::asio::ip::tcp::socket _socket) : socket(std::move(_socket)), MyClientSocket()
 {
-	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint();
+	ioc_ref = socket.get_executor();
+	timer = std::make_unique<timer_t>(ioc_ref);
+
+	boost::system::error_code error_code;
+	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint(error_code);
+	if(error_code.failed())
+	{
+		Address = "";
+		Port = 0;
+		return;
+	}
+
 	Address = ep.address().to_string();
 	Port = ep.port();
 
@@ -14,161 +22,97 @@ MyTCPClient::MyTCPClient(std::shared_ptr<boost::asio::io_context> _pioc, boost::
 
 MyTCPClient::~MyTCPClient()
 {
-	Close();
+	Shutdown();
 }
 
-Expected<std::vector<byte>, ErrorCode> MyTCPClient::RecvRaw()
+void MyTCPClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
-	if(!socket.is_open())
-		return {ErrorCode{ERR_CONNECTION_CLOSED}};
+	connHandler = callback;
 
-	if(isAsyncDone)
+	auto self_ptr = shared_from_this();
+	boost::asio::post(ioc_ref, [this, self_ptr]()
 	{
-		isAsyncDone = false;
-		recv_ec = ErrorCode(SUCCESS);
-		result_bytes.clear();
-		if(timeout.count() > 0)
-		{
-			deadline.expires_after(timeout);
-			deadline.async_wait([&](boost::beast::error_code error)
-			{
-				if(error == boost::asio::error::operation_aborted)
-					return;
-				boost::system::error_code cancel_ec;
-				socket.cancel(cancel_ec);
-				if(cancel_ec)
-					recv_ec = ErrorCode(cancel_ec);
-			});
-		}
-		socket.async_receive(boost::asio::buffer(buffer.data(), BUF_SIZE), [&](boost::beast::error_code error, size_t bytes_written)
-		{
-			isAsyncDone = true;
-			if(error == boost::asio::error::operation_aborted)
-				recv_ec = ErrorCode(ERR_TIMEOUT);
-			else
-				recv_ec = ErrorCode(error);
-			if(!recv_ec)
-				return;
-			if(bytes_written == 0)
-			{
-				recv_ec = ErrorCode(ERR_CONNECTION_CLOSED);
-				return;
-			}
-
-			unsigned char *first = static_cast<unsigned char*>(buffer.data());
-			size_t size = bytes_written;
-
-			result_bytes.assign(first, first + size);
-			//buffer = boost::asio::mutable_buffer();
-
-			boost::system::error_code cancel_ec;
-			deadline.cancel(cancel_ec);
-			if(cancel_ec)
-				recv_ec = ErrorCode(cancel_ec);
-		});
-	}
-
-	if(pioc->stopped())
-		pioc->restart();
-
-	pioc->run();
-
-	if(!recv_ec)
-	{
-		if(isNormalClose(recv_ec))
-			return {ErrorCode{ERR_CONNECTION_CLOSED}};
-		return recv_ec;
-	}
-	if(result_bytes.size() <= 0)
-		return ErrorCode{ERR_TIMEOUT};
-
-	return result_bytes;
+		this->connHandler(self_ptr, ErrorCode(SUCCESS));
+	});
 }
 
-ErrorCode MyTCPClient::SendRaw(const byte* bytes, const size_t &len)
+void MyTCPClient::DoRecv(std::function<void(boost::system::error_code, size_t)> handler)
 {
-	if(!socket.is_open())
-		return {ERR_CONNECTION_CLOSED};
+	socket.async_receive(boost::asio::buffer(buffer.data(), BUF_SIZE), handler);
+}
 
-	boost::asio::const_buffer buffer(bytes, len);
-	boost::beast::error_code ec;
+void MyTCPClient::GetRecv(size_t bytes_written)
+{
+	bytes_written = std::min(bytes_written, BUF_SIZE);
+	recvbuffer.Recv(buffer.data(), bytes_written);
+}
+
+ErrorCode MyTCPClient::DoSend(const byte* bytes, const size_t &len)
+{
+	boost::asio::const_buffer send_buffer(bytes, len);
 	
-	size_t sendlen = socket.send(buffer, 0, ec);
-	if(ec)
-		return {ec};
-	if(sendlen == 0)
-		return {ERR_CONNECTION_CLOSED};
-
-	return {SUCCESS};
-}
-
-StackErrorCode MyTCPClient::Connect(std::string addr, int port)
-{
-	Close();
-
-	boost::asio::ip::tcp::resolver resolver(*pioc);
-	boost::beast::error_code ec;
-
-	auto const results = resolver.resolve(addr, std::to_string(port), ec);
-	if(ec)
-		return {ec, __STACKINFO__};
-	for(auto &endpoint : results)
-	{
-		socket.connect(endpoint, ec);
-		if(ec)
-			continue;
-		break;
-	}
-	if(ec)
-		return {ec, __STACKINFO__};
-
-	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint();
-	Address = ep.address().to_string();
-	Port = ep.port();
-
-	socket.non_blocking(false);
-	
-	return {};
-}
-
-void MyTCPClient::SetTimeout(float sec)
-{
-	int time = 0;
-	if(sec > 0.0f)
-	{
-		long millisec = std::floor(sec * 1000);
-		time = (int)millisec;
-	}
-	timeout = std::chrono::milliseconds(time);
-}
-
-void MyTCPClient::Close()
-{
-	std::exception_ptr eptr = nullptr;
 	boost::system::error_code ec;
+	socket.send(send_buffer, 0, ec);
+	return ErrorCode{ec};
 
-	if(socket.is_open())
-		socket.close(ec);
-	deadline.cancel(ec);
-	if(pioc)
+	//socket.async_send(send_buffer, std::bind(&MyTCPClient::Send_Handle, this, std::placeholders::_1, std::placeholders::_2));
+}
+
+void MyTCPClient::Connect_Handle(const boost::system::error_code& error_code)
+{
+	if(!error_code.failed())
 	{
-		if(pioc->stopped())
-		{
-			try
-			{
-				pioc->restart();
-				pioc->run();
-			}
-			catch(...)
-			{
-				eptr = std::current_exception();
-			}
-		}
+		boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint();
+		Address = ep.address().to_string();
+		Port = ep.port();
+
+		socket.non_blocking(false);
+		
+		connHandler(shared_from_this(), ErrorCode(error_code));
 	}
-	recvbuffer.Clear();
-	if(eptr)
-		std::rethrow_exception(eptr);
-	if(ec)
-		throw ErrorCodeExcept(ec, __STACKINFO__);
-	isAsyncDone = true;
+	else
+	{
+		if(endpoints.empty())
+		{
+			connHandler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
+			return;
+		}
+		auto ep = endpoints.front();
+		endpoints.pop();
+		
+		socket.async_connect(ep, std::bind(&MyTCPClient::Connect_Handle, this, std::placeholders::_1));
+	}
+}
+
+void MyTCPClient::Cancel()
+{
+	boost::system::error_code error_code;
+	socket.cancel(error_code);
+	//ErrorCode ec(error_code);
+	//if(!isNormalClose(ec))
+	//	throw ErrorCodeExcept(ec, __STACKINFO__);
+}
+
+void MyTCPClient::Shutdown()
+{
+	boost::system::error_code error_code;
+	socket.close(error_code);
+	//ErrorCode ec(error_code);
+	//if(!isNormalClose(ec))
+	//	throw ErrorCodeExcept(ec, __STACKINFO__);
+}
+
+boost::asio::any_io_executor MyTCPClient::GetContext()
+{
+	return socket.get_executor();
+}
+
+bool MyTCPClient::is_open() const
+{
+	return socket.is_open();
+}
+
+bool MyTCPClient::isReadable() const
+{
+	return socket.is_open();
 }

@@ -1,36 +1,81 @@
 #include "MyClientSocket.hpp"
 
-MyClientSocket::MyClientSocket() : encryptor(true), decryptor(false), isSecure(false)
+MyClientSocket::MyClientSocket() : encryptor(true), decryptor(false), isSecure(false), initiateClose(false), initiateRecv(false)
 {
 }
 
-StackErrorCode MyClientSocket::KeyExchange(bool useSecure)
+void MyClientSocket::KeyExchange(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler)
 {
-	if(!useSecure)
-		return {};
-
-	ErrorCode ec;
-	KeyExchanger exchanger;
-	isSecure = false;
-
-
+	keHandler = handler;
 	auto pkey = exchanger.GetPublicKey();
 	if(!pkey)
-		return pkey.error();
-	ec = Send(*pkey);
+	{
+		keHandler(shared_from_this(), pkey.error());
+		return;
+	}
+	ErrorCode ec = Send(*pkey);
 	if(!ec)
-		return {ec, __STACKINFO__};
-
-	auto peer_key = Recv(TIME_KEYEXCHANGE);
+	{
+		keHandler(shared_from_this(), ec);
+		return;
+	}
 	
-	if(!peer_key)
-		return {peer_key.error(), __STACKINFO__};
-	auto secret = exchanger.ComputeKey(peer_key->vector());
+	SetTimeout(TIME_KEYEXCHANGE, [this](std::shared_ptr<MyClientSocket> socket){
+		this->keHandler(socket, ErrorCode(ERR_TIMEOUT));
+	});
+	
+	std::unique_lock<std::mutex> lk(mtx);
+	if(isReadable())
+		DoRecv(std::bind(&MyClientSocket::KE_Handle, this, std::placeholders::_1, std::placeholders::_2));
+	else
+	{
+		CancelTimeout();
+		keHandler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
+	}
+}
+
+Expected<ByteQueue> MyClientSocket::Recv()
+{
+	if(recvbuffer.isMsgIn())
+	{
+		auto result = recvbuffer.GetMsg();
+		if(isSecure)
+			result = decryptor.Crypt(result);
+		return ByteQueue(result);
+	}
+	return {};
+}
+
+void MyClientSocket::KE_Handle(boost::system::error_code error_code, size_t bytes_written)
+{
+	if(error_code.failed())
+	{
+		keHandler(shared_from_this(), ErrorCode(error_code));
+		return;
+	}
+	else
+		GetRecv(bytes_written);
+
+	auto result = Recv();
+	if(!result)
+	{
+		DoRecv(std::bind(&MyClientSocket::KE_Handle, this, std::placeholders::_1, std::placeholders::_2));
+		return;
+	}
+	CancelTimeout();
+
+	auto secret = exchanger.ComputeKey(result->vector());
 	if(!secret)
-		return {secret.error(), __STACKINFO__};
+	{
+		keHandler(shared_from_this(), ErrorCode(ERR_PROTOCOL_VIOLATION));
+		return;
+	}
 	auto derived = KeyExchanger::KDF(*secret, 48);
 	if(derived.size() != 48)
-		return {ErrorCode(ERR_PROTOCOL_VIOLATION), __STACKINFO__};
+	{
+		keHandler(shared_from_this(), ErrorCode(ERR_OUT_OF_CAPACITY));
+		return;
+	}
 	
 	auto [key, iv] = Encryptor::SplitKey(derived);
 
@@ -38,41 +83,53 @@ StackErrorCode MyClientSocket::KeyExchange(bool useSecure)
 	decryptor.SetKey(key, iv);
 
 	isSecure = true;
-
-	return {};
+	keHandler(shared_from_this(), ErrorCode(SUCCESS));
 }
 
-std::string MyClientSocket::ToString()
+void MyClientSocket::StartRecv(std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> callback)
 {
-	return Address + ":" + std::to_string(Port);
-}
+	msgHandler = callback;
 
-StackErrorCode MyClientSocket::Connect()
-{
-	return Connect(Address, Port);
-}
+	std::unique_lock<std::mutex> lk(mtx);
+	if(!isReadable() || initiateClose)
+		return;
 
-Expected<ByteQueue, ErrorCode> MyClientSocket::Recv(float timeout)
-{
-	if(timeout > 0.0f)
-		SetTimeout(timeout);
-
-	while(!recvbuffer.isMsgIn())
+	if(!initiateRecv)
 	{
-		auto result = RecvRaw();
+		initiateRecv = true;
+		DoRecv(std::bind(&MyClientSocket::Recv_Handle, this, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+	}
+}
+
+void MyClientSocket::Recv_Handle(std::shared_ptr<MyClientSocket> self_ptr, boost::system::error_code error_code, size_t bytes_written)
+{
+	if(self_ptr == nullptr)
+		return;
+
+	self_ptr->GetRecv(bytes_written);
+	
+	while(msgHandler != nullptr && recvbuffer.isMsgIn())
+	{
+		auto result = Recv();
 		if(!result)
-			return result.error();
-		
-		recvbuffer.Recv(result->data(), result->size());
+			break;
+		msgHandler(shared_from_this(), *result, ErrorCode(SUCCESS));
 	}
 
-	if(timeout > 0.0f)
-		SetTimeout();
-		
-	std::vector<byte> result = recvbuffer.GetMsg();
-	if(isSecure)
-		result = decryptor.Crypt(result);
-	return ByteQueue(result);
+	if(error_code.failed())
+	{
+		if(msgHandler != nullptr)
+			msgHandler(shared_from_this(), ByteQueue{}, ErrorCode{error_code});
+		self_ptr->Close();
+		initiateRecv = false;
+		return;
+	}
+
+	std::unique_lock<std::mutex> lk(mtx);
+	if(!isReadable() || initiateClose)
+		return;
+
+	DoRecv(std::bind(&MyClientSocket::Recv_Handle, this, shared_from_this(), std::placeholders::_1, std::placeholders::_2));	//읽을 수 있으면 계속 읽는다.
 }
 
 ErrorCode MyClientSocket::Send(ByteQueue bytes)
@@ -82,14 +139,97 @@ ErrorCode MyClientSocket::Send(ByteQueue bytes)
 
 ErrorCode MyClientSocket::Send(std::vector<byte> bytes)
 {
+	std::unique_lock<std::mutex> lk(mtx);
+	if(!is_open() || initiateClose)
+		return ErrorCode(ERR_CONNECTION_CLOSED);
+
 	if(isSecure)
-		return SendRaw(PacketProcessor::encapsulate(encryptor.Crypt(bytes)));
-	return SendRaw(PacketProcessor::encapsulate(bytes));
+		bytes = PacketProcessor::encapsulate(encryptor.Crypt(bytes));
+	else
+		bytes = PacketProcessor::encapsulate(bytes);
+
+	auto result = DoSend(bytes.data(), bytes.size());
+
+	return result;
 }
 
-ErrorCode MyClientSocket::SendRaw(const std::vector<byte> &bytes)
+void MyClientSocket::Connect(std::string addr, int port, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler)
 {
-	return SendRaw(bytes.data(), bytes.size());
+	if(is_open())
+		return;
+	
+	while(!endpoints.empty())
+		endpoints.pop();
+
+	connHandler = handler;
+
+	//For Websocket
+	Address = addr;
+	Port = port;
+
+	boost::asio::ip::tcp::resolver resolver(GetContext());
+	boost::beast::error_code ec;
+
+	auto results = resolver.resolve(addr, std::to_string(port), ec);
+	if(ec)
+		throw ErrorCodeExcept{ec, __STACKINFO__};
+	for(auto &endpoint : results)
+		endpoints.push(endpoint);
+
+	Connect_Handle(boost::asio::error::connection_refused);
+}
+
+void MyClientSocket::SetTimeout(const int& ms, std::function<void(std::shared_ptr<MyClientSocket>)> callback)
+{
+	if(initiateClose)
+		return;
+	timer->expires_after(std::chrono::milliseconds(ms));
+	auto self_ptr = shared_from_this();
+	timer->async_wait([this, self_ptr, callback](const boost::system::error_code& error_code)
+	{
+		if(error_code != boost::asio::error::operation_aborted)
+		{
+			if(callback == nullptr)
+				this->msgHandler(self_ptr, ByteQueue(), ErrorCode(ERR_TIMEOUT));
+			else
+				callback(self_ptr);
+		}
+	});
+}
+
+void MyClientSocket::SetCleanUp(std::function<void(std::shared_ptr<MyClientSocket>)> callback)
+{
+	cleanHandler = callback;
+}
+
+void MyClientSocket::CleanUp()
+{
+	if(cleanHandler == nullptr)
+		return;
+	boost::asio::post(ioc_ref, std::bind(cleanHandler, shared_from_this()));
+}
+
+void MyClientSocket::CancelTimeout()
+{
+	timer->cancel();
+}
+
+void MyClientSocket::Close()
+{
+	std::unique_lock<std::mutex> lk(mtx);
+	if(!is_open())
+		return;
+	
+	if(initiateClose)
+		return;
+
+	initiateClose = true;
+	CancelTimeout();
+	Cancel();
+	Shutdown();
+	lk.unlock();
+
+	CleanUp();
 }
 
 bool MyClientSocket::isNormalClose(const ErrorCode &ec)
@@ -114,4 +254,19 @@ bool MyClientSocket::isNormalClose(const ErrorCode &ec)
 			return false;
 	}
 	return false;
+}
+
+std::string MyClientSocket::ToString()
+{
+	return Address + ":" + std::to_string(Port);
+}
+
+std::string MyClientSocket::GetAddress()
+{
+	return Address;
+}
+
+int MyClientSocket::GetPort()
+{
+	return Port;
 }

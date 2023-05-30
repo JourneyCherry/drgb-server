@@ -1,92 +1,80 @@
 #include "MyConnectee.hpp"
 
-MyConnectee::MyConnectee(std::string keyword, int port, ThreadExceptHandler *parent)
- : t_accept(std::bind(&MyConnectee::AcceptLoop, this), this, false),
-	server_socket(port),
-	identify_keyword(keyword),
- 	ThreadExceptHandler(parent)
+MyConnectee::MyConnectee(std::string keyword, int port, int t, ThreadExceptHandler *parent)
+ : except(parent), identify_keyword(keyword), MyTCPServer(port, t)
 {
-	isRunning = false;
-}
-
-MyConnectee::~MyConnectee()
-{
-	Close();
-}
-
-void MyConnectee::Open()
-{
-	isRunning = true;
-	t_accept.start();
-}
-
-void MyConnectee::Close()
-{
-	isRunning = false;
-	server_socket.Close();
-	t_accept.join();
-	for(auto iter = ConnectorsMap.begin();iter != ConnectorsMap.end();iter++)
-	{
-		iter->second->safe_loop([&](std::shared_ptr<MyConnector> connector){ connector->Close(); });
-		iter->second->Stop();
-	}
+	StartAccept(nullptr);	//enterHandle은 GetClient의 2번째 인수이며, Connectee에선 사용되지 않음. client->Prepare()가 아닌 connector->Connectee()를 사용하기 때문.
 }
 
 void MyConnectee::Accept(std::string keyword, std::function<ByteQueue(ByteQueue)> process)
-{	
+{
 	KeywordProcessMap.insert_or_assign(keyword, process);
-	ConnectorsMap.insert_or_assign(keyword, std::make_shared<VariadicPool<std::shared_ptr<MyConnector>>>(this));
 }
 
-void MyConnectee::AcceptLoop()
+std::shared_ptr<MyClientSocket> MyConnectee::GetClient(boost::asio::ip::tcp::socket& socket, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handle)
 {
-	Thread::SetThreadName("ConnectAcceptor");
+	auto connector = std::make_shared<MyConnector>(std::move(socket));
+	connector->Connectee(std::bind(&MyConnectee::ClientAuth, this, std::placeholders::_1, std::placeholders::_2));
 
-	while(isRunning)
+	return connector;
+}
+
+bool MyConnectee::ClientAuth(std::shared_ptr<MyClientSocket> socket, Expected<std::string, ErrorCode> remote_keyword)
+{
+	if(!remote_keyword.isSuccessed())
 	{
-		try
+		Logger::log("Connectee : " + socket->ToString() + " Failed with " + remote_keyword.error().message_code(), Logger::LogType::error);
+		socket->Close();
+		return false;
+	}
+		
+	if(KeywordProcessMap.find(*remote_keyword) == KeywordProcessMap.end())
+	{
+		Logger::log("Connectee : Unknwon Keyword(" + *remote_keyword + ") " + socket->ToString(), Logger::LogType::info);
+		socket->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_KEYWORD));
+		socket->Close();
+		return false;
+	}
+	else
+	{
+		ByteQueue answer = ByteQueue::Create<byte>(SUCCESS);
+		answer.push<std::string>(identify_keyword);
+		auto ec = socket->Send(answer);
+		if(!ec)
 		{
-			for(auto iter = ConnectorsMap.begin();iter != ConnectorsMap.end();iter++)
-				iter->second->flush();
+			socket->Close();
+			return false;
+		}
 
-			auto client = server_socket.Accept();	
-			if (!client)
-			{
-				if(MyClientSocket::isNormalClose(client.error()))
-					break;	//TODO : ServerSocket이 닫혔는지 확인 후, MyConnectee가 가동중이라면 소켓 다시 살리기.
-				else
-					throw ErrorCodeExcept(client.error(), __STACKINFO__);
-			}
-			auto connector = std::make_shared<MyConnector>(this, *client);
-			std::string keyword = connector->keyword;
-			if(KeywordProcessMap.find(keyword) == KeywordProcessMap.end())
-			{
-				connector->Reject(ERR_NO_MATCH_KEYWORD);
-				Logger::log("Connectee : Unknwon Keyword(" + keyword + ") " + connector->ToString(), Logger::LogType::info);
-				continue;
-			}
-			connector->SetInquiry(KeywordProcessMap[keyword]);
-			ConnectorsMap[keyword]->insert(connector, std::bind(&MyConnector::RecvLoop, connector));
-			connector->Accept(identify_keyword);
-			Logger::log(identify_keyword + " <- " + keyword + " : " + connector->ToString(), Logger::LogType::info);
-		}
-		catch(const std::exception &e)
-		{
-			Logger::log(e.what(), Logger::LogType::error);
-			//TODO : socket이 reset이 필요할 경우 reset 해주기. 에러가 발생해서 소켓이 닫혔을 수 있기 때문.
-		}
+		Logger::log(identify_keyword + " <- " + *remote_keyword + " : " + socket->ToString(), Logger::LogType::info);
+		auto connector = std::dynamic_pointer_cast<MyConnector>(socket);
+		connector->StartInquiry(KeywordProcessMap[*remote_keyword]);
+		
+		return true;
 	}
 }
 
-void MyConnectee::Request(std::string keyword, ByteQueue request, std::function<void(std::shared_ptr<MyConnector>, ByteQueue)> process)
+void MyConnectee::Request(std::string keyword, ByteQueue request, std::function<void(std::shared_ptr<MyConnector>, Expected<ByteQueue, StackErrorCode>)> process)
 {
-	if(ConnectorsMap.find(keyword) == ConnectorsMap.end())
-		return;
-	auto connectors = ConnectorsMap[keyword];
-	connectors->safe_loop([&](std::shared_ptr<MyConnector> connector)
+	safe_loop([keyword, request, process](std::shared_ptr<MyClientSocket> client)
 	{
-		auto req_result = connector->Request(request);
-		if(req_result)
-			process(connector, *req_result);
+		auto connector = std::dynamic_pointer_cast<MyConnector>(client);
+		if(connector->keyword != keyword)
+			return;
+
+		process(connector, connector->Request(request));
 	});
+}
+
+size_t MyConnectee::GetAuthorized()
+{
+	size_t count = 0;
+	std::unique_lock<std::mutex> lk(mtx_client);
+	for(auto &client : clients)
+	{
+		auto connector = std::dynamic_pointer_cast<MyConnector>(client);
+		if(connector->is_open() && connector->isAuthorized())
+			count++;
+	}
+	return count;
 }

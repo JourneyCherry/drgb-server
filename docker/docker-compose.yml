@@ -29,6 +29,8 @@ services:
     ports:
       - "54322:54322" #web
       - "54422:54422" #tcp
+    cpus: 1         #no effect on wsl2
+    mem_limit: 512m #no effect on wsl2
   match:
     container_name: match
     image: drgb-match
@@ -45,6 +47,8 @@ services:
     ports:
       - "54323:54323" #web
       - "54423:54423" #tcp
+    cpus: 1         #no effect on wsl2
+    mem_limit: 512m #no effect on wsl2
   battle:
     container_name: battle
     image: drgb-battle
@@ -61,6 +65,8 @@ services:
     ports:
       - "54324:54324" #web
       - "54424:54424" #tcp
+    cpus: 1         #no effect on wsl2
+    mem_limit: 512m #no effect on wsl2
   db:
     container_name: db
     image: postgres

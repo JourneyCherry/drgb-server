@@ -14,6 +14,7 @@ SET ( TESTS
 	PacketProcessor_Test
 	StackTraceExcept_Test
 	Socket_Test
+	Connector_Test
 )
 
 FOREACH ( TEST IN LISTS TESTS )
@@ -34,4 +35,5 @@ TARGET_LINK_LIBRARIES ( Invoker_Test PRIVATE Invoker )
 TARGET_LINK_LIBRARIES ( Notifier_Test PRIVATE Notifier )
 TARGET_LINK_LIBRARIES ( PacketProcessor_Test PRIVATE PacketProcessor )
 TARGET_LINK_LIBRARIES ( StackTraceExcept_Test PRIVATE StackTraceExcept )
-TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClient MyTCPTLSServer MyWebsocketClient MyWebsocketServer MyWebsocketTLSClient MyWebsocketTLSServer )
+TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClient MyTCPTLSServer MyWebsocketClient MyWebsocketServer MyWebsocketTLSClient MyWebsocketTLSServer pthread )
+TARGET_LINK_LIBRARIES ( Connector_Test PRIVATE MyConnectorPool MyConnectee )

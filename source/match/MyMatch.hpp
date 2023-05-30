@@ -19,7 +19,7 @@ class MyMatch : public MyServer
 {
 	private:
 		const std::chrono::seconds rematch_delay = std::chrono::seconds(1);	//TODO : Config로 뺄 필요가 있음.
-		DeMap<Account_ID_t, Hash_t, std::shared_ptr<Notifier>> sessions;
+		DeMap<Account_ID_t, Hash_t, std::weak_ptr<MyClientSocket>> sessions;
 
 		MyConnectee connectee;
 
@@ -31,7 +31,12 @@ class MyMatch : public MyServer
 		~MyMatch();
 		void Open() override;
 		void Close() override;
-		void ClientProcess(std::shared_ptr<MyClientSocket>) override;
+		void AcceptProcess(std::shared_ptr<MyClientSocket>, ErrorCode) override;
+		void EnterProcess(std::shared_ptr<MyClientSocket>, ErrorCode);
+		void AuthenticateProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
+		void ClientProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode, Account_ID_t);
+		void MatchProcess(std::shared_ptr<MyClientSocket>, ByteQueue, Account_ID_t);
+		void ExitProcess(std::shared_ptr<MyClientSocket>, const boost::system::error_code&, Account_ID_t);
 	
 	private:
 		ByteQueue MatchInquiry(ByteQueue);

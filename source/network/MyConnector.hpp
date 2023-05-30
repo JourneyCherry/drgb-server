@@ -1,21 +1,17 @@
 #pragma once
 #include <string>
-#include <thread>
-#include <mutex>
 #include <chrono>
 #include <functional>
+#include <future>
+#include <mutex>
 #include <random>
 #include <limits>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netdb.h>
 #include "MyTCPClient.hpp"
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
 #include "Thread.hpp"
 #include "Logger.hpp"
+#include "Expected.hpp"
 
 using mylib::utils::ByteQueue;
 using mylib::utils::StackErrorCode;
@@ -24,46 +20,35 @@ using mylib::utils::PacketProcessor;
 using mylib::utils::Logger;
 using mylib::threads::Thread;
 using mylib::threads::ThreadExceptHandler;
+using mylib::utils::Expected;
 
-class MyConnector
+class MyConnector : public MyTCPClient
 {
 	private:
-		std::string target_addr;
-		int target_port;
-		std::string target_keyword;
-	
-	private:
-		static constexpr int TIME_WAIT_ANSWER = 1;
-		static constexpr int RETRY_WAIT_SEC = 3;
+		bool m_authorized;
+		static constexpr int TIME_WAIT_ANSWER = 5000;	//ms
 
-		bool isConnected;
-		bool keepTryConnect;
-		std::shared_ptr<MyClientSocket> socket;
-	
-		Thread t_recv;
 		std::function<ByteQueue(ByteQueue)> inquiry_process;
 		std::mutex m_req;
-		std::condition_variable cv_req;
-		std::map<unsigned int, ByteQueue> answer_map;
+		std::map<unsigned int, std::promise<ByteQueue>> answer_map;
+
+		void RecvHandler(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
 
 	public:
 		std::string keyword;
 
 	private:
-		std::condition_variable cv;
-		void ConnectLoop();	//TODO : Coroutine으로 변경 필요.
+		void KeyExchange_Handle(std::shared_ptr<MyClientSocket>, ErrorCode);
+		void ConnectorEnter(std::shared_ptr<MyClientSocket>, ErrorCode);
 
 	public:
-		MyConnector(ThreadExceptHandler*, std::string, int, std::string, std::function<ByteQueue(ByteQueue)>);
-		MyConnector(ThreadExceptHandler*, std::shared_ptr<MyClientSocket>);
+		MyConnector(boost::asio::ip::tcp::socket);
 		~MyConnector();
 
-		void SetInquiry(std::function<ByteQueue(ByteQueue)>);
-		void Accept(std::string);
-		void Reject(errorcode_t);
-		void Connect();
-		void Close();
-		void RecvLoop();	//TODO : Coroutine으로 변경 필요.
+		void StartInquiry(std::function<ByteQueue(ByteQueue)>);
+		void Connectee(std::function<bool(std::shared_ptr<MyClientSocket>, Expected<std::string, ErrorCode>)>);
+		void Connector(std::string, std::function<void(std::shared_ptr<MyClientSocket>, Expected<std::string, ErrorCode>)>);
 		Expected<ByteQueue, StackErrorCode> Request(ByteQueue);
-		std::string ToString() const;
+
+		bool isAuthorized() const;
 };

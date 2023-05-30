@@ -1,12 +1,7 @@
 #include "MyServer.hpp"
 
-MyServer::MyServer(int port_web, int port_tcp) : isRunning(false), workerpool("ClientProcess", std::bind(&MyServer::ClientProcess, this, std::placeholders::_1), this)
+MyServer::MyServer(int web, int tcp) : web_server(web, 2), tcp_server(tcp, 2), isRunning(false)	//TODO : thread 수를 core 수에 맞추거나 별도 설정(Configfile)으로 결정 필요.
 {
-	sockets[0] = std::make_shared<MyTCPServer>(port_tcp);
-	sockets[1] = std::make_shared<MyWebsocketServer>(port_web);
-
-	for(int i = 0;i<MAX_SOCKET;i++)
-		acceptors[i] = Thread(std::bind(&MyServer::Accept, this, sockets[i]), this, false);
 }
 
 MyServer::~MyServer()
@@ -21,9 +16,8 @@ void MyServer::Start()
 		return;
 
 	isRunning = true;
-
-	for(Thread &t : acceptors)
-		t.start();
+	web_server.StartAccept(std::bind(&MyServer::AcceptProcess, this, std::placeholders::_1, std::placeholders::_2));
+	tcp_server.StartAccept(std::bind(&MyServer::AcceptProcess, this, std::placeholders::_1, std::placeholders::_2));
 	Open();
 }
 
@@ -33,16 +27,8 @@ void MyServer::Stop()
 		return;
 
 	isRunning = false;
-
-	for(auto &socket : sockets)
-		socket->Close();
-	for(auto &acceptor : acceptors)
-		acceptor.join();
-	workerpool.safe_loop([&](std::shared_ptr<MyClientSocket> client)
-	{
-		client->Close();
-	});
-	workerpool.stop();
+	web_server.Close();
+	tcp_server.Close();
 		
 	Close();
 	GracefulWakeUp();
@@ -59,33 +45,6 @@ void MyServer::Join()
 		catch(const std::exception &e)
 		{
 			Logger::log(e.what(), Logger::LogType::error);
-		}
-	}
-}
-
-void MyServer::Accept(std::shared_ptr<MyServerSocket> socket)
-{
-	Thread::SetThreadName("ServerAcceptor");
-
-	while(isRunning)
-	{
-		try
-		{
-			auto client = socket->Accept();
-			if(!client)
-			{
-				if(MyClientSocket::isNormalClose(client.error()))
-					break;
-				else
-					throw ErrorCodeExcept(client.error(), __STACKINFO__);
-			}
-
-			workerpool.insert(*client);
-		}
-		catch(const std::exception& e)
-		{
-			Logger::log(e.what(), Logger::LogType::error);	//에러 발생해도 스레드를 죽이지 않고 그대로 진행.
-			//TODO : socket이 reset이 필요할 경우 reset 해주기. 에러가 발생해서 소켓이 닫혔을 수 있기 때문.
 		}
 	}
 }

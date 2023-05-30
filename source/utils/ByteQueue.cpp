@@ -109,8 +109,16 @@ ByteQueue::~ByteQueue()
 template <>
 void ByteQueue::push<std::string>(std::string data)
 {
-	
 	pushraw((byte*)data.c_str(), data.length());
+}
+
+template <>
+ByteQueue ByteQueue::Create<std::string>(std::string data)
+{
+	ByteQueue result;
+	result.push<std::string>(data);
+
+	return result;
 }
 
 void ByteQueue::pushraw(const byte* datas, size_t len)

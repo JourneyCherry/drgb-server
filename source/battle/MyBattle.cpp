@@ -1,9 +1,9 @@
 #include "MyBattle.hpp"
 
 MyBattle::MyBattle() : 
-	connector_match(this, ConfigParser::GetString("Match1_Addr"), ConfigParser::GetInt("Match1_Port", 52431), "battle", std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1)), 
+	connector("battle", 1, this), keyword_match("match"),
 	gamepool("GamePool", std::bind(&MyBattle::GameProcess, this, std::placeholders::_1), this),
-	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54321), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54322))
+	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54324), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54424))
 {
 }
 
@@ -14,56 +14,67 @@ MyBattle::~MyBattle()
 void MyBattle::Open()
 {
 	MyPostgres::Open();
-	connector_match.Connect();
+
+	connector.Connect(ConfigParser::GetString("Match_Addr"), ConfigParser::GetInt("Match_Port", 52431), keyword_match, std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1));
 	Logger::log("Battle Server Start", Logger::LogType::info);
 }
 
 void MyBattle::Close()
 {
 	gamepool.stop();
-	connector_match.Close();
+	connector.Close();
 	MyPostgres::Close();
 	Logger::log("Battle Server Stop", Logger::LogType::info);
 }
 
-void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
+void MyBattle::AcceptProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec)
 {
-	StackErrorCode ec = client->KeyExchange();
+	if(!ec)
+		return;
+
+	client->KeyExchange(std::bind(&MyBattle::EnterProcess, this, std::placeholders::_1, std::placeholders::_2));
+}
+
+void MyBattle::EnterProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec)
+{
 	if(!ec)
 	{
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate : " + ec.message_code(), Logger::LogType::auth);
 		client->Close();
-		Logger::log("Client " + client->ToString() + " Failed to KeyExchange", Logger::LogType::auth);
-		if(!MyClientSocket::isNormalClose(ec))
-			throw ErrorCodeExcept(ec, __STACKINFO__);
-	}
-	
-	//Authentication
-	auto authenticate = client->Recv(TIME_AUTHENTICATE);
-	if(!authenticate)
-	{
-		client->Close();
-		Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
 		return;
 	}
-	Hash_t cookie = authenticate->pop<Hash_t>();
-	auto session = cookies.FindRKey(cookie);
+
+	client->StartRecv(std::bind(&MyBattle::AuthenticateProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+	client->SetTimeout(TIME_AUTHENTICATE);
+}
+
+void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
+{
+	client->CancelTimeout();
+	if(!ec)
+	{
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate : " + ec.message_code(), Logger::LogType::auth);
+		client->Close();
+		return;
+	}
+
+	Hash_t cookie = packet.pop<Hash_t>();
+	auto session = this->cookies.FindRKey(cookie);
 	if(!session)	//세션이 match로부터 오지 않는 경우
 	{
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Cookie", Logger::LogType::auth);
 		client->Close();
-		Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
 		return;
 	}
-
 	Account_ID_t account_id = session->first;
 	std::shared_ptr<MyGame> GameSession = session->second;
-
-	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
 
 	//Game에 접속 보내기.
 	int side = GameSession->Connect(account_id, client);
 	if(side < 0)	//게임이 종료되었거나 올바르지 않은 세션이 올라온 경우
 	{
-		cookies.EraseLKey(account_id);
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Game", Logger::LogType::auth);
+		this->cookies.EraseLKey(account_id);
 		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 		client->Close();
 		return;
@@ -79,41 +90,42 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client)
 		client->Send(info);
 	}
 
-	while(isRunning && ec)
+	client->StartRecv(std::bind(&MyBattle::ClientProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, account_id, side, GameSession));
+	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
+}
+
+void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec, Account_ID_t account_id, int side, std::shared_ptr<MyGame> GameSession)
+{
+	if(!recv_ec)
 	{
-		auto msg = client->Recv();
-		if(!msg)
-		{
-			//Game에 disconnect 메시지 보내기.
-			GameSession->Disconnect(side, client);
-			ec = StackErrorCode(msg.error(), __STACKINFO__);
-			break;
-		}
-		byte header = msg->pop<byte>();
-		switch(header)
-		{
-			case REQ_GAME_ACTION:
-				try
-				{
-					int action = msg->pop<int>();
-					GameSession->Action(side, action);
-				}
-				catch(const std::exception &e)
-				{
-					ec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__);
-					Logger::log(e.what(), Logger::LogType::error);
-				}
-				break;
-			default:
-				ec = StackErrorCode(client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION)), __STACKINFO__);
-				break;
-		}
+		GameSession->Disconnect(side, client);
+		if(client->isNormalClose(recv_ec))
+			Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
+		else
+			Logger::log("Account " + std::to_string(account_id) + " logged out with " + recv_ec.message_code(), Logger::LogType::auth);
+		client->Close();
+		return;
 	}
 
-	client->Close();
-	Logger::log("Account " + std::to_string(account_id) + " logged out from " + client->ToString(), Logger::LogType::auth);
-	if(!MyClientSocket::isNormalClose(ec))
-		throw ErrorCodeExcept(ec, __STACKINFO__);
+	byte header = packet.pop<byte>();
+	switch(header)
+	{
+		case REQ_GAME_ACTION:
+			try
+			{
+				int action = packet.pop<int>();
+				GameSession->Action(side, action);
+			}
+			catch(const std::exception &e)
+			{
+				client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+				Logger::log(e.what(), Logger::LogType::error);
+			}
+			break;
+		default:
+			client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+			break;
+	}
 }
 
 ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
@@ -203,7 +215,7 @@ void MyBattle::GameProcess(std::shared_ptr<MyGame> game)
 			req.push<Account_ID_t>(id);
 			req.push<Hash_t>(cookie);
 
-			auto req_result = connector_match.Request(req);
+			auto req_result = connector.Request(keyword_match, req);
 			if(req_result)
 			{
 				byte header = req_result->pop<byte>();

@@ -1,5 +1,4 @@
 #pragma once
-#include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include "MyServerSocket.hpp"
 #include "MyTCPClient.hpp"
@@ -10,18 +9,21 @@ using mylib::utils::Expected;
 
 class MyTCPServer : public MyServerSocket
 {
-	private:
-		boost::asio::io_context ioc;
+	protected:
 		boost::asio::ip::tcp::acceptor acceptor;
 
+		void Accept_Handle(boost::system::error_code, boost::asio::ip::tcp::socket);
+		virtual std::shared_ptr<MyClientSocket> GetClient(boost::asio::ip::tcp::socket&, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>);
+		void CloseSocket() override;
+
 	public:
-		MyTCPServer(int);
+		MyTCPServer(int, int);
 		MyTCPServer(const MyTCPServer&) = delete;
 		MyTCPServer(MyTCPServer&&) = delete;
 		~MyTCPServer();
 
-		Expected<std::shared_ptr<MyClientSocket>, ErrorCode> Accept() override;
-		void Close() override;
+		void StartAccept(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
+		bool is_open() override;
 
 		MyTCPServer& operator=(const MyTCPServer&) = delete;
 		MyTCPServer& operator=(MyTCPServer&&) = delete;

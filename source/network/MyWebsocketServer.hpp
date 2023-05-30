@@ -1,26 +1,21 @@
 #pragma once
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
-#include "MyServerSocket.hpp"
+#include "MyTCPServer.hpp"
 #include "MyWebsocketClient.hpp"
 
 using mylib::utils::ErrorCodeExcept;
 using mylib::utils::StackTraceExcept;
 
-class MyWebsocketServer : public MyServerSocket
+class MyWebsocketServer : public MyTCPServer
 {
-	private:
-		boost::beast::net::io_context ioc;
-		boost::asio::ip::tcp::acceptor acceptor;
+	protected:
+		std::shared_ptr<MyClientSocket> GetClient(boost::asio::ip::tcp::socket&, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
 
 	public:
-		MyWebsocketServer(int);
+		MyWebsocketServer(int, int);
 		MyWebsocketServer(const MyWebsocketServer&) = delete;
 		MyWebsocketServer(MyWebsocketServer&&) = delete;
-		~MyWebsocketServer();
-
-		Expected<std::shared_ptr<MyClientSocket>, ErrorCode> Accept() override;
-		void Close() override;
 
 		MyWebsocketServer& operator=(const MyWebsocketServer&) = delete;
 		MyWebsocketServer& operator=(MyWebsocketServer&&) = delete;

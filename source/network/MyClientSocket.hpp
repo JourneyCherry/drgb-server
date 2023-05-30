@@ -1,10 +1,10 @@
 #pragma once
 #include <string>
-#include <openssl/err.h>
+#include <atomic>
+#include <boost/asio/any_io_executor.hpp>
 #include "Expected.hpp"
 #include "ByteQueue.hpp"
 #include "PacketProcessor.hpp"
-#include "ConfigParser.hpp"
 #include "KeyExchanger.hpp"
 #include "Encryptor.hpp"
 
@@ -13,48 +13,77 @@ using mylib::utils::PacketProcessor;
 using mylib::utils::ByteQueue;
 using mylib::utils::ErrorCode;
 using mylib::utils::StackErrorCode;
-using mylib::utils::ConfigParser;
-using mylib::security::Encryptor;
+using mylib::utils::ErrorCodeExcept;
 using mylib::security::KeyExchanger;
+using mylib::security::Encryptor;
 
-class MyClientSocket
+class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 {
 	private:
 		bool isSecure;
 		Encryptor encryptor, decryptor;
+		KeyExchanger exchanger;
 
 	protected:
 		std::string Address;
 		int Port;
 		PacketProcessor recvbuffer;
+		bool initiateClose;
+		bool initiateRecv;
+		std::mutex mtx;
+		
+		std::queue<boost::asio::ip::basic_resolver_entry<boost::asio::ip::tcp>> endpoints;
+
+		using timer_t = boost::asio::steady_timer;
+		boost::asio::any_io_executor ioc_ref;
+		std::unique_ptr<timer_t> timer;
+
+		//For User of Client Socket
+		std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> connHandler;
+		std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> keHandler;
+		std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> msgHandler;
+		std::function<void(std::shared_ptr<MyClientSocket>)> cleanHandler;
+		Expected<ByteQueue> Recv();
+
+		virtual void DoRecv(std::function<void(boost::system::error_code, size_t)>) = 0;
+		virtual void GetRecv(size_t) = 0;
+		virtual ErrorCode DoSend(const byte*, const size_t&) = 0;
+		virtual void Connect_Handle(const boost::system::error_code&) = 0;
+		void KE_Handle(boost::system::error_code, size_t);
+		void Recv_Handle(std::shared_ptr<MyClientSocket>, boost::system::error_code, size_t);
+		void CleanUp();
+		virtual boost::asio::any_io_executor GetContext() = 0;
+		virtual bool isReadable() const = 0;
+		virtual void Cancel() = 0;
+		virtual void Shutdown() = 0;
 
 	public:
-		static constexpr float TIME_KEYEXCHANGE = 2.0f;
+		static constexpr int TIME_KEYEXCHANGE = 2000;
 		
 		MyClientSocket();
 		MyClientSocket(const MyClientSocket&) = delete;
 		MyClientSocket(MyClientSocket&&) = delete;
 		virtual ~MyClientSocket() = default;
 
-		StackErrorCode Connect();
-		virtual StackErrorCode Connect(std::string, int) = 0;
-		virtual void Close() = 0;
-		virtual void SetTimeout(float = 0.0f) = 0;	//seconds
+		virtual void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) = 0;
+		void Connect(std::string, int, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>);
+		virtual bool is_open() const = 0;
+		void Close();
 
 		MyClientSocket& operator=(const MyClientSocket&) = delete;
 		MyClientSocket& operator=(MyClientSocket&&) = delete;
 
-		Expected<ByteQueue, ErrorCode> Recv(float = 0.0f);
 		ErrorCode Send(ByteQueue);
 		ErrorCode Send(std::vector<byte>);
+		void SetTimeout(const int&, std::function<void(std::shared_ptr<MyClientSocket>)> = nullptr);
+		void SetCleanUp(std::function<void(std::shared_ptr<MyClientSocket>)>);
+		void CancelTimeout();
 
 		std::string ToString();
-		StackErrorCode KeyExchange(bool = true);
+		std::string GetAddress();
+		int GetPort();
+		void StartRecv(std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)>);
+		void KeyExchange(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>);
 
 		static bool isNormalClose(const ErrorCode&);
-
-	protected:
-		virtual Expected<std::vector<byte>, ErrorCode> RecvRaw() = 0;
-		virtual ErrorCode SendRaw(const byte*, const size_t&) = 0;
-		ErrorCode SendRaw(const std::vector<byte>&);
 };

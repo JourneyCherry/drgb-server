@@ -3,6 +3,7 @@
 #include <vector>
 #include <mutex>
 #include <condition_variable>
+#include <chrono>
 #include "Expected.hpp"
 #include "StackTraceExcept.hpp"
 
@@ -33,7 +34,7 @@ class PacketProcessor
 		void Recv(const byte*, int);
 		bool isMsgIn();
 		std::vector<byte> GetMsg();
-		Expected<std::vector<byte>> JoinMsg();
+		Expected<std::vector<byte>, ErrorCode> JoinMsg(std::chrono::milliseconds);
 		void Clear();
 		static std::vector<byte> decapsulate(std::vector<byte>);
 		static std::vector<byte> encapsulate(std::vector<byte>);

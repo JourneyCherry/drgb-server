@@ -1,8 +1,9 @@
 #include "MyTCPServer.hpp"
 
-MyTCPServer::MyTCPServer(int p) : ioc{}, acceptor{ioc, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), (unsigned short)p)}, MyServerSocket(p)
+MyTCPServer::MyTCPServer(int p, int t) : acceptor{ioc, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), (unsigned short)p)}, MyServerSocket(p, t)
 {
 	acceptor.set_option(boost::asio::socket_base::reuse_address(true));
+	port = acceptor.local_endpoint().port();
 }
 
 MyTCPServer::~MyTCPServer()
@@ -10,51 +11,54 @@ MyTCPServer::~MyTCPServer()
 	Close();
 }
 
-void MyTCPServer::Close()
+bool MyTCPServer::is_open()
 {
-	ioc.stop();
+	return acceptor.is_open();
 }
 
-Expected<std::shared_ptr<MyClientSocket>, ErrorCode> MyTCPServer::Accept()
+void MyTCPServer::CloseSocket()
 {
-	std::shared_ptr<boost::asio::io_context> client_ioc = std::make_shared<boost::asio::io_context>();
-	boost::asio::ip::tcp::socket socket{*client_ioc};
-	std::shared_ptr<MyTCPClient> client = nullptr;
-	boost::system::error_code result = boost::asio::error::operation_aborted;
-	std::exception_ptr eptr = nullptr;
+	acceptor.close();
+	safe_loop([&](std::shared_ptr<MyClientSocket> client){ client->Close(); });
+}
 
-	acceptor.async_accept(socket, [&](boost::system::error_code ec){
-		result = ec;
-		if(ec)
-			return;
-		try
-		{
-			client = std::make_shared<MyTCPClient>(client_ioc, std::move(socket));
-		}
-		catch(StackTraceExcept e)
-		{
-			e.stack(__STACKINFO__);
-			eptr = std::make_exception_ptr(e);
-		}
-		catch(const std::exception &e)
-		{
-			eptr = std::make_exception_ptr(StackTraceExcept(e.what(), __STACKINFO__));
-		}
-	});
+void MyTCPServer::StartAccept(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handle)
+{
+	enterHandle = handle;
+	acceptor.async_accept(std::bind(&MyTCPServer::Accept_Handle, this, std::placeholders::_1, std::placeholders::_2));
+	StartThread();
+}
 
-	if(ioc.stopped())
-		ioc.restart();
-	ioc.run();
-
-	if(result)
+void MyTCPServer::Accept_Handle(boost::system::error_code error_code, boost::asio::ip::tcp::socket socket)
+{
+	if(error_code.failed())
 	{
-		if(result == boost::asio::error::operation_aborted)
-			return {ERR_CONNECTION_CLOSED};
-		return {result};
+		ErrorCode ec(error_code);
+		if(MyClientSocket::isNormalClose(ec))
+			return;
+		throw ErrorCodeExcept(ec, __STACKINFO__);
 	}
+
+	std::exception_ptr eptr = nullptr;
+	try
+	{
+		AddClient(GetClient(socket, enterHandle));
+	}
+	catch(...)
+	{
+		eptr = std::current_exception();
+	}
+	if(is_open())
+		acceptor.async_accept(std::bind(&MyTCPServer::Accept_Handle, this, std::placeholders::_1, std::placeholders::_2));
+
 	if(eptr)
 		std::rethrow_exception(eptr);
-	if(!client)		//MyTCPServer::Close()의 호출로 종료되면 보통 위의 result에서 걸려 나가지만, 혹시모를 예외사항을 위해 
-		return {result};//한번 더 검증을 수행함.
-	return {client, true};
+}
+
+std::shared_ptr<MyClientSocket> MyTCPServer::GetClient(boost::asio::ip::tcp::socket& socket, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handle)
+{
+	auto client = std::make_shared<MyTCPClient>(std::move(socket));
+	client->Prepare(handle);
+
+	return client;
 }

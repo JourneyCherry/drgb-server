@@ -122,12 +122,19 @@ std::vector<byte> PacketProcessor::GetMsg()
 	return result;
 }
 
-Expected<std::vector<byte>> PacketProcessor::JoinMsg()
+Expected<std::vector<byte>, ErrorCode> PacketProcessor::JoinMsg(std::chrono::milliseconds dur)
 {
 	locker lk(mtx);
-	cv.wait(lk, [&](){return isMsgIn() || !isRunning;});
+	if(dur.count() <= 0)
+		cv.wait(lk, [&](){return isMsgIn() || !isRunning;});
+	else
+	{
+		bool not_timeout = cv.wait_for(lk, dur, [&](){return isMsgIn() || !isRunning; });
+		if(!not_timeout)
+			return ErrorCode{ERR_TIMEOUT};
+	}
 	if(!isRunning)
-		return {};
+		return ErrorCode{ERR_CONNECTION_CLOSED};
 	auto result = msgs.front();
 	msgs.pop();
 	lk.unlock();

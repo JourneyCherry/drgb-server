@@ -1,38 +1,23 @@
 #pragma once
-#include <mutex>
-#include <thread>
-#include <memory>
-#include <string>
-#include <cerrno>
-//For TCP
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-//For SSL
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-////
-#include "MyServerSocket.hpp"
+#include <boost/asio/ssl.hpp>
+#include "MyTCPServer.hpp"
 #include "MyTCPTLSClient.hpp"
 
 using mylib::utils::ErrorCodeExcept;
 using mylib::utils::Expected;
 
-class MyTCPTLSServer : public MyServerSocket
+class MyTCPTLSServer : public MyTCPServer
 {
 	private:
-		static constexpr int LISTEN_SIZE = 5;
-		SSL_CTX *ctx;
+		boost::asio::ssl::context sslctx;
+	
+	protected:
+		std::shared_ptr<MyClientSocket> GetClient(boost::asio::ip::tcp::socket&, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
 
-		int server_fd;
 	public:
-		MyTCPTLSServer(int, const char*, const char*);
+		MyTCPTLSServer(int, int, std::string, std::string);
 		MyTCPTLSServer(const MyTCPTLSServer&) = delete;
 		MyTCPTLSServer(MyTCPTLSServer&&) = delete;
-		~MyTCPTLSServer();
-
-		Expected<std::shared_ptr<MyClientSocket>, ErrorCode> Accept() override;
-		void Close() override;
 
 		MyTCPTLSServer& operator=(const MyTCPTLSServer&) = delete;
 		MyTCPTLSServer& operator=(MyTCPTLSServer&&) = delete;
