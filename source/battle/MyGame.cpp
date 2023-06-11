@@ -8,15 +8,16 @@ const std::map<int, int> MyGame::required_energy =
 	{PUNCH, 1},
 	{FIRE, 2}
 };
-const std::chrono::seconds MyGame::StartAnim_Time = std::chrono::seconds(2);
 const std::chrono::seconds MyGame::Round_Time = std::chrono::seconds(2);
 const std::chrono::seconds MyGame::Dis_Time = std::chrono::seconds(15);
+const std::chrono::seconds MyGame::StartAnim_Time = std::chrono::seconds(2) + MyGame::Round_Time;	//Start Animation이 그려진 뒤, 자동으로 한 라운드를 진행하므로 사용자 입력을 기다리는 Round_Time이 추가되어야 한다.
 
-MyGame::MyGame(Account_ID_t lpid, Account_ID_t rpid)
+MyGame::MyGame(Account_ID_t lpid, Account_ID_t rpid, std::shared_ptr<boost::asio::steady_timer> t) : timer(t), state_level(0), now_round(-1)
 {
 	ulock lk(mtx);
 	players[0].id = lpid;
 	players[1].id = rpid;
+	logtitlestr = "Game (" + std::to_string(players[0].id) + " vs " + std::to_string(players[1].id) + ")";
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
 		players[i].socket = nullptr;
@@ -63,11 +64,11 @@ int MyGame::Connect(Account_ID_t id, std::shared_ptr<MyClientSocket> socket)
 				Disconnect(i, existing);
 				existing->Send(ByteQueue::Create<byte>(ERR_DUPLICATED_ACCESS));
 				existing->Close();
-				Logger::log("Account " + std::to_string(id) + " has duplicate access : " + existing->ToString() + " -> " + socket->ToString(), Logger::LogType::auth);
+				Logger::log("Account " + std::to_string(id) + " has dup access : " + existing->ToString() + " -> " + socket->ToString(), Logger::LogType::auth);
 				lk.lock();
 			}
 			players[i].socket = socket;
-			cv.notify_all();
+			timer->cancel();
 			return i;
 		}
 	}
@@ -81,7 +82,7 @@ void MyGame::Disconnect(int side, std::shared_ptr<MyClientSocket> socket)
 	if(players[side].socket == socket)
 	{
 		players[side].socket = nullptr;
-		cv.notify_all();
+		timer->cancel();
 	}
 }
 
@@ -112,53 +113,67 @@ int MyGame::GetWinner()
 	return winner;
 }
 
-void MyGame::Work()
+bool MyGame::Work(const bool& interrupted)
 {
-	std::string logtitlestr = "Game (" + std::to_string(players[0].id) + " vs " + std::to_string(players[1].id) + ")";
-	std::function<bool()> isAllIn = [&](){
-		for(int i = 0;i<MAX_PLAYER;i++)
-		{
-			if(!players[i].socket)
-				return false;
-		}
-		return true;
-	};
-	//Player 최초 접속 기다리기.
+	switch(state_level)
 	{
-		ulock lk(mtx);
-		bool allIn = cv.wait_for(lk, Dis_Time, isAllIn);
-		if(!allIn)	//시작 전에 튕기면 게임 자체를 기록하지 않는다. 단, 1라운드라도 지나고 나가면 무효게임이라 하더라도 닷지로 처리한다.
-		{
-			for(int i = 0;i<MAX_PLAYER;i++)
-				players[i].result = GAME_CRASHED;
-			Logger::log(logtitlestr + " : Crashed by disconnect", Logger::LogType::info);
-			return;
-		}
-		SendAll(ByteQueue::Create<byte>(GAME_PLAYER_ALL_CONNECTED) + ByteQueue::Create<int>(-1));
-		std::this_thread::sleep_for(StartAnim_Time);
-	}
-
-	//실제 플레이 내용
-	int now_round = 0;
-	bool drawed = true;
-	bool crashed = false;
-	for(;now_round < MAX_ROUND;now_round++)
-	{
-		ulock lk(mtx);
-		bool isSomeoneOut = cv.wait_for(lk, Round_Time, [&](){return !isAllIn();});	//cv.wait_for()는 시간이 다된&Notify된 시점의 Predicate값을 return 한다.
-		if(isSomeoneOut)
-		{
-			SendAll(ByteQueue::Create<byte>(GAME_PLAYER_DISCONNEDTED));
-			bool isAllConnected = cv.wait_for(lk, Dis_Time, isAllIn);
-			lk.unlock();
-			if(!isAllConnected)	//Disconnection Time이 지날떄까지 들어오지 못하면 해당 게임은 종료된다.
+		case 0:	//최초 호출
+			timer->expires_after(Dis_Time);
+			state_level++;
+			return true;
+		case 1:		//Player 최초 접속 기다리기.
+			if(isAllIn())
 			{
-				crashed = true;	//drawed가 false면 dis로 승리했음을 의미한다.
-				if(now_round > DODGE_ROUND && GetWinner() >= 0)	//일정 라운드 이내거나 둘다 연결이 종료되면 무효. 그 외엔 나간 쪽이 loose
-					drawed = false;
-				break;
+				state_level++;
+				SendAll(ByteQueue::Create<byte>(GAME_PLAYER_ALL_CONNECTED) + ByteQueue::Create<int>(now_round++));
+				timer->expires_after(StartAnim_Time);
+				return true;
+			}
+			if(!interrupted)
+			{
+				ulock lk(mtx);
+				for(int i = 0;i<MAX_PLAYER;i++)
+					players[i].result = GAME_CRASHED;
+				lk.unlock();
+				
+				Logger::log(logtitlestr + " : Crashed by disconnect", Logger::LogType::info);
+				ProcessResult(true, true);
+				return false;
+			}
+			return true;
+		case 2:		//Game Play
+			if(interrupted)
+			{
+				if(!isAllIn())
+				{
+					SendAll(ByteQueue::Create<byte>(GAME_PLAYER_DISCONNEDTED));
+					timer->expires_after(Dis_Time);
+					state_level++;
+				}
 			}
 			else
+			{
+				bool isGameOver = process();
+				//라운드 결과 전달하기.
+				ByteQueue result = ByteQueue::Create<byte>(GAME_ROUND_RESULT);
+				result.push<int>(now_round);
+
+				for(int i = 0;i<MAX_PLAYER;i++)
+					players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
+				for(int i = 0;i<MAX_PLAYER;i++)
+					players[i].action = MEDITATE;
+
+				if(++now_round >= MAX_ROUND || isGameOver)
+				{
+					ProcessResult(!isGameOver, false);
+					return false;
+				}
+
+				timer->expires_after(Round_Time);
+			}
+			return true;
+		case 3:		//Disconnected
+			if(isAllIn())
 			{
 				now_round--;		//해당 라운드를 무효 한 뒤,
 
@@ -167,36 +182,34 @@ void MyGame::Work()
 
 				if(now_round >= 0)	//최초 라운드는 결과를 보내지 않는다.(아직 진행된 내용이 없으므로)
 				{
+					ulock lk(mtx);
 					for(int i = 0;i<MAX_PLAYER;i++)
 						players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
 					for(int i = 0;i<MAX_PLAYER;i++)
 						players[i].action = MEDITATE;
 				}
-				std::this_thread::sleep_for(StartAnim_Time);
+				else
+					SendAll(result);
+
+				timer->expires_after(StartAnim_Time);
+				state_level--;
+				return true;
 			}
-		}
-		else
-		{
-			bool isGameOver = process();
-			//라운드 결과 전달하기.
-			ByteQueue result = ByteQueue::Create<byte>(GAME_ROUND_RESULT);
-			result.push<int>(now_round);
-
-			for(int i = 0;i<MAX_PLAYER;i++)
-				players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
-			for(int i = 0;i<MAX_PLAYER;i++)
-				players[i].action = MEDITATE;
-
-			lk.unlock();
-
-			if(isGameOver)
+			if(!interrupted)	//Disconnection Time이 지날떄까지 들어오지 못하면 해당 게임은 종료된다.
 			{
-				drawed = false;
-				break;
+				bool drawed = (now_round <= DODGE_ROUND || GetWinner() < 0);	//일정 라운드 이내거나 둘다 연결이 종료되면 무효. 그 외엔 나간 쪽이 loose
+				ProcessResult(drawed, true);
+				return false;
 			}
-		}
+			return true;
+		default:
+			return false;
 	}
+}
 
+
+void MyGame::ProcessResult(bool drawed, bool crashed)
+{
 	//DB에 경기결과 기록 및 사용자들에게 경기결과 전달 + 연결 종료.
 	int winner = GetWinner();
 	if(drawed && !crashed)	//무승부의 경우.
@@ -332,6 +345,16 @@ bool MyGame::CheckAction(int action)
 
 	if(MYPOPCNT(static_cast<unsigned int>(action)) != 1) return false;	//1 비트가 1개가 아니면 여러 액션을 지칭하거나 없을 수 있으므로 false.
 
+	return true;
+}
+
+bool MyGame::isAllIn()
+{
+	for(int i = 0;i<MAX_PLAYER;i++)
+	{
+		if(!players[i].socket)
+			return false;
+	}
 	return true;
 }
 

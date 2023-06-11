@@ -3,6 +3,8 @@
 #include <condition_variable>
 #include <map>
 #include <chrono>
+#include <boost/asio/error.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include "MyCodes.hpp"
 #include "MyPostgres.hpp"
 #include "MyClientSocket.hpp"
@@ -19,13 +21,16 @@ class MyGame
 		using ulock = std::unique_lock<std::mutex>;
 
 		std::mutex mtx;
-		std::condition_variable cv;
+		std::shared_ptr<boost::asio::steady_timer> timer;
+		std::string logtitlestr;
+
+		int state_level;
+		int now_round;
 
 		static const std::chrono::seconds StartAnim_Time;	//경기 시작/재개 시, 애니메이션 시간.
 		static const std::chrono::seconds Round_Time;
 		static const std::chrono::seconds Dis_Time;	//디스 시간.
 		static const std::map<int, int> required_energy;
-
 
 	public:
 		static constexpr int MAX_PLAYER = 2;
@@ -55,17 +60,19 @@ class MyGame
 		static constexpr int PUNCH = 1 << 3;
 		static constexpr int FIRE = 1 << 4;
 
-		MyGame(Account_ID_t, Account_ID_t);
+		MyGame(Account_ID_t, Account_ID_t, std::shared_ptr<boost::asio::steady_timer>);
 		~MyGame() = default;
 		int Connect(Account_ID_t, std::shared_ptr<MyClientSocket>);
 		void Disconnect(int, std::shared_ptr<MyClientSocket>);
 		void Action(int, int);
 		int GetWinner();
-		void Work();
+		bool Work(const bool&);
 	
 	private:
+		void ProcessResult(bool, bool);
 		bool process();
 		bool CheckAction(int);
+		bool isAllIn();
 		void SendAll(ByteQueue);	//같은 패킷 보낼때 씀.
 		ByteQueue GetPlayerByte(const struct player_info&);
 		void AchieveCount(Account_ID_t, Achievement_ID_t, std::shared_ptr<MyClientSocket>);

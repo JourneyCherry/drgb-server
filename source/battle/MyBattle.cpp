@@ -2,7 +2,8 @@
 
 MyBattle::MyBattle() : 
 	connector("battle", 1, this), keyword_match("match"),
-	gamepool("GamePool", std::bind(&MyBattle::GameProcess, this, std::placeholders::_1), this),
+	//gamepool("GamePool", std::bind(&MyBattle::GameProcess, this, std::placeholders::_1), this),
+	gamepool(1, this),
 	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54324), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54424))
 {
 }
@@ -21,7 +22,7 @@ void MyBattle::Open()
 
 void MyBattle::Close()
 {
-	gamepool.stop();
+	gamepool.Stop();
 	connector.Close();
 	MyPostgres::Close();
 	Logger::log("Battle Server Stop", Logger::LogType::info);
@@ -147,19 +148,16 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 			break;
 		case INQ_AVAILABLE:
 			{
-				int capacity = gamepool.remain();
-				if(capacity == 0)
-					return ByteQueue::Create<byte>(ERR_OUT_OF_CAPACITY);
-					
+				size_t usage = gamepool.Size();
 				ByteQueue answer = ByteQueue::Create<byte>(SUCCESS);
-				answer.push<int>(capacity);
+				answer.push<size_t>(usage);
 				return answer;
 			}
 			break;
 		case INQ_MATCH_TRANSFER:
 			{
-				int capacity = gamepool.remain();
-				if(capacity == 0)
+				auto timer = gamepool.GetTimer();
+				if(timer == nullptr)
 					return ByteQueue::Create<byte>(ERR_OUT_OF_CAPACITY);
 
 				Account_ID_t lpid = bytes.pop<Account_ID_t>();
@@ -167,11 +165,11 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 				Account_ID_t rpid = bytes.pop<Account_ID_t>();
 				Hash_t rpcookie = bytes.pop<Hash_t>();
 
-				std::shared_ptr<MyGame> new_game = std::make_shared<MyGame>(lpid, rpid);
+				std::shared_ptr<MyGame> new_game = std::make_shared<MyGame>(lpid, rpid, timer);
 
 				cookies.Insert(lpid, lpcookie, new_game);
 				cookies.Insert(rpid, rpcookie, new_game);
-				gamepool.insert(new_game);
+				GameProcess(timer, new_game, boost::system::error_code());	//최초 Timer 등록
 
 				auto answer = ByteQueue::Create<byte>(SUCCESS);
 				answer.push<Seed_t>(MACHINE_ID);
@@ -182,16 +180,19 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 	return ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 }
 
-void MyBattle::GameProcess(std::shared_ptr<MyGame> game)
+void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std::shared_ptr<MyGame> game, const boost::system::error_code &error_code)
 {
-	std::array<Account_ID_t, MyGame::MAX_PLAYER> ids;
-	for(int i = 0;i<MyGame::MAX_PLAYER;i++)
-		ids[i] = game->players[i].id;
+	if(!gamepool.is_open())
+		return;
 	std::exception_ptr eptr = nullptr;
 
 	try
 	{
-		game->Work();
+		if(game->Work(error_code.failed()))
+		{
+			timer->async_wait(std::bind(&MyBattle::GameProcess, this, timer, game, std::placeholders::_1));
+			return;
+		}
 
 		std::queue<MyGame::player_info> players;
 		for(int i = 0;i<MyGame::MAX_PLAYER;i++)
@@ -250,8 +251,9 @@ void MyBattle::GameProcess(std::shared_ptr<MyGame> game)
 		eptr = std::make_exception_ptr(StackTraceExcept(e.what(), __STACKINFO__));
 	}
 
-	for(Account_ID_t id : ids)	//exception 발생할 시를 대비한 쿠키 지우기. 이미 예외가 발생했으므로, 후처리는 못한다고 봐야 한다.
-		cookies.EraseLKey(id);
+	gamepool.ReleaseTimer(timer);
+	for(int i = 0;i<MyGame::MAX_PLAYER;i++)
+		cookies.EraseLKey(game->players[i].id);	//exception 발생할 시를 대비한 쿠키 지우기. 이미 예외가 발생했으므로, 후처리는 못한다고 봐야 한다.
 
 	if(eptr)
 		std::rethrow_exception(eptr);

@@ -3,6 +3,7 @@ SET ( LIBS
 	Thread
 	ThreadExceptHandler
 	VariadicPool
+	TimerPool
 )
 
 FOREACH( LIB IN LISTS LIBS )
@@ -17,3 +18,6 @@ TARGET_LINK_LIBRARIES ( FixedPool INTERFACE ThreadExceptHandler StackTraceExcept
 TARGET_LINK_LIBRARIES ( Thread PUBLIC ThreadExceptHandler pthread )
 TARGET_LINK_LIBRARIES ( ThreadExceptHandler PUBLIC )
 TARGET_LINK_LIBRARIES ( VariadicPool INTERFACE Thread ThreadExceptHandler Expected StackTraceExcept )
+TARGET_LINK_LIBRARIES ( TimerPool PUBLIC ThreadExceptHandler )
+
+UNSET ( LIBS )

@@ -15,3 +15,5 @@ ENDFOREACH()
 TARGET_LINK_LIBRARIES ( MyMain PUBLIC Daemonizer ConfigParser MyServerOpt Thread )
 TARGET_LINK_LIBRARIES ( MyServer PUBLIC FixedPool Thread Logger MyTCPServer MyWebsocketServer MyConnectorPool )
 TARGET_LINK_LIBRARIES ( MyServerOpt PUBLIC GetArg Logger )
+
+UNSET ( LIBS )

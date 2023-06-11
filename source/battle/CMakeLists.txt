@@ -27,6 +27,7 @@ TARGET_LINK_LIBRARIES ( MyBattle PUBLIC
 	DeMap
 	MyConnector
 	MyConnectee
+	TimerPool
 )
 
 TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE

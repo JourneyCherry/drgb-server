@@ -37,3 +37,5 @@ TARGET_LINK_LIBRARIES( MyWebsocketClient PUBLIC MyClientSocket ErrorCode )
 TARGET_LINK_LIBRARIES( MyWebsocketServer PUBLIC MyTCPServer MyWebsocketClient )
 TARGET_LINK_LIBRARIES( MyWebsocketTLSClient PUBLIC MyClientSocket ErrorCode )
 TARGET_LINK_LIBRARIES( MyWebsocketTLSServer PUBLIC MyTCPServer MyWebsocketTLSClient )
+
+UNSET ( LIBS )

@@ -56,6 +56,11 @@ StackErrorCode &StackErrorCode::operator=(const StackErrorCode& copy)
 	return *this;
 }
 
+std::string StackErrorCode::what() const
+{
+	return message_code() + CR + "[Stack Trace]" + CR + stacktrace;
+}
+
 void ErrorCodeExcept::ThrowOnFail(ErrorCode ec, std::string file, std::string func, int line)
 {
 	if(!ec)

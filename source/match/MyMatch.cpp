@@ -282,7 +282,7 @@ ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
 				Account_ID_t account_id = bytes.pop<Account_ID_t>();
 				Hash_t cookie = bytes.pop<Hash_t>();
 
-				if(sessions.Size() >= MAX_CLIENTS)
+				if(sessions.Size() >= std::numeric_limits<size_t>::max())	//TODO : OS Maximum Socket Size로 변경 필요.
 					return ByteQueue::Create<byte>(ERR_OUT_OF_CAPACITY);
 				
 				if(!sessions.Insert(account_id, cookie, std::weak_ptr<MyClientSocket>()))
@@ -327,10 +327,11 @@ void MyMatch::MatchMake()
 			
 			if(lpsocket && rpsocket)	//둘다 정상접속 상태이면
 			{
+				try
 				{
 					//모든 Battle 서버에 허용량 확인하기.
 					std::mutex req_mtx;
-					std::map<std::shared_ptr<MyConnector>, int> capacities;
+					std::map<std::shared_ptr<MyConnector>, size_t> capacities;
 
 					connectee.Request("battle", ByteQueue::Create<byte>(INQ_AVAILABLE), [&](std::shared_ptr<MyConnector> connector, Expected<ByteQueue, StackErrorCode> answer)
 					{
@@ -341,23 +342,20 @@ void MyMatch::MatchMake()
 						{
 							case SUCCESS:
 								{
-									int capacity = answer->pop<int>();
+									auto capacity = answer->pop<size_t>();
 									std::unique_lock<std::mutex> lk(req_mtx);
 									capacities.insert({connector, capacity});
 								}
 								break;
-							case ERR_OUT_OF_CAPACITY:
+							default:
 								break;
 						}
 					});
 
 					//가장 capacity가 많은 Connector를 찾아 request 하기.
-					auto maxiter = std::max_element(capacities.begin(), capacities.end(), [](std::pair<std::shared_ptr<MyConnector>, int> const &lhs, std::pair<std::shared_ptr<MyConnector>, int> const &rhs){ return lhs.second < rhs.second; });
-					if(maxiter == capacities.end() || maxiter->second <= 0)
-					{
-						Logger::log("Battle Server Cannot Accept Battle : " + ErrorCode(ERR_OUT_OF_CAPACITY).message_code(), Logger::LogType::error);
-						break;
-					}
+					auto miniter = std::min_element(capacities.begin(), capacities.end(), [](std::pair<std::shared_ptr<MyConnector>, int> const &lhs, std::pair<std::shared_ptr<MyConnector>, int> const &rhs){ return lhs.second < rhs.second; });
+					if(miniter == capacities.end() || miniter->second >= std::numeric_limits<size_t>::max())
+						throw ErrorCodeExcept(ERR_OUT_OF_CAPACITY, __STACKINFO__);
 
 					//battle서버에 battle 등록.
 					ByteQueue req = ByteQueue::Create<byte>(INQ_MATCH_TRANSFER);
@@ -366,32 +364,29 @@ void MyMatch::MatchMake()
 					req.push<Account_ID_t>(rpid);
 					req.push<Hash_t>(sessions.FindLKey(rpid)->first);
 
-					auto req_result = maxiter->first->Request(req);
-					if(!req_result)
-					{
-						Logger::log("Battle Server Cannot Accept Battle : " + req_result.error().message_code(), Logger::LogType::error);
-						break;
-					}
+					auto req_result = miniter->first->Request(req);
+					ErrorCodeExcept::ThrowOnFail(req_result.error(), __STACKINFO__);
+
 					ByteQueue ans = *req_result;
 					byte result = ans.pop<byte>();
-					if(result == SUCCESS)
-					{
-						int battle_server = ans.pop<Seed_t>();
-						Logger::log("Match made : " + std::to_string(lpid) + " vs " + std::to_string(rpid) + " onto " + std::to_string(battle_server), Logger::LogType::info);
-						ByteQueue msg_to_client = ByteQueue::Create<byte>(ANS_MATCHMADE);
-						msg_to_client.push<int>(battle_server);
-						lpsocket->Send(msg_to_client);
-						rpsocket->Send(msg_to_client);
-						matchmaker.PopMatch();
+					if(result != SUCCESS)
+						throw ErrorCodeExcept(result, __STACKINFO__);
 
-						sessions.EraseLKey(lpid);
-						sessions.EraseLKey(rpid);
-					}
-					else	//battle서버에서 매치 전달에 실패한 경우
-					{
-						Logger::log("Battle Server Cannot Accept Battle : " + ErrorCode(result).message_code(), Logger::LogType::error);
-						break;
-					}
+					int battle_server = ans.pop<Seed_t>();
+					Logger::log("Match made : " + std::to_string(lpid) + " vs " + std::to_string(rpid) + " onto " + std::to_string(battle_server), Logger::LogType::info);
+					ByteQueue msg_to_client = ByteQueue::Create<byte>(ANS_MATCHMADE);
+					msg_to_client.push<int>(battle_server);
+					lpsocket->Send(msg_to_client);
+					rpsocket->Send(msg_to_client);
+					matchmaker.PopMatch();
+
+					sessions.EraseLKey(lpid);
+					sessions.EraseLKey(rpid);
+				}
+				catch(const std::exception &e)
+				{
+					Logger::log("Battle Server Cannot Accept : " + std::string(e.what()), Logger::LogType::error);
+					break;
 				}
 			}
 			else	//매칭된 둘 중에 한명이라도 이미 접속을 종료했다면 남은 한명을 다시 큐에 집어넣는다.

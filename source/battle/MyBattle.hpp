@@ -6,11 +6,13 @@
 #include "MyGame.hpp"
 #include "DeMap.hpp"
 #include "MyConnectorPool.hpp"
+#include "TimerPool.hpp"
 #include "MyConnectee.hpp"
 
 using mylib::utils::StackTraceExcept;
 using mylib::utils::DeMap;
 using mylib::threads::FixedPool;
+using mylib::threads::TimerPool;
 
 class MyBattle : public MyServer
 {
@@ -22,7 +24,8 @@ class MyBattle : public MyServer
 		std::string keyword_match;
 
 		DeMap<Account_ID_t, Hash_t, std::shared_ptr<MyGame>> cookies;
-		FixedPool<std::shared_ptr<MyGame>, MAX_GAME> gamepool;
+		//FixedPool<std::shared_ptr<MyGame>, MAX_GAME> gamepool;
+		TimerPool gamepool;
 	
 	public:
 		MyBattle();
@@ -33,7 +36,7 @@ class MyBattle : public MyServer
 		void EnterProcess(std::shared_ptr<MyClientSocket>, ErrorCode);
 		void AuthenticateProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
 		void ClientProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode, Account_ID_t, int, std::shared_ptr<MyGame>);
-		void GameProcess(std::shared_ptr<MyGame>);
+		void GameProcess(std::shared_ptr<boost::asio::steady_timer>, std::shared_ptr<MyGame>, const boost::system::error_code&);
 
 	private:
 		ByteQueue BattleInquiry(ByteQueue);

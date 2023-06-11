@@ -49,6 +49,7 @@ class StackErrorCode : public ErrorCode
 		StackErrorCode(StackErrorCode sec, std::string fi, std::string fu, int l) : ErrorCode(sec) { stacktrace = sec.stacktrace; stack(fi, fu, l); }
 		StackErrorCode(const StackErrorCode& copy) { (*this) = copy; }
 		StackErrorCode &operator=(const StackErrorCode&);
+		std::string what() const;
 	
 	private:
 		void stack(std::string, std::string, int);

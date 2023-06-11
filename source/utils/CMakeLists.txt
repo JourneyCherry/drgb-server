@@ -41,3 +41,5 @@ TARGET_LINK_LIBRARIES ( MyTypes INTERFACE )
 TARGET_LINK_LIBRARIES ( Notifier PUBLIC Expected )
 TARGET_LINK_LIBRARIES ( PacketProcessor PUBLIC ByteQueue StackTraceExcept )
 TARGET_LINK_LIBRARIES ( StackTraceExcept PUBLIC ErrorCode )
+
+UNSET ( LIBS )
