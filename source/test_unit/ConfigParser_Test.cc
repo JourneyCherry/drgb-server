@@ -6,7 +6,7 @@ using mylib::utils::ConfigParser;
 TEST(ConfigParserTest, ArgumentTest)
 {
 	//Test Executable이 생성되는 위치가 drgb_server/source/build/test 이다.
-	ASSERT_TRUE(ConfigParser::ReadFile("../../test/ConfigParser_Test_Resource.conf"));
+	ASSERT_TRUE(ConfigParser::ReadFile("../../test_unit/ConfigParser_Test_Resource.conf"));
 
 	//Default Type Test
 	EXPECT_EQ(3, ConfigParser::GetInt("integer"));

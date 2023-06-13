@@ -233,7 +233,7 @@ void MyPostgres::ArchiveBattle(Account_ID_t winner, Account_ID_t looser, bool dr
 
 Hash_t MyPostgres::GetPwdHash(Account_ID_t id, Pwd_Hash_t pwd, std::string reg_time)
 {
-	static constexpr int MAX_HASH_ITERATION = 32;
+	static constexpr int MAX_HASH_ITERATION = 17;	//최소 1회 ~ 최대 65536회
 	ByteQueue result = ByteQueue::Create<Hash_t>(pwd);
 	ByteQueue salt = ByteQueue(reg_time.c_str(), reg_time.size());
 	unsigned long long iterateCount = 1 << (id % MAX_HASH_ITERATION);

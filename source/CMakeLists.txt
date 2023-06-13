@@ -33,7 +33,7 @@ SET ( TEST_TARGET )
 
 IF( NOT BUILD_TARGET )
 	SET ( BUILD_TARGET auth match battle )
-	LIST ( APPEND TEST_TARGET test )
+	LIST ( APPEND TEST_TARGET test_unit test_stress )
 	include(CTest)
 	enable_testing()
 ENDIF()

@@ -158,10 +158,15 @@ bool MyGame::Work(const bool& interrupted)
 				ByteQueue result = ByteQueue::Create<byte>(GAME_ROUND_RESULT);
 				result.push<int>(now_round);
 
+				ulock lk(mtx);
 				for(int i = 0;i<MAX_PLAYER;i++)
-					players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
+				{
+					if(players[i].socket != nullptr)	//process() 진행 중, player가 나가는 경우가 있으면 에러가 발생함.
+						players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
+				}
 				for(int i = 0;i<MAX_PLAYER;i++)
 					players[i].action = MEDITATE;
+				lk.unlock();
 
 				if(++now_round >= MAX_ROUND || isGameOver)
 				{
@@ -169,7 +174,14 @@ bool MyGame::Work(const bool& interrupted)
 					return false;
 				}
 
-				timer->expires_after(Round_Time);
+				if(!isAllIn())
+				{
+					SendAll(ByteQueue::Create<byte>(GAME_PLAYER_DISCONNEDTED));
+					timer->expires_after(Dis_Time);
+					state_level++;
+				}
+				else
+					timer->expires_after(Round_Time);
 			}
 			return true;
 		case 3:		//Disconnected

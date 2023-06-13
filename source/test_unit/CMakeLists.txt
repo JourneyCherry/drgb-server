@@ -15,6 +15,7 @@ SET ( TESTS
 	StackTraceExcept_Test
 	Socket_Test
 	Connector_Test
+	BoostTimer_Test
 )
 
 FOREACH ( TEST IN LISTS TESTS )
@@ -37,3 +38,6 @@ TARGET_LINK_LIBRARIES ( PacketProcessor_Test PRIVATE PacketProcessor )
 TARGET_LINK_LIBRARIES ( StackTraceExcept_Test PRIVATE StackTraceExcept )
 TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClient MyTCPTLSServer MyWebsocketClient MyWebsocketServer MyWebsocketTLSClient MyWebsocketTLSServer pthread )
 TARGET_LINK_LIBRARIES ( Connector_Test PRIVATE MyConnectorPool MyConnectee )
+TARGET_LINK_LIBRARIES ( BoostTimer_Test PRIVATE pthread )
+
+UNSET ( TESTS )
