@@ -4,6 +4,7 @@
 #include "MyServer.hpp"
 #include "MyPostgres.hpp"
 #include "Encoder.hpp"
+#include "MyConnectee.hpp"
 #include "MyConnectorPool.hpp"
 #include "MyCodes.hpp"
 #include "Hasher.hpp"
@@ -21,6 +22,7 @@ class MyAuth : public MyServer
 		static constexpr int MAX_MATCH_COUNT = 1;
 
 		MyConnectorPool connector;
+		MyConnectee connectee;
 		std::string keyword_match;
 
 	public:

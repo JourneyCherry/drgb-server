@@ -40,5 +40,6 @@ class MyMatch : public MyServer
 	
 	private:
 		ByteQueue MatchInquiry(ByteQueue);
+		ByteQueue MgrInquiry(ByteQueue);
 		void MatchMake();
 };

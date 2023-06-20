@@ -2,7 +2,7 @@
 
 MyBattle::MyBattle() : 
 	connector("battle", 1, this), keyword_match("match"),
-	//gamepool("GamePool", std::bind(&MyBattle::GameProcess, this, std::placeholders::_1), this),
+	connectee("battle", ConfigParser::GetInt("Battle1_Port", 52431), 1, this),	//TODO : MACHINE_ID에 따라 변수명 변경 필요.
 	gamepool(1, this),
 	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54324), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54424))
 {
@@ -16,6 +16,7 @@ void MyBattle::Open()
 {
 	MyPostgres::Open();
 
+	connectee.Accept("drgbmgr", std::bind(&MyBattle::MgrInquiry, this, std::placeholders::_1));
 	connector.Connect(ConfigParser::GetString("Match_Addr"), ConfigParser::GetInt("Match_Port", 52431), keyword_match, std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1));
 	Logger::log("Battle Server Start", Logger::LogType::info);
 }
@@ -60,7 +61,7 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 	}
 
 	Hash_t cookie = packet.pop<Hash_t>();
-	auto session = this->cookies.FindRKey(cookie);
+	auto session = this->sessions.FindRKey(cookie);
 	if(!session)	//세션이 match로부터 오지 않는 경우
 	{
 		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Cookie", Logger::LogType::auth);
@@ -75,7 +76,7 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 	if(side < 0)	//게임이 종료되었거나 올바르지 않은 세션이 올라온 경우
 	{
 		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Game", Logger::LogType::auth);
-		this->cookies.EraseLKey(account_id);
+		this->sessions.EraseLKey(account_id);
 		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 		client->Close();
 		return;
@@ -137,7 +138,7 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 		case INQ_ACCOUNT_CHECK:
 			{
 				Account_ID_t account_id = bytes.pop<Account_ID_t>();
-				auto cookie = cookies.FindLKey(account_id);
+				auto cookie = sessions.FindLKey(account_id);
 				if(!cookie)
 					return ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT);
 				ByteQueue result = ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE);
@@ -146,7 +147,7 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 				return result;
 			}
 			break;
-		case INQ_AVAILABLE:
+		case INQ_USAGE:
 			{
 				size_t usage = gamepool.Size();
 				ByteQueue answer = ByteQueue::Create<byte>(SUCCESS);
@@ -167,8 +168,8 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 
 				std::shared_ptr<MyGame> new_game = std::make_shared<MyGame>(lpid, rpid, timer);
 
-				cookies.Insert(lpid, lpcookie, new_game);
-				cookies.Insert(rpid, rpcookie, new_game);
+				sessions.Insert(lpid, lpcookie, new_game);
+				sessions.Insert(rpid, rpcookie, new_game);
 				GameProcess(timer, new_game, boost::system::error_code());	//최초 Timer 등록
 
 				auto answer = ByteQueue::Create<byte>(SUCCESS);
@@ -204,7 +205,7 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 
 			auto player = players.front();
 			players.pop();
-			auto erase_result = cookies.EraseLKey(player.id);
+			auto erase_result = sessions.EraseLKey(player.id);
 			if(!erase_result)	//session이 없으면 이미 빠진 것이므로 무시.
 				continue;
 			auto [id, cookie, _g] = *erase_result;
@@ -253,8 +254,66 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 
 	gamepool.ReleaseTimer(timer);
 	for(int i = 0;i<MyGame::MAX_PLAYER;i++)
-		cookies.EraseLKey(game->players[i].id);	//exception 발생할 시를 대비한 쿠키 지우기. 이미 예외가 발생했으므로, 후처리는 못한다고 봐야 한다.
+		sessions.EraseLKey(game->players[i].id);	//exception 발생할 시를 대비한 쿠키 지우기. 이미 예외가 발생했으므로, 후처리는 못한다고 봐야 한다.
 
 	if(eptr)
 		std::rethrow_exception(eptr);
+}
+
+ByteQueue MyBattle::MgrInquiry(ByteQueue request)
+{
+	ByteQueue answer;
+	try
+	{
+		byte header = request.pop<byte>();
+		switch(header)
+		{
+			case INQ_CLIENTUSAGE:
+				answer = ByteQueue::Create<byte>(SUCCESS);
+				answer.push<size_t>(tcp_server.GetConnected());
+				answer.push<size_t>(web_server.GetConnected());
+				break;
+			case INQ_CONNUSAGE:
+				{
+					answer = ByteQueue::Create<byte>(SUCCESS);
+
+					auto teeusage = connectee.GetUsage();
+					answer.push<size_t>(teeusage.size());	//connectee 목록
+					for(auto &tee : teeusage)
+					{
+						answer.push<size_t>(tee.first.size());
+						answer.push<std::string>(tee.first);
+						answer.push<size_t>(tee.second);
+					}
+					auto torusage = connector.GetUsage();
+					answer.push<size_t>(torusage.size());	//connector 목록
+					for(auto &tor : torusage)
+					{
+						answer.push<size_t>(tor.first.size());
+						answer.push<std::string>(tor.first);
+						answer.push<int>(tor.second);
+					}
+				}
+				break;
+			case INQ_USAGE:
+				answer = ByteQueue::Create<byte>(SUCCESS);
+				answer.push<size_t>(gamepool.Size());
+				break;
+			case INQ_SESSIONS:
+				answer = ByteQueue::Create<byte>(SUCCESS);
+				answer.push<size_t>(sessions.Size());
+				break;
+			case INQ_ACCOUNT_CHECK:
+				answer = ByteQueue::Create<byte>(sessions.FindLKey(request.pop<Account_ID_t>()).isSuccessed()?SUCCESS:ERR_NO_MATCH_ACCOUNT);
+				break;
+			default:
+				answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
+				break;
+		}
+	}
+	catch(...)
+	{
+		answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
+	}
+	return answer;
 }

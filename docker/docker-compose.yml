@@ -27,6 +27,7 @@ services:
     stdin_open: true
     privileged: true
     ports:
+      - "52431:52431" #server-server port include mgr
       - "54322:54322" #web
       - "54422:54422" #tcp
     cpus: 1         #no effect on wsl2
@@ -45,6 +46,7 @@ services:
     stdin_open: true
     privileged: true
     ports:
+      - "52432:52431" #server-server port include mgr
       - "54323:54323" #web
       - "54423:54423" #tcp
     cpus: 1         #no effect on wsl2
@@ -63,6 +65,7 @@ services:
     stdin_open: true
     privileged: true
     ports:
+      - "52433:52431" #server-server port include mgr
       - "54324:54324" #web
       - "54424:54424" #tcp
     cpus: 1         #no effect on wsl2

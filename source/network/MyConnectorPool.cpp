@@ -132,3 +132,23 @@ size_t MyConnectorPool::GetAuthorized()
 	}
 	return count;
 }
+
+std::map<std::string, int> MyConnectorPool::GetUsage()
+{
+	std::map<std::string, int> result;
+	for(auto &key : keywords)
+	{
+		auto info = pool.FindLKey(key);
+		if(!info)
+			continue;
+		auto connector = std::get<1>(*info);
+		if(!connector->is_open())
+			result.insert({key, -1});
+		else if(!connector->isAuthorized())
+			result.insert({key, 0});
+		else
+			result.insert({key, 1});
+	}
+
+	return result;
+}

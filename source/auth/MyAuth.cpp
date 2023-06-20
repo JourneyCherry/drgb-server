@@ -2,6 +2,7 @@
 
 MyAuth::MyAuth() : 
 	connector("auth", 1, this), keyword_match("match"),
+	connectee("auth", ConfigParser::GetInt("Auth_Port", 52431), 1, this),
 	MyServer(ConfigParser::GetInt("Auth_ClientPort_Web", 54322), ConfigParser::GetInt("Auth_ClientPort_TCP", 54422))
 {
 }
@@ -12,14 +13,15 @@ MyAuth::~MyAuth()
 
 void MyAuth::Open()
 {
-	//connectee.Accept("battle", std::bind(MyAuth::AuthGenie, this, std::placeholders::_1));	//battle 서버가 auth서버로 질의를 할 일은 없다.
 	MyPostgres::Open();
+	connectee.Accept("drgbmgr", std::bind(&MyAuth::AuthInquiry, this, std::placeholders::_1));
 	connector.Connect(ConfigParser::GetString("Match_Addr"), ConfigParser::GetInt("Match_Port"), keyword_match,  std::bind(&MyAuth::AuthInquiry, this, std::placeholders::_1));
 	Logger::log("Auth Server Start", Logger::LogType::info);
 }
 
 void MyAuth::Close()
 {
+	connectee.Close();
 	connector.Close();
 	MyPostgres::Close();
 	Logger::log("Auth Server Stop", Logger::LogType::info);
@@ -190,12 +192,46 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue pac
 ByteQueue MyAuth::AuthInquiry(ByteQueue request)
 {
 	ByteQueue answer;
-	byte header = request.pop<byte>();
-	switch(header)
+	try
 	{
-		default:
-			answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
-			break;
+		byte header = request.pop<byte>();
+		switch(header)
+		{
+			case INQ_CLIENTUSAGE:
+				answer = ByteQueue::Create<byte>(SUCCESS);
+				answer.push<size_t>(tcp_server.GetConnected());
+				answer.push<size_t>(web_server.GetConnected());
+				break;
+			case INQ_CONNUSAGE:
+				{
+					answer = ByteQueue::Create<byte>(SUCCESS);
+
+					auto teeusage = connectee.GetUsage();
+					answer.push<size_t>(teeusage.size());	//connectee 목록
+					for(auto &tee : teeusage)
+					{
+						answer.push<size_t>(tee.first.size());
+						answer.push<std::string>(tee.first);
+						answer.push<size_t>(tee.second);
+					}
+					auto torusage = connector.GetUsage();
+					answer.push<size_t>(torusage.size());	//connector 목록
+					for(auto &tor : torusage)
+					{
+						answer.push<size_t>(tor.first.size());
+						answer.push<std::string>(tor.first);
+						answer.push<int>(tor.second);
+					}
+				}
+				break;
+			default:
+				answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
+				break;
+		}
+	}
+	catch(...)
+	{
+		answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 	}
 	return answer;
 }

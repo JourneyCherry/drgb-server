@@ -25,6 +25,8 @@ class MyServer : public ThreadExceptHandler
 		static constexpr int MAX_SOCKET = 2;
 		int port_web;
 		int port_tcp;
+	
+	protected:
 		MyTCPServer tcp_server;
 		MyWebsocketServer web_server;
 

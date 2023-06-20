@@ -33,4 +33,5 @@ class MyConnectorPool : public ThreadExceptHandler
 		void Close();
 		size_t GetConnected() const;
 		size_t GetAuthorized();
+		std::map<std::string, int> GetUsage();
 };

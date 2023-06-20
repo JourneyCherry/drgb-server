@@ -16,6 +16,7 @@ void MyMatch::Open()
 	MyPostgres::Open();
 	connectee.Accept("auth", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connectee.Accept("battle", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
+	connectee.Accept("drgbmgr", std::bind(&MyMatch::MgrInquiry, this, std::placeholders::_1));
 	Logger::log("Match Server Start", Logger::LogType::info);
 }
 
@@ -333,7 +334,7 @@ void MyMatch::MatchMake()
 					std::mutex req_mtx;
 					std::map<std::shared_ptr<MyConnector>, size_t> capacities;
 
-					connectee.Request("battle", ByteQueue::Create<byte>(INQ_AVAILABLE), [&](std::shared_ptr<MyConnector> connector, Expected<ByteQueue, StackErrorCode> answer)
+					connectee.Request("battle", ByteQueue::Create<byte>(INQ_USAGE), [&](std::shared_ptr<MyConnector> connector, Expected<ByteQueue, StackErrorCode> answer)
 					{
 						if(!answer)
 							return;
@@ -399,4 +400,54 @@ void MyMatch::MatchMake()
 			}
 		}
 	}
+}
+
+ByteQueue MyMatch::MgrInquiry(ByteQueue request)
+{
+	ByteQueue answer;
+
+	try
+	{
+		byte header = request.pop<byte>();
+		switch(header)
+		{
+			case INQ_CLIENTUSAGE:
+				answer = ByteQueue::Create<byte>(SUCCESS);
+				answer.push<size_t>(tcp_server.GetConnected());
+				answer.push<size_t>(web_server.GetConnected());
+				break;
+			case INQ_CONNUSAGE:
+				{
+					answer = ByteQueue::Create<byte>(SUCCESS);
+
+					auto teeusage = connectee.GetUsage();
+					answer.push<size_t>(teeusage.size());	//connectee 목록
+					for(auto &tee : teeusage)
+					{
+						answer.push<size_t>(tee.first.size());
+						answer.push<std::string>(tee.first);
+						answer.push<size_t>(tee.second);
+					}
+					answer.push<size_t>(0);	//connector 목록
+					//Match는 Connector를 사용하지 않지만 답 패킷 포맷 유지를 위해 구분바이트를 넣음.
+				}
+				break;
+			case INQ_SESSIONS:
+				answer = ByteQueue::Create<byte>(SUCCESS);
+				answer.push<size_t>(sessions.Size());
+				break;
+			case INQ_ACCOUNT_CHECK:
+				answer = ByteQueue::Create<byte>(sessions.FindLKey(request.pop<Account_ID_t>()).isSuccessed()?SUCCESS:ERR_NO_MATCH_ACCOUNT);
+				break;
+			default:
+				answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
+				break;
+		}
+	}
+	catch(...)
+	{
+		answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
+	}
+
+	return answer;
 }

@@ -60,5 +60,8 @@ static constexpr byte INQ_ANSWER = 51;			//Inquiry에 대한 답 헤더.
 static constexpr byte INQ_COOKIE_CHECK = 52;	//쿠키 존재/만료 여부 확인.
 static constexpr byte INQ_ACCOUNT_CHECK = 53;	//계정 접속/만료 여부 확인.
 static constexpr byte INQ_COOKIE_TRANSFER = 54;	//쿠키 전달. 
-static constexpr byte INQ_AVAILABLE = 55;		//가용량 확인.
-static constexpr byte INQ_MATCH_TRANSFER = 56;	//매치 전달. Account_ID_t, Hash_t(cookie), Account_ID_t, Hash_t(cookie) 순으로 따라온다.
+static constexpr byte INQ_MATCH_TRANSFER = 55;	//매치 전달. Account_ID_t, Hash_t(cookie), Account_ID_t, Hash_t(cookie) 순으로 따라온다.
+static constexpr byte INQ_USAGE = 56;			//사용량(서버 내 자원) 확인.
+static constexpr byte INQ_CLIENTUSAGE = 57;		//사용량(클라이언트 접속량) 확인. 동시접속자 수와 동일
+static constexpr byte INQ_CONNUSAGE = 58;		//사용량(Connector 접속량) 확인.
+static constexpr byte INQ_SESSIONS = 59;		//세션 수. (세션 수 - 동시접속자 수) == 대기 세션(쿠키만 할당 받고 아직 접속하지 않은 사용자 수)

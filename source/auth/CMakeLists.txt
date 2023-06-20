@@ -20,6 +20,7 @@ TARGET_LINK_LIBRARIES ( MyAuth PUBLIC
 	MyPostgres
 	Encoder
 	MyConnector
+	MyConnectee
 	MyCodes
 	Hasher
 )

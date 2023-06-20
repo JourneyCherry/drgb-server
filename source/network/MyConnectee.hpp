@@ -23,7 +23,6 @@ class MyConnectee : public MyTCPServer
 	private:
 		ThreadExceptHandler except;
 
-		std::vector<std::string> registered_keywords;
 		std::map<std::string, std::function<ByteQueue(ByteQueue)>> KeywordProcessMap;
 		std::string identify_keyword;
 
@@ -36,4 +35,5 @@ class MyConnectee : public MyTCPServer
 		void Accept(std::string, std::function<ByteQueue(ByteQueue)>);
 		void Request(std::string, ByteQueue, std::function<void(std::shared_ptr<MyConnector>, Expected<ByteQueue, StackErrorCode>)>);
 		size_t GetAuthorized();
+		std::map<std::string, size_t> GetUsage();
 };

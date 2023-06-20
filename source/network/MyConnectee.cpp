@@ -68,13 +68,42 @@ void MyConnectee::Request(std::string keyword, ByteQueue request, std::function<
 
 size_t MyConnectee::GetAuthorized()
 {
-	size_t count = 0;
-	std::unique_lock<std::mutex> lk(mtx_client);
-	for(auto &client : clients)
+	std::atomic<size_t> count = 0;
+	safe_loop([&](std::shared_ptr<MyClientSocket> client)
 	{
 		auto connector = std::dynamic_pointer_cast<MyConnector>(client);
 		if(connector->is_open() && connector->isAuthorized())
 			count++;
-	}
+	});
 	return count;
+}
+
+std::map<std::string, size_t> MyConnectee::GetUsage()
+{
+	std::map<std::string, size_t> result;
+	std::atomic<size_t> disconnected(0);
+	std::atomic<size_t> connected(0);
+	std::map<std::string, std::atomic<size_t>> authorized;
+	for(auto &pair : KeywordProcessMap)
+		authorized.insert_or_assign(pair.first, 0);
+
+	safe_loop([&](std::shared_ptr<MyClientSocket> client)
+	{
+		auto connector = std::dynamic_pointer_cast<MyConnector>(client);
+		if(!connector->is_open())
+			disconnected.fetch_add(1);
+		else if(!connector->isAuthorized())
+			connected.fetch_add(1);
+		else if(authorized.find(connector->keyword) == authorized.end())
+			connected.fetch_add(1);
+		else
+			authorized[connector->keyword].fetch_add(1);
+	});
+
+	for(auto &pair : authorized)
+		result.insert({pair.first, pair.second.load()});
+	result.insert({"Unauthorized", connected.load()});
+	result.insert({"Disconnected", disconnected.load()});
+
+	return result;
 }
