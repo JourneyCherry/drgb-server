@@ -1,6 +1,7 @@
 #include "MyAuth.hpp"
 
 MyAuth::MyAuth() : 
+	redis(SESSION_TIMEOUT),
 	connector("auth", 1, this), keyword_match("match"),
 	connectee("auth", ConfigParser::GetInt("Auth_Port", 52431), 1, this),
 	MyServer(ConfigParser::GetInt("Auth_ClientPort_Web", 54322), ConfigParser::GetInt("Auth_ClientPort_TCP", 54422))
@@ -14,6 +15,7 @@ MyAuth::~MyAuth()
 void MyAuth::Open()
 {
 	MyPostgres::Open();
+	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
 	connectee.Accept("drgbmgr", std::bind(&MyAuth::AuthInquiry, this, std::placeholders::_1));
 	connector.Connect(ConfigParser::GetString("Match_Addr"), ConfigParser::GetInt("Match_Port"), keyword_match,  std::bind(&MyAuth::AuthInquiry, this, std::placeholders::_1));
 	Logger::log("Auth Server Start", Logger::LogType::info);
@@ -23,6 +25,7 @@ void MyAuth::Close()
 {
 	connectee.Close();
 	connector.Close();
+	redis.Close();
 	MyPostgres::Close();
 	Logger::log("Auth Server Stop", Logger::LogType::info);
 }
@@ -61,6 +64,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue pac
 		return;
 	}
 
+	//Authenticate
 	try
 	{
 		byte header = packet.pop<byte>();
@@ -127,6 +131,46 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue pac
 			return;
 		}
 
+		//session check
+		{
+			auto info = redis.GetInfoFromID(account_id);
+			if(!info)
+			{
+				if(info.error().code() == ERR_CONNECTION_CLOSED)
+				{
+					client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+					return;
+				}
+				ByteQueue seed = ByteQueue::Create<Account_ID_t>(account_id) + ByteQueue::Create<std::chrono::time_point<std::chrono::system_clock>>(std::chrono::system_clock::now());
+				Hash_t cookie = Hasher::sha256(seed);
+
+				//중복 쿠키 확인후, 존재하면 다시 해시하기.
+				while(redis.GetInfoFromCookie(cookie).isSuccessed())
+					cookie = Hasher::sha256(cookie.data(), cookie.size());
+
+				auto result = redis.SetInfo(account_id, cookie, keyword_match);
+				if(!result)
+					client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+				else
+				{
+					client->Send(ByteQueue::Create<byte>(SUCCESS) + ByteQueue::Create<Hash_t>(cookie));
+					client->Close();
+				}
+			}
+			else
+			{
+				ByteQueue cookie = ByteQueue::Create<Hash_t>(info->first);
+				std::string serverName = info->second;
+				//TODO : match에 질의해서 해당 keyword의 서버가 연결되어 있는지, 주소는 어디인지 받아오기.(match 자기 자신 포함)
+				if(serverName == keyword_match)
+					client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_MATCH) + cookie);
+				else
+					client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE) + ByteQueue::Create<Seed_t>(1));
+				client->Close();
+			}
+		}
+
+		/*
 		//match/battle 서버에 cookie 확인. battle 서버는 match서버가 확인해 줄 것임.
 		{
 			ByteQueue query = ByteQueue::Create<byte>(INQ_ACCOUNT_CHECK);
@@ -181,6 +225,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue pac
 					throw StackTraceExcept("Unknown Header From Match : " + std::to_string(query_header), __STACKINFO__);
 			}
 		}
+		*/
 	}
 	catch(const std::exception& e)
 	{

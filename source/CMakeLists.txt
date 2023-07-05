@@ -45,6 +45,7 @@ SET ( DIRS
 	security
 	threads
 	postgres
+	redis
 	network
 	templates
 	

@@ -28,6 +28,7 @@ TARGET_LINK_LIBRARIES ( MyBattle PUBLIC
 	MyConnector
 	MyConnectee
 	TimerPool
+	MyRedis
 )
 
 TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE

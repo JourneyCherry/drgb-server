@@ -34,6 +34,7 @@ TARGET_LINK_LIBRARIES ( MyMatch PUBLIC
 	MyMatchMaker
 	MyNotifyMsgs
 	MyPostgres
+	MyRedis
 )
 
 TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE

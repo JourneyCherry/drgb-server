@@ -1,0 +1,27 @@
+SET ( LIB_NAME MyRedis )
+SET ( LIBS
+	MyRedisReply
+)
+
+FIND_PACKAGE ( hiredis REQUIRED )
+
+ADD_LIBRARY ( ${LIB_NAME} EXCLUDE_FROM_ALL ${LIB_NAME}.cpp ${LIB_NAME}.hpp )
+FOREACH( LIB IN LISTS LIBS )
+	ADD_LIBRARY ( ${LIB} EXCLUDE_FROM_ALL ${LIB}.cpp ${LIB}.hpp )
+ENDFOREACH()
+
+TARGET_LINK_LIBRARIES ( ${LIB_NAME} PUBLIC 
+	hiredis
+	ErrorCode
+	Expected
+	Encoder
+
+	${LIBS}
+)
+
+TARGET_COMPILE_OPTIONS ( ${LIB_NAME} PUBLIC
+	-std=c++17
+)
+
+UNSET ( LIB_NAME )
+UNSET ( LIBS )

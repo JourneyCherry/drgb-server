@@ -1,8 +1,11 @@
 #include "MyMatch.hpp"
 
+const std::string MyMatch::self_keyword = "match";
+
 MyMatch::MyMatch() : 
-	connectee("match", ConfigParser::GetInt("Match_Port"), 2, this), 
+	connectee(self_keyword, ConfigParser::GetInt("Match_Port"), 2, this), 
 	t_matchmaker(std::bind(&MyMatch::MatchMake, this), this),
+	redis(SESSION_TIMEOUT),
 	MyServer(ConfigParser::GetInt("Match_ClientPort_Web", 54323), ConfigParser::GetInt("Match_ClientPort_TCP", 54423))
 {
 }
@@ -14,6 +17,7 @@ MyMatch::~MyMatch()
 void MyMatch::Open()
 {
 	MyPostgres::Open();
+	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
 	connectee.Accept("auth", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connectee.Accept("battle", std::bind(&MyMatch::MatchInquiry, this, std::placeholders::_1));
 	connectee.Accept("drgbmgr", std::bind(&MyMatch::MgrInquiry, this, std::placeholders::_1));
@@ -23,6 +27,7 @@ void MyMatch::Open()
 void MyMatch::Close()
 {
 	connectee.Close();
+	redis.Close();
 	MyPostgres::Close();
 	Logger::log("Match Server Stop", Logger::LogType::info);
 }
@@ -59,12 +64,23 @@ void MyMatch::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQu
 	}
 
 	Hash_t cookie = packet.pop<Hash_t>();
-	Account_ID_t account_id = 0;
-	auto result = this->sessions.FindRKey(cookie);
-	if(result)
+
+	//Session Server에서 Session 찾기
+	auto info = redis.GetInfoFromCookie(cookie);
+	if(!info || info->second != self_keyword)
 	{
-		account_id = result->first;
-		auto origin = result->second;
+		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+		client->Close();
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
+		return;
+	}
+	Account_ID_t account_id = info->first;
+
+	//Local Server에서 Session 찾기
+	auto session = this->sessions.FindRKey(cookie);
+	if(session)
+	{
+		auto origin = session->second;
 		if(!origin.expired())	//Dup-Access Process
 		{
 			this->matchmaker.Exit(account_id);
@@ -75,15 +91,8 @@ void MyMatch::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQu
 		}
 		this->sessions.InsertLKeyValue(account_id, client->weak_from_this());
 	}
-	if(account_id <= 0)
-	{
-		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
-		client->Close();
-		Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
-		return;
-	}
-
-	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
+	else
+		this->sessions.Insert(account_id, cookie, client->weak_from_this());
 
 	//사용자에게 정보 전달.
 	try
@@ -118,17 +127,24 @@ void MyMatch::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQu
 	}
 
 	client->StartRecv(std::bind(&MyMatch::ClientProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, account_id));
+	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
+	client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyMatch::SessionProcess, this, std::placeholders::_1, account_id, cookie));
 }
 
 void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec, Account_ID_t account_id)
 {
 	if(!recv_ec)
 	{
-		if(client->isNormalClose(recv_ec))
+		if(client->isNormalClose(recv_ec))	//TODO : 아무것도 안하고 나갔을 경우, 세션이 제대로 빠지지 않는다. 확인 필요.
 			Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
 		else
 			Logger::log("Account " + std::to_string(account_id) + " logged out with " + recv_ec.message_code(), Logger::LogType::auth);
 		matchmaker.Exit(account_id);
+		auto session = sessions.FindLKey(account_id);
+		if(!session)
+			return;
+		if(session->second.lock() == client)	//dup-accessed when it is false
+			sessions.EraseLKey(account_id);
 		client->Close();
 		return;
 	}
@@ -214,23 +230,15 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue pa
 	}
 }
 
-void MyMatch::MatchProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, Account_ID_t account_id)
-{
-	client->Send(packet);
-}
-
-void MyMatch::ExitProcess(std::shared_ptr<MyClientSocket> client, const boost::system::error_code &error_code, Account_ID_t account_id)
+void MyMatch::SessionProcess(std::shared_ptr<MyClientSocket> client, const Account_ID_t& account_id, const Hash_t& cookie)
 {
 	if(!client->is_open())
-	{
-		matchmaker.Exit(account_id);
-		Logger::log("Account " + std::to_string(account_id) + " logged out from " + client->ToString(), Logger::LogType::auth);
-		auto session = sessions.FindLKey(account_id);
-		if(!session)
-			return;
-		if(session->second.lock() == client)	//dup-accessed when it is false
-			sessions.EraseLKey(account_id);
-	}
+		return;
+
+	if(redis.RefreshInfo(account_id, cookie, self_keyword))
+		client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyMatch::SessionProcess, this, std::placeholders::_1, account_id, cookie));
+	else
+		client->Close();
 }
 
 ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
@@ -238,6 +246,7 @@ ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
 	byte header = bytes.pop<byte>();
 	switch(header)
 	{
+		/*
 		case INQ_ACCOUNT_CHECK:
 			{
 				Account_ID_t account_id = bytes.pop<Account_ID_t>();
@@ -290,6 +299,8 @@ ByteQueue MyMatch::MatchInquiry(ByteQueue bytes)
 					return ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_MATCH);
 			}
 			return ByteQueue::Create<byte>(SUCCESS);
+		*/
+		//TODO : Auth로부터 keyword질의를 받아 (자기 자신을 포함하여) 해당 keyword의 서버 주소(client로부터의 접근 주소) 전달하기.
 	}
 
 	return ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
@@ -373,7 +384,13 @@ void MyMatch::MatchMake()
 					if(result != SUCCESS)
 						throw ErrorCodeExcept(result, __STACKINFO__);
 
-					int battle_server = ans.pop<Seed_t>();
+					int battle_server = ans.pop<Seed_t>();										//TODO : 이 값과
+					std::string battle_server_name = "battle" + std::to_string(battle_server);	//TODO : 이 값을 Battle 서버가 match서버로 접근 시도했을 때, 할당해주고, 이름 저장해두고, Public Address/Port를 받아와, 그 값을 Client에게 전달해야 한다.
+
+					//Session 서버 등록.
+					redis.SetInfo(lpid, lpcookie, battle_server_name);
+					redis.SetInfo(rpid, rpcookie, battle_server_name);
+
 					Logger::log("Match made : " + std::to_string(lpid) + " vs " + std::to_string(rpid) + " onto " + std::to_string(battle_server), Logger::LogType::info);
 					ByteQueue msg_to_client = ByteQueue::Create<byte>(ANS_MATCHMADE);
 					msg_to_client.push<int>(battle_server);

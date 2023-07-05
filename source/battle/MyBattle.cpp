@@ -1,9 +1,12 @@
 #include "MyBattle.hpp"
 
 MyBattle::MyBattle() : 
+	machine_id(1),		//TODO : match 서버로부터 값 받아오기 필요.
+	self_keyword("battle" + std::to_string(machine_id)),
 	connector("battle", 1, this), keyword_match("match"),
-	connectee("battle", ConfigParser::GetInt("Battle1_Port", 52431), 1, this),	//TODO : MACHINE_ID에 따라 변수명 변경 필요.
+	connectee("battle", ConfigParser::GetInt("Battle1_Port", 52431), 1, this),
 	gamepool(1, this),
+	redis(SESSION_TIMEOUT),
 	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54324), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54424))
 {
 }
@@ -15,7 +18,7 @@ MyBattle::~MyBattle()
 void MyBattle::Open()
 {
 	MyPostgres::Open();
-
+	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
 	connectee.Accept("drgbmgr", std::bind(&MyBattle::MgrInquiry, this, std::placeholders::_1));
 	connector.Connect(ConfigParser::GetString("Match_Addr"), ConfigParser::GetInt("Match_Port", 52431), keyword_match, std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1));
 	Logger::log("Battle Server Start", Logger::LogType::info);
@@ -25,6 +28,7 @@ void MyBattle::Close()
 {
 	gamepool.Stop();
 	connector.Close();
+	redis.Close();
 	MyPostgres::Close();
 	Logger::log("Battle Server Stop", Logger::LogType::info);
 }
@@ -61,14 +65,27 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 	}
 
 	Hash_t cookie = packet.pop<Hash_t>();
+
+	//Session Server에서 Session 찾기
+	auto info = redis.GetInfoFromCookie(cookie);
+	if(!info || info->second != self_keyword)
+	{
+		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+		client->Close();
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
+		return;
+	}
+	Account_ID_t account_id = info->first;
+
+	//Local Server에서 Session찾기
 	auto session = this->sessions.FindRKey(cookie);
 	if(!session)	//세션이 match로부터 오지 않는 경우
 	{
-		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Cookie", Logger::LogType::auth);
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Game", Logger::LogType::auth);
+		redis.SetInfo(account_id, cookie, keyword_match);	//battle서버에 있을 필요 없는 세션은 match서버로 보낸다.
 		client->Close();
 		return;
 	}
-	Account_ID_t account_id = session->first;
 	std::shared_ptr<MyGame> GameSession = session->second;
 
 	//Game에 접속 보내기.
@@ -78,6 +95,7 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Game", Logger::LogType::auth);
 		this->sessions.EraseLKey(account_id);
 		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+		redis.SetInfo(account_id, cookie, keyword_match);	//battle서버에 있을 필요 없는 세션은 match서버로 보낸다.
 		client->Close();
 		return;
 	}
@@ -94,6 +112,7 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 
 	client->StartRecv(std::bind(&MyBattle::ClientProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, account_id, side, GameSession));
 	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
+	client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyBattle::SessionProcess, this, std::placeholders::_1, account_id, cookie));
 }
 
 void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec, Account_ID_t account_id, int side, std::shared_ptr<MyGame> GameSession)
@@ -130,6 +149,17 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue p
 	}
 }
 
+void MyBattle::SessionProcess(std::shared_ptr<MyClientSocket> client, const Account_ID_t& account_id, const Hash_t& cookie)
+{
+	if(!client->is_open())
+		return;
+	
+	if(redis.RefreshInfo(account_id, cookie, self_keyword))
+		client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyBattle::SessionProcess, this, std::placeholders::_1, account_id, cookie));
+	else
+		client->Close();
+}
+
 ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 {
 	byte header = bytes.pop<byte>();
@@ -143,7 +173,7 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 					return ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT);
 				ByteQueue result = ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE);
 				result.push<Hash_t>(cookie->first);
-				result.push<Seed_t>(MACHINE_ID);
+				result.push<Seed_t>(machine_id);
 				return result;
 			}
 			break;
@@ -173,10 +203,11 @@ ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
 				GameProcess(timer, new_game, boost::system::error_code());	//최초 Timer 등록
 
 				auto answer = ByteQueue::Create<byte>(SUCCESS);
-				answer.push<Seed_t>(MACHINE_ID);
+				answer.push<Seed_t>(machine_id);
 				return answer;
 			}
 			break;
+		//TODO : Match로부터 keyword질의를 받아 자기 자신의 keyword 전달 및 서버 주소(client로부터의 접근 주소) 전달하기.
 	}
 	return ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
 }
@@ -213,6 +244,7 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 			if(!socket)		//소켓이 nullptr이면 게임 중간에 나간 것이므로 무시.
 				continue;
 
+			/*
 			ByteQueue req = ByteQueue::Create<byte>(INQ_COOKIE_TRANSFER);
 			req.push<Account_ID_t>(id);
 			req.push<Hash_t>(cookie);
@@ -236,6 +268,8 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 			{
 				Logger::log("Cookie Transfer Failed : " + req_result.error().message_code(), Logger::LogType::error);
 			}
+			*/
+			redis.SetInfo(id, cookie, keyword_match);	//battle서버에 있을 필요 없는 세션은 match서버로 보낸다.
 
 			ByteQueue packet = ByteQueue::Create<byte>(player.result);
 			socket->Send(packet);

@@ -16,7 +16,10 @@ SET ( TESTS
 	Socket_Test
 	Connector_Test
 	BoostTimer_Test
+	Redis_Test
 )
+
+FIND_PACKAGE ( hiredis REQUIRED )
 
 FOREACH ( TEST IN LISTS TESTS )
 	ADD_EXECUTABLE ( ${TEST} ${TEST}.cc)
@@ -39,5 +42,6 @@ TARGET_LINK_LIBRARIES ( StackTraceExcept_Test PRIVATE StackTraceExcept )
 TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClient MyTCPTLSServer MyWebsocketClient MyWebsocketServer MyWebsocketTLSClient MyWebsocketTLSServer pthread )
 TARGET_LINK_LIBRARIES ( Connector_Test PRIVATE MyConnectorPool MyConnectee )
 TARGET_LINK_LIBRARIES ( BoostTimer_Test PRIVATE pthread )
+TARGET_LINK_LIBRARIES ( Redis_Test PRIVATE MyRedis )
 
 UNSET ( TESTS )

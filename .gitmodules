@@ -1,0 +1,4 @@
+[submodule "libraries/hiredis"]
+	path = libraries/hiredis
+	url = https://github.com/redis/hiredis.git
+	branch = release/v1.1.0

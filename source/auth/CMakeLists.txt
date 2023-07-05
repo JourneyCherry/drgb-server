@@ -18,6 +18,7 @@ TARGET_LINK_LIBRARIES ( MyAuth PUBLIC
 	ConfigParser
 	MyServer
 	MyPostgres
+	MyRedis
 	Encoder
 	MyConnector
 	MyConnectee

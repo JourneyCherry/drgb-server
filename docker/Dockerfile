@@ -3,6 +3,8 @@ FROM ubuntu
 ARG TARGET
 ARG SOURCE_DIR=../source
 ARG WORK_DIR=/drgb-server
+ARG LIBRARY_DIR=../libraries
+ARG HIREDIS_DIR=hiredis
 
 #Ubuntu package는 apt-get update를 해주어야 패키지 목록이 업데이트되어 타 패키지를 받을 수 있다.
 RUN apt-get update
@@ -26,6 +28,16 @@ RUN apt-get install -y \
 
 #local5를 f_messages를 거치지 않게 변경
 RUN sed -i -e "/                    not facility(auth,authpriv,cron,daemon,mail,news); };/c\\                    not facility(auth,authpriv,cron,daemon,mail,news,local5); };" /etc/syslog-ng/syslog-ng.conf
+
+#Required Libraries Install
+RUN mkdir /libraries
+COPY ${LIBRARY_DIR} /libraries
+#Install hiredis-1.1.0
+RUN if test -e /libraries/${HIREDIS_DIR}/build; then rm -rf /libraries/hiredis-1.1.0/build/*; else mkdir /libraries/${HIREDIS_DIR}/build; fi
+WORKDIR /libraries/${HIREDIS_DIR}/build
+RUN cmake .. -DCMAKE_INSTALL_PREFIX=/usr
+RUN make
+RUN make install
 
 #drgb server Install
 RUN mkdir ${WORK_DIR}
