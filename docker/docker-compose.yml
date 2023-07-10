@@ -53,8 +53,8 @@ services:
       - "54423:54423" #tcp
     cpus: 1         #no effect on wsl2
     mem_limit: 512m #no effect on wsl2
-  battle:
-    container_name: battle
+  battle1:
+    container_name: battle1
     image: drgb-battle
     depends_on:
       - db
@@ -64,6 +64,7 @@ services:
       dockerfile: ./docker/Dockerfile
       args:
         TARGET: "battle"
+        MACHINE_ID: 1
     tty: true
     stdin_open: true
     privileged: true

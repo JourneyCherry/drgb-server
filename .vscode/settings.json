@@ -6,7 +6,8 @@
 		"*.txt": "plaintext",
 		"CMakeLists.txt": "cmake",
 		"*.hpp": "cpp",
-		"*.cpp": "cpp"
+		"*.cpp": "cpp",
+		"*.proto": "proto3"
 	},
 	"editor.wordWrap": "on",
 	"diffEditor.wordWrap": "on",

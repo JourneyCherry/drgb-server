@@ -17,7 +17,6 @@ void MgrOpt::ClearOpt()
 {
 	addr = "localhost";
 	port = 52431;	//default port
-	remote_keyword = "manager";
 	shell_mode = false;
 	while(!commands.empty())
 		commands.pop();
@@ -47,11 +46,6 @@ void MgrOpt::GetArgs(int argc, char *argv[])
 		}
 	}
 
-	if(optind >= argc)
-		throw StackTraceExcept("No Remote Keyword", __STACKINFO__);
-	
-	remote_keyword = std::string(argv[optind++]);
-	
 	while(optind < argc)
 		commands.push(std::string(argv[optind++]));
 	

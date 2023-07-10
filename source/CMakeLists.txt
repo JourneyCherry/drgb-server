@@ -39,13 +39,13 @@ IF( NOT BUILD_TARGET )
 	enable_testing()
 ENDIF()
 
-
 SET ( DIRS
 	utils
 	security
 	threads
 	postgres
 	redis
+	proto
 	network
 	templates
 	

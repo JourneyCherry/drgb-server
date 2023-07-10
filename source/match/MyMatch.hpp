@@ -1,7 +1,6 @@
 #pragma once
 #include "MyServer.hpp"
-#include "MyConnectee.hpp"
-#include "MyConnector.hpp"
+#include "MatchServiceServer.hpp"
 #include "ConfigParser.hpp"
 #include "MyCodes.hpp"
 #include "MyMatchMaker.hpp"
@@ -20,11 +19,10 @@ class MyMatch : public MyServer
 {
 	private:
 		static const std::string self_keyword;
-		const std::chrono::seconds rematch_delay = std::chrono::seconds(1);	//TODO : Config로 뺄 필요가 있음.
+		std::chrono::milliseconds rematch_delay;
 		DeMap<Account_ID_t, Hash_t, std::weak_ptr<MyClientSocket>> sessions;	//Local Server Session
 
-		MyConnectee connectee;
-
+		MatchServiceServer MatchService;
 		MyMatchMaker matchmaker;
 		Thread t_matchmaker;
 
@@ -42,8 +40,10 @@ class MyMatch : public MyServer
 		void AuthenticateProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
 		void ClientProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode, Account_ID_t);
 		void SessionProcess(std::shared_ptr<MyClientSocket>, const Account_ID_t&, const Hash_t&);
-	
-		ByteQueue MatchInquiry(ByteQueue);
-		ByteQueue MgrInquiry(ByteQueue);
+
 		void MatchMake();
+
+	protected:
+		bool CheckAccount(Account_ID_t) override;
+		std::map<std::string, size_t> GetConnectUsage() override;
 };

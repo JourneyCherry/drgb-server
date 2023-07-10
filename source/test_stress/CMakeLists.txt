@@ -10,7 +10,7 @@ FOREACH ( LIB IN LISTS LIBS )
 ENDFOREACH ()
 ADD_EXECUTABLE ( ${EXEC_NAME} main.cpp )
 
-TARGET_LINK_LIBRARIES ( ${EXEC_NAME} PUBLIC pthread TestOpt TestClient ConfigParser )
+TARGET_LINK_LIBRARIES ( ${EXEC_NAME} PUBLIC pthread TestOpt TestClient )
 TARGET_LINK_LIBRARIES ( TestOpt PUBLIC GetArg StackTraceExcept )
 TARGET_LINK_LIBRARIES ( TestClient PUBLIC ThreadExceptHandler MyWebsocketClient Hasher )
 

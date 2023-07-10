@@ -3,6 +3,7 @@ SET ( LIBS
 	MyMatch
 	MyMatchMaker
 	MyNotifyMsgs
+	MatchServiceServer
 )
 
 FOREACH ( LIB IN LISTS LIBS )
@@ -27,14 +28,19 @@ TARGET_LINK_LIBRARIES ( MyMatchMaker PUBLIC
 
 TARGET_LINK_LIBRARIES ( MyMatch PUBLIC
 	MyServer
-	MyConnectee
-	MyConnector
 	ConfigParser
 	MyCodes
 	MyMatchMaker
 	MyNotifyMsgs
 	MyPostgres
 	MyRedis
+	MatchServiceServer
+)
+
+TARGET_LINK_LIBRARIES ( MatchServiceServer PUBLIC
+	ServerService
+	DeMap
+	MyCodes
 )
 
 TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE

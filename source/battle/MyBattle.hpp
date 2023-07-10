@@ -5,15 +5,12 @@
 #include "MyServer.hpp"
 #include "MyGame.hpp"
 #include "DeMap.hpp"
-#include "MyConnectee.hpp"
-#include "MyConnectorPool.hpp"
 #include "TimerPool.hpp"
-#include "MyConnectee.hpp"
 #include "MyRedis.hpp"
+#include "BattleServiceClient.hpp"
 
 using mylib::utils::StackTraceExcept;
 using mylib::utils::DeMap;
-using mylib::threads::FixedPool;
 using mylib::threads::TimerPool;
 
 class MyBattle : public MyServer
@@ -21,17 +18,15 @@ class MyBattle : public MyServer
 	private:
 		static constexpr int MAX_GAME = MAX_CLIENTS / 2;	//std::floor는 C++23에서 constexpr이며, 이전엔 일반 함수이다.
 
-		MyConnectee connectee;
-		MyConnectorPool connector;
-
 		Seed_t machine_id;
-		std::string keyword_match;
 		std::string self_keyword;
+		std::string keyword_match;
+
+		BattleServiceClient BattleService;	//Match To Battle Service Client
 
 		MyRedis redis;
 
 		DeMap<Account_ID_t, Hash_t, std::shared_ptr<MyGame>> sessions;
-		//FixedPool<std::shared_ptr<MyGame>, MAX_GAME> gamepool;
 		TimerPool gamepool;
 	
 	public:
@@ -48,6 +43,10 @@ class MyBattle : public MyServer
 		void GameProcess(std::shared_ptr<boost::asio::steady_timer>, std::shared_ptr<MyGame>, const boost::system::error_code&);
 		void SessionProcess(std::shared_ptr<MyClientSocket>, const Account_ID_t&, const Hash_t&);
 
-		ByteQueue BattleInquiry(ByteQueue);
-		ByteQueue MgrInquiry(ByteQueue);
+		void MatchTransfer(const Account_ID_t&, const Account_ID_t&);
+	
+	protected:
+		size_t GetUsage();
+		bool CheckAccount(Account_ID_t);
+		std::map<std::string, size_t> GetConnectUsage();
 };

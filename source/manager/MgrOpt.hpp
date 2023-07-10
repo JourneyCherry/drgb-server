@@ -14,7 +14,6 @@ class MgrOpt : public GetArg
 		std::string addr;
 		int port;
 		bool shell_mode;
-		std::string remote_keyword;
 		std::queue<std::string> commands;
 
 	public:

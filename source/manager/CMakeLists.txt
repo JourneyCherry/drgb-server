@@ -2,6 +2,8 @@ SET ( TARGET manager )
 SET ( EXEC_NAME drgbmgr )
 SET ( LIBS 
 	MgrOpt
+	ManagerServiceClient
+	ManagerServiceServer
 )
 
 FOREACH ( LIB IN LISTS LIBS )
@@ -10,9 +12,11 @@ ENDFOREACH()
 
 ADD_EXECUTABLE ( ${TARGET} main.cpp )
 SET_TARGET_PROPERTIES ( ${TARGET} PROPERTIES OUTPUT_NAME ${EXEC_NAME} )
-TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE ${LIBS} MyConnectorPool )
+TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE ${LIBS} ManagerServiceClient )
 
 TARGET_LINK_LIBRARIES ( MgrOpt PUBLIC GetArg StackTraceExcept )
+TARGET_LINK_LIBRARIES ( ManagerServiceClient PUBLIC ServerService MyTypes )
+TARGET_LINK_LIBRARIES ( ManagerServiceServer PUBLIC ServerService MyTypes )
 
 UNSET ( LIBS )
 UNSET ( EXEC_NAME )

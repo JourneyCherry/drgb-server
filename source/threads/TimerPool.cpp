@@ -3,7 +3,12 @@
 namespace mylib{
 namespace threads{
 
-TimerPool::TimerPool(const size_t &thread_num, ThreadExceptHandler *p) : isRunning(true), ioc(thread_num), ThreadPool(thread_num), ThreadExceptHandler(p)
+TimerPool::TimerPool(const size_t &thread_num, ThreadExceptHandler *p)
+ : isRunning(true), 
+ ioc(thread_num), 
+ work_guard(boost::asio::make_work_guard(ioc)),
+ ThreadPool(thread_num), 
+ ThreadExceptHandler(p)
 {
 	for(int i = 0;i<thread_num;i++)
 	{
@@ -35,6 +40,7 @@ TimerPool::~TimerPool()
 void TimerPool::Stop()
 {
 	isRunning = false;
+	work_guard.reset();
 	boost::system::error_code error_code;
 	for(auto &timer : TimerSet)
 		timer->cancel(error_code);	//에러 무시

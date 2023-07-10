@@ -2,13 +2,11 @@
 #include <iostream>
 #include <boost/asio/thread_pool.hpp>
 #include <thread>
-#include "ConfigParser.hpp"
 #include "TestOpt.hpp"
 #include "TestClient.hpp"
 #include "ThreadExceptHandler.hpp"
 
 using mylib::threads::ThreadExceptHandler;
-using mylib::utils::ConfigParser;
 
 class ExceptQueue : public ThreadExceptHandler
 {
@@ -52,12 +50,10 @@ int main(int argc, char *argv[])
 	try
 	{
 		opt.GetArgs(argc, argv);
-		if(!ConfigParser::ReadFile("../../resources/drgb.conf"))
-			throw StackTraceExcept("Read Config file Failed", __STACKINFO__);
 		
-		TestClient::AddAddr(opt.addr, ConfigParser::GetInt("Auth_ClientPort_Web"));
-		TestClient::AddAddr(opt.addr, ConfigParser::GetInt("Match_ClientPort_Web"));
-		TestClient::AddAddr(opt.addr, ConfigParser::GetInt("Battle1_ClientPort_Web"));
+		TestClient::AddAddr(opt.addr, 54322);
+		TestClient::AddAddr(opt.addr, 54323);
+		TestClient::AddAddr(opt.addr, 54324);
 	}
 	catch(const std::exception &e)
 	{

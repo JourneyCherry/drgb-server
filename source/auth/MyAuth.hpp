@@ -5,8 +5,6 @@
 #include "MyPostgres.hpp"
 #include "MyRedis.hpp"
 #include "Encoder.hpp"
-#include "MyConnectee.hpp"
-#include "MyConnectorPool.hpp"
 #include "MyCodes.hpp"
 #include "Hasher.hpp"
 
@@ -20,9 +18,7 @@ class MyAuth : public MyServer
 		using dbsystem = MyPostgres;
 
 		MyRedis redis;
-		MyConnectorPool connector;
-		MyConnectee connectee;
-		std::string keyword_match;
+		const std::string keyword_match = "match";
 
 	public:
 		MyAuth();
@@ -32,5 +28,4 @@ class MyAuth : public MyServer
 		void AcceptProcess(std::shared_ptr<MyClientSocket>, ErrorCode) override;
 		void EnterProcess(std::shared_ptr<MyClientSocket>, ErrorCode);
 		void ClientProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
-		ByteQueue AuthInquiry(ByteQueue);
 };

@@ -91,3 +91,4 @@ source/[Rr]esources/*.key
 docker/[Dd]ata/
 docker/[Cc]lient[Bb]uild/
 [Ll]ibraries/*/[Bb]uild/
+*.pb.*

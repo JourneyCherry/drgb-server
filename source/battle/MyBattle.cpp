@@ -1,14 +1,15 @@
 #include "MyBattle.hpp"
 
 MyBattle::MyBattle() : 
-	machine_id(1),		//TODO : match 서버로부터 값 받아오기 필요.
+	machine_id(ConfigParser::GetInt("Machine_ID", 1)),
 	self_keyword("battle" + std::to_string(machine_id)),
-	connector("battle", 1, this), keyword_match("match"),
-	connectee("battle", ConfigParser::GetInt("Battle1_Port", 52431), 1, this),
-	gamepool(1, this),
+	keyword_match("match"),
+	BattleService(ConfigParser::GetString("Match_Addr"), ConfigParser::GetInt("Service_Port", 52431), machine_id, this),
 	redis(SESSION_TIMEOUT),
-	MyServer(ConfigParser::GetInt("Battle1_ClientPort_Web", 54324), ConfigParser::GetInt("Battle1_ClientPort_TCP", 54424))
+	gamepool(1, this),
+	MyServer(ConfigParser::GetInt("Battle_ClientPort_Web", 54324), ConfigParser::GetInt("Battle_ClientPort_TCP", 54424))
 {
+	BattleService.SetCallback(std::bind(&MyBattle::MatchTransfer, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 MyBattle::~MyBattle()
@@ -19,15 +20,13 @@ void MyBattle::Open()
 {
 	MyPostgres::Open();
 	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
-	connectee.Accept("drgbmgr", std::bind(&MyBattle::MgrInquiry, this, std::placeholders::_1));
-	connector.Connect(ConfigParser::GetString("Match_Addr"), ConfigParser::GetInt("Match_Port", 52431), keyword_match, std::bind(&MyBattle::BattleInquiry, this, std::placeholders::_1));
-	Logger::log("Battle Server Start", Logger::LogType::info);
+	Logger::log("Battle Server Start as " + self_keyword, Logger::LogType::info);
 }
 
 void MyBattle::Close()
 {
 	gamepool.Stop();
-	connector.Close();
+	BattleService.Close();
 	redis.Close();
 	MyPostgres::Close();
 	Logger::log("Battle Server Stop", Logger::LogType::info);
@@ -160,58 +159,6 @@ void MyBattle::SessionProcess(std::shared_ptr<MyClientSocket> client, const Acco
 		client->Close();
 }
 
-ByteQueue MyBattle::BattleInquiry(ByteQueue bytes)
-{
-	byte header = bytes.pop<byte>();
-	switch(header)
-	{
-		case INQ_ACCOUNT_CHECK:
-			{
-				Account_ID_t account_id = bytes.pop<Account_ID_t>();
-				auto cookie = sessions.FindLKey(account_id);
-				if(!cookie)
-					return ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT);
-				ByteQueue result = ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE);
-				result.push<Hash_t>(cookie->first);
-				result.push<Seed_t>(machine_id);
-				return result;
-			}
-			break;
-		case INQ_USAGE:
-			{
-				size_t usage = gamepool.Size();
-				ByteQueue answer = ByteQueue::Create<byte>(SUCCESS);
-				answer.push<size_t>(usage);
-				return answer;
-			}
-			break;
-		case INQ_MATCH_TRANSFER:
-			{
-				auto timer = gamepool.GetTimer();
-				if(timer == nullptr)
-					return ByteQueue::Create<byte>(ERR_OUT_OF_CAPACITY);
-
-				Account_ID_t lpid = bytes.pop<Account_ID_t>();
-				Hash_t lpcookie = bytes.pop<Hash_t>();
-				Account_ID_t rpid = bytes.pop<Account_ID_t>();
-				Hash_t rpcookie = bytes.pop<Hash_t>();
-
-				std::shared_ptr<MyGame> new_game = std::make_shared<MyGame>(lpid, rpid, timer);
-
-				sessions.Insert(lpid, lpcookie, new_game);
-				sessions.Insert(rpid, rpcookie, new_game);
-				GameProcess(timer, new_game, boost::system::error_code());	//최초 Timer 등록
-
-				auto answer = ByteQueue::Create<byte>(SUCCESS);
-				answer.push<Seed_t>(machine_id);
-				return answer;
-			}
-			break;
-		//TODO : Match로부터 keyword질의를 받아 자기 자신의 keyword 전달 및 서버 주소(client로부터의 접근 주소) 전달하기.
-	}
-	return ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
-}
-
 void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std::shared_ptr<MyGame> game, const boost::system::error_code &error_code)
 {
 	if(!gamepool.is_open())
@@ -244,31 +191,6 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 			if(!socket)		//소켓이 nullptr이면 게임 중간에 나간 것이므로 무시.
 				continue;
 
-			/*
-			ByteQueue req = ByteQueue::Create<byte>(INQ_COOKIE_TRANSFER);
-			req.push<Account_ID_t>(id);
-			req.push<Hash_t>(cookie);
-
-			auto req_result = connector.Request(keyword_match, req);
-			if(req_result)
-			{
-				byte header = req_result->pop<byte>();
-
-				switch(header)
-				{
-					case SUCCESS:
-					case ERR_EXIST_ACCOUNT_MATCH:	//이미 해당 쿠키가 Match서버에 있으면 Match 서버에 주도권을 준다.(즉, 정상동작)
-						break;
-					default:
-						Logger::log("Cookie Transfer Failed : " + ErrorCode(header).message_code(), Logger::LogType::error);
-						break;
-				}
-			}
-			else
-			{
-				Logger::log("Cookie Transfer Failed : " + req_result.error().message_code(), Logger::LogType::error);
-			}
-			*/
 			redis.SetInfo(id, cookie, keyword_match);	//battle서버에 있을 필요 없는 세션은 match서버로 보낸다.
 
 			ByteQueue packet = ByteQueue::Create<byte>(player.result);
@@ -294,60 +216,46 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 		std::rethrow_exception(eptr);
 }
 
-ByteQueue MyBattle::MgrInquiry(ByteQueue request)
+void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 {
-	ByteQueue answer;
-	try
+	if(lpid <= 0 || rpid <= 0)
 	{
-		byte header = request.pop<byte>();
-		switch(header)
-		{
-			case INQ_CLIENTUSAGE:
-				answer = ByteQueue::Create<byte>(SUCCESS);
-				answer.push<size_t>(tcp_server.GetConnected());
-				answer.push<size_t>(web_server.GetConnected());
-				break;
-			case INQ_CONNUSAGE:
-				{
-					answer = ByteQueue::Create<byte>(SUCCESS);
+		BattleService.SetUsage(sessions.Size());
+		return;
+	}
 
-					auto teeusage = connectee.GetUsage();
-					answer.push<size_t>(teeusage.size());	//connectee 목록
-					for(auto &tee : teeusage)
-					{
-						answer.push<size_t>(tee.first.size());
-						answer.push<std::string>(tee.first);
-						answer.push<size_t>(tee.second);
-					}
-					auto torusage = connector.GetUsage();
-					answer.push<size_t>(torusage.size());	//connector 목록
-					for(auto &tor : torusage)
-					{
-						answer.push<size_t>(tor.first.size());
-						answer.push<std::string>(tor.first);
-						answer.push<int>(tor.second);
-					}
-				}
-				break;
-			case INQ_USAGE:
-				answer = ByteQueue::Create<byte>(SUCCESS);
-				answer.push<size_t>(gamepool.Size());
-				break;
-			case INQ_SESSIONS:
-				answer = ByteQueue::Create<byte>(SUCCESS);
-				answer.push<size_t>(sessions.Size());
-				break;
-			case INQ_ACCOUNT_CHECK:
-				answer = ByteQueue::Create<byte>(sessions.FindLKey(request.pop<Account_ID_t>()).isSuccessed()?SUCCESS:ERR_NO_MATCH_ACCOUNT);
-				break;
-			default:
-				answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
-				break;
+	auto timer = gamepool.GetTimer();
+	if(timer)
+	{
+		auto lpresult = redis.GetInfoFromID(lpid);
+		auto rpresult = redis.GetInfoFromID(rpid);
+		if(lpresult && rpresult)
+		{
+			Hash_t lpcookie = lpresult->first;
+			Hash_t rpcookie = rpresult->first;
+			std::shared_ptr<MyGame> new_game = std::make_shared<MyGame>(lpid, rpid, timer);
+
+			sessions.Insert(lpid, lpcookie, new_game);
+			sessions.Insert(rpid, rpcookie, new_game);
+			GameProcess(timer, new_game, boost::system::error_code());	//최초 Timer 등록
 		}
 	}
-	catch(...)
-	{
-		answer = ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);
-	}
-	return answer;
+	BattleService.SetUsage(sessions.Size());
+}
+
+size_t MyBattle::GetUsage()
+{
+	return gamepool.Size();
+}
+
+bool MyBattle::CheckAccount(Account_ID_t id)
+{
+	return sessions.FindLKey(id).isSuccessed();
+}
+
+std::map<std::string, size_t> MyBattle::GetConnectUsage()
+{
+	auto connected = MyServer::GetConnectUsage();
+	connected.insert({"match", BattleService.is_open()?1:0});
+	return connected;
 }

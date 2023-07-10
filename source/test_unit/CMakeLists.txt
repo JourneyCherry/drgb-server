@@ -17,6 +17,8 @@ SET ( TESTS
 	Connector_Test
 	BoostTimer_Test
 	Redis_Test
+	RPC_Test
+	TimerPool_Test
 )
 
 FIND_PACKAGE ( hiredis REQUIRED )
@@ -43,5 +45,7 @@ TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClie
 TARGET_LINK_LIBRARIES ( Connector_Test PRIVATE MyConnectorPool MyConnectee )
 TARGET_LINK_LIBRARIES ( BoostTimer_Test PRIVATE pthread )
 TARGET_LINK_LIBRARIES ( Redis_Test PRIVATE MyRedis )
+TARGET_LINK_LIBRARIES ( RPC_Test PRIVATE BattleServiceClient MatchServiceServer ManagerServiceClient ManagerServiceServer )
+TARGET_LINK_LIBRARIES ( TimerPool_Test PRIVATE TimerPool )
 
 UNSET ( TESTS )

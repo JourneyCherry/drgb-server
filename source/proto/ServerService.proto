@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package ServerService;
+
+service MatchToBattle
+{
+	rpc SessionStream (stream Usage) returns (stream MatchTransfer) {}
+}
+
+service MgrToServer
+{
+	rpc GetUsage (google.protobuf.Empty) returns (Usage) {}
+	rpc CheckAccount (Account) returns (CheckResult) {}
+	rpc GetClientUsage (google.protobuf.Empty) returns (ClientUsage) {}
+	rpc GetConnectUsage (google.protobuf.Empty) returns (ConnectionUsage) {}
+}
+
+message Usage {
+	uint32 usage = 1;
+}
+
+message MatchTransfer {
+	Account lpid = 1;
+	Account rpid = 2;
+}
+
+message Account {
+	uint64 id = 1;
+}
+
+message CheckResult {
+	bool result = 1;
+}
+
+message ClientUsage {
+	Usage tcp = 1;
+	Usage web = 2;
+}
+
+message ConnectionUsage {
+	map<string, uint32> ServerConnected = 1;
+}

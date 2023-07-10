@@ -18,8 +18,9 @@ class TimerPool : public ThreadExceptHandler
 {
 	private:
 		bool isRunning;
-		boost::asio::thread_pool ThreadPool;
 		boost::asio::io_context ioc;
+		boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard;
+		boost::asio::thread_pool ThreadPool;
 
 		std::mutex timer_mtx;
 		std::set<std::shared_ptr<boost::asio::steady_timer>> TimerSet;

@@ -1,0 +1,39 @@
+SET ( LIB_NAME ServerService )
+
+FIND_PACKAGE ( Protobuf REQUIRED )
+FIND_PACKAGE ( PkgConfig REQUIRED )
+pkg_search_module ( GRPC REQUIRED grpc )
+pkg_search_module ( GRPCPP REQUIRED grpc++ )
+
+FIND_PROGRAM ( _PROTOBUF_PROTOC protoc )
+FIND_PROGRAM ( _GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin )
+
+SET ( FILE_NAME "ServerService" )
+GET_FILENAME_COMPONENT ( PROTO "./${FILE_NAME}.proto" ABSOLUTE )
+GET_FILENAME_COMPONENT ( PROTO_PATH "${PROTO}" PATH )
+
+SET ( OUTPUT_FILES
+	"${PROTO_PATH}/${FILE_NAME}.pb.cc"
+	"${PROTO_PATH}/${FILE_NAME}.pb.h"
+	"${PROTO_PATH}/${FILE_NAME}.grpc.pb.cc"
+	"${PROTO_PATH}/${FILE_NAME}.grpc.pb.h"
+)
+
+ADD_CUSTOM_COMMAND (
+	OUTPUT ${OUTPUT_FILES}
+	COMMAND ${_PROTOBUF_PROTOC}
+	ARGS
+		--grpc_out "${PROTO_PATH}"
+		--cpp_out "${PROTO_PATH}"
+		-I "${PROTO_PATH}"
+		--plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
+		"${PROTO}"
+	DEPENDS
+		"${PROTO}"
+)
+
+ADD_LIBRARY ( ${LIB_NAME} EXCLUDE_FROM_ALL ${OUTPUT_FILES} )
+TARGET_LINK_LIBRARIES ( ${LIB_NAME} PUBLIC grpc++ protobuf::libprotobuf )
+TARGET_INCLUDE_DIRECTORIES ( ${LIB_NAME} PUBLIC ${PROTO_PATH} )
+
+UNSET ( LIB_NAME )

@@ -2,6 +2,7 @@ SET ( TARGET battle )
 SET ( LIBS
 	MyBattle
 	MyGame
+	BattleServiceClient
 )
 
 FOREACH ( LIB IN LISTS LIBS )
@@ -25,10 +26,15 @@ TARGET_LINK_LIBRARIES ( MyBattle PUBLIC
 	MyServer
 	MyGame
 	DeMap
-	MyConnector
-	MyConnectee
 	TimerPool
 	MyRedis
+	BattleServiceClient
+)
+
+TARGET_LINK_LIBRARIES ( BattleServiceClient PUBLIC
+	ServerService
+	ThreadExceptHandler
+	StackTraceExcept
 )
 
 TARGET_LINK_LIBRARIES ( ${TARGET} PRIVATE

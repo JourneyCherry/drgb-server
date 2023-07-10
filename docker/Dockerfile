@@ -1,5 +1,6 @@
 FROM ubuntu
 
+ARG MACHINE_ID=1
 ARG TARGET
 ARG SOURCE_DIR=../source
 ARG WORK_DIR=/drgb-server
@@ -16,6 +17,10 @@ RUN apt-get install -y \
 	git \
 	libtbb-dev \
 	libboost-dev \
+	#grpc
+	libgrpc++-dev \
+	protobuf-compiler-grpc \
+	libprotobuf-dev \
 	#우분투는 기본 사양. 대신 /sbin/init이 없으므로 init을 받아야 한다. /sbin/init -> /usr/lib/systemd로 자동 링킹된다.
 	#openrc \	
 	init \
@@ -32,7 +37,7 @@ RUN sed -i -e "/                    not facility(auth,authpriv,cron,daemon,mail,
 #Required Libraries Install
 RUN mkdir /libraries
 COPY ${LIBRARY_DIR} /libraries
-#Install hiredis-1.1.0
+#Install hiredis
 RUN if test -e /libraries/${HIREDIS_DIR}/build; then rm -rf /libraries/hiredis-1.1.0/build/*; else mkdir /libraries/${HIREDIS_DIR}/build; fi
 WORKDIR /libraries/${HIREDIS_DIR}/build
 RUN cmake .. -DCMAKE_INSTALL_PREFIX=/usr
@@ -43,6 +48,8 @@ RUN make install
 RUN mkdir ${WORK_DIR}
 COPY ${SOURCE_DIR} ${WORK_DIR}
 RUN if test -e ${WORK_DIR}/build; then rm -rf ${WORK_DIR}/build/*; else mkdir ${WORK_DIR}/build; fi
+WORKDIR ${WORK_DIR}/resources
+RUN sed -i "0,/Machine_ID = 1/s//Machine_ID = ${MACHINE_ID}/" drgb.conf
 WORKDIR ${WORK_DIR}/build
 RUN cmake .. -DBUILD_TARGET=${TARGET} -DCMAKE_BUILD_TYPE=Release
 RUN make

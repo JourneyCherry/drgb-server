@@ -115,9 +115,25 @@ class DeMap
 			rlm.clear();
 			kvm.clear();
 		}
+
 		size_t Size() const
 		{
 			return lrm.size();
+		}
+
+		std::vector<std::tuple<LKey, RKey, Value>> GetAll()
+		{
+			ulock lk(mtx);
+
+			std::vector<std::tuple<LKey, RKey, Value>> result;
+			result.reserve(lrm.size());
+			for(auto &[lkey, value] : kvm)
+			{
+				auto rkey = lrm[lkey];
+				result.push_back({lkey, rkey, value});
+			}
+
+			return result;
 		}
 };
 

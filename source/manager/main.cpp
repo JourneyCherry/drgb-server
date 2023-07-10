@@ -1,191 +1,162 @@
 #include <iostream>
 #include <map>
 #include "MgrOpt.hpp"
-#include "MyConnectorPool.hpp"
+#include "ManagerServiceClient.hpp"
+#include "StackTraceExcept.hpp"
+
+using mylib::utils::ErrorCodeExcept;
 
 std::map<std::string, byte> cmdtable = {
 	{"client", INQ_CLIENTUSAGE},
-	{"connector", INQ_CONNUSAGE},
+	{"connect", INQ_CONNUSAGE},
 	{"usage", INQ_USAGE},
-	{"sessions", INQ_SESSIONS},
-	{"account", INQ_ACCOUNT_CHECK}
+	{"account", INQ_ACCOUNT_CHECK},
+	{"help", ERR_DB_FAILED},
+	{"quit", 0}
 };
+MgrOpt opt;
+std::queue<std::string> commands;
 
-std::string keyword;
-MyConnectorPool pool("drgbmgr", 1);
+void ShowCommands();
+void ShowHowToUse(std::string);
 
 byte GetRequest(std::string command)
 {
 	auto header = cmdtable.find(command);
 	if(header == cmdtable.end())
-		return ERR_PROTOCOL_VIOLATION;
+	{
+		static const auto cmp = [](const std::string exp, const std::string ctr) -> size_t
+		{
+			size_t length = std::min(exp.size(), ctr.size());
+			size_t fitCount = 0;
+			for(size_t i = 0;i < length; i++)
+			{
+				if(exp[i] != ctr[i])
+					break;
+				fitCount++;
+			}
+			return fitCount;
+		};
+		std::map<byte, size_t> compare;
+		for(auto &pair : cmdtable)
+			compare.insert({pair.second, cmp(command, pair.first)});
+		static const auto compare_cmp = [](std::pair<byte, size_t> lhs, std::pair<byte, size_t> rhs) -> bool
+		{ return lhs.second < rhs.second; };
+		auto answer = std::max_element(compare.begin(), compare.end(), compare_cmp);
+		size_t count = 0;
+		for(auto &pair : compare)
+		{
+			if(pair.second == answer->second)
+				count++;
+		}
+		if(count > 1)
+			return ERR_PROTOCOL_VIOLATION;
+		return answer->first;
+	}
 	return header->second;
 }
 
-void ShowResult(byte request, ByteQueue answer)
-{
-	if(answer.Size() <= 0)
-	{
-		std::cout << "[Mgr] : Zero-byte Received" << std::endl;
-		return;
-	}
-	
-	byte header = answer.pop<byte>();
-	switch(header)
-	{
-		case SUCCESS:
-			switch(request)
-			{
-				case INQ_CLIENTUSAGE:
-					{
-						std::cout << "[Mgr] : Client Usage" << std::endl;
-						std::cout << "TCP Client : " << std::to_string(answer.pop<size_t>()) << std::endl;
-						std::cout << "WEB Client : " << std::to_string(answer.pop<size_t>()) << std::endl;
-					}
-					break;
-				case INQ_CONNUSAGE:
-					{
-						std::cout << "[Mgr] : Connector Usage" << std::endl;
-						std::cout << "==Connectee==" << std::endl;
-						size_t tee = answer.pop<size_t>();
-						for(size_t i = 0;i<tee;i++)
-						{
-							size_t len = answer.pop<size_t>();
-							std::string keyword = answer.popstr(len, false);
-							size_t count = answer.pop<size_t>();
-							std::cout << keyword << " : " << count << std::endl;
-						}
-						std::cout << "==Connector==" << std::endl;
-						size_t tor = answer.pop<size_t>();
-						for(size_t i = 0;i<tor;i++)
-						{
-							size_t len = answer.pop<size_t>();
-							std::string keyword = answer.popstr(len, false);
-							int state = answer.pop<int>();
-							std::string state_str = "";
-							if(state < 0)
-								state_str = "Disconnected";
-							else if(state == 0)
-								state_str = "Connected";
-							else
-								state_str = "Authorized";
-							std::cout << keyword << " : " << state_str << std::endl;
-						}
-					}
-					break;
-				case INQ_USAGE:
-					std::cout << "[Mgr] : Server Usage : " << std::to_string(answer.pop<size_t>()) << std::endl;
-					break;
-				case INQ_SESSIONS:
-					std::cout << "[Mgr] : Server Sessions : " << std::to_string(answer.pop<size_t>()) << std::endl;
-					break;
-				default:
-					std::cout << "[Mgr] : Unknown Request : " << std::to_string(request) << std::endl;
-					break;
-			}
-			break;
-		case ERR_PROTOCOL_VIOLATION:
-			std::cout << "[Mgr] : Not Supported Request : " << std::to_string(request) << std::endl;
-			break;
-		default:
-			std::cout << "[Mgr] : Unknown Answer : " << std::to_string(header) << std::endl;
-			break;
-	}
-}
-
-void Process(std::queue<std::string> &commands)
+void Process(ManagerServiceClient* client, std::queue<std::string> &commands)
 {
 	auto command = commands.front();
-	commands.pop();
 	auto request = GetRequest(command);
-	if(request == ERR_PROTOCOL_VIOLATION)
-		throw StackTraceExcept("Unknown Command : " + command, __STACKINFO__);
-	ByteQueue request_bytes = ByteQueue::Create<byte>(request);
+	commands.pop();
+
 	switch(request)
 	{
-		case INQ_ACCOUNT_CHECK:
+		case INQ_USAGE:
 			{
-				if(commands.empty())
-					throw StackTraceExcept("Argument required", __STACKINFO__);
-				Account_ID_t id = std::stoull(commands.front());
-				commands.pop();
-				request_bytes.push<Account_ID_t>(id);
-				auto answer = pool.Request(keyword, request_bytes);
+				auto answer = client->GetUsage();
 				if(!answer)
 					throw ErrorCodeExcept(answer.error(), __STACKINFO__);
 				
-				if(answer->Size() <= 0)
-					std::cout << "[Mgr] : Zero-byte Received" << std::endl;
-				else
-				{
-					byte result = answer->pop<byte>();
-					if(result == SUCCESS)
-						std::cout << "[Mgr] : Account " << std::to_string(id) << " Found" << std::endl;
-					else if(result == ERR_NO_MATCH_ACCOUNT)
-						std::cout << "[Mgr] : Account " << std::to_string(id) << " Not Found" << std::endl;
-					else if(result == ERR_PROTOCOL_VIOLATION)
-						std::cout << "[Mgr] : Not Supported Request : " << std::to_string(request) << std::endl;
-					else
-						std::cout << "[Mgr] : Unknown Answer : " << std::to_string(result) << std::endl;
-				}
+				std::cout << "[Mgr] : Server Usage " << *answer << std::endl;
 			}
 			break;
-		default:
+		case INQ_ACCOUNT_CHECK:
 			{
-				auto answer = pool.Request(keyword, request_bytes);
+				if(commands.empty())
+				{
+					ShowCommands();
+					throw StackTraceExcept(command + " : Argument Required", __STACKINFO__);
+				}
+				auto argument = commands.front();
+				commands.pop();
+				Account_ID_t id = std::stoull(argument);
+				auto answer = client->CheckAccount(id);
+				if(!answer)
+					throw ErrorCodeExcept(answer.error(), __STACKINFO__);
+				
+				if(*answer)
+					std::cout << "[Mgr] : Account " << std::to_string(id) << " Found" << std::endl;
+				else
+					std::cout << "[Mgr] : Account " << std::to_string(id) << " Not Found" << std::endl;
+			}
+			break;
+		case INQ_CLIENTUSAGE:
+			{
+				auto answer = client->GetClientUsage();
+				if(!answer)
+					throw ErrorCodeExcept(answer.error(), __STACKINFO__);
+				
+				std::cout << "[Mgr] : Clients" << std::endl;
+				std::cout << "TCP Client : " << answer->first << std::endl;
+				std::cout << "WEB Client : " << answer->second << std::endl;
+			}
+			break;
+		case INQ_CONNUSAGE:
+			{
+				auto answer = client->GetConnectUsage();
 				if(!answer)
 					throw ErrorCodeExcept(answer.error(), __STACKINFO__);
 
-				ShowResult(request, *answer);
+				std::cout << "[Mgr] : Connections" << std::endl;
+				if(answer->size() > 0)
+				{
+					for(auto &pair : *answer)
+						std::cout << pair.first << " : " << pair.second << std::endl;
+				}
+				else
+					std::cout << "No Connection" << std::endl;
 			}
 			break;
+		case ERR_DB_FAILED:
+			std::cout << "[Mgr] : ";
+			ShowCommands();
+			break;
+		case 0:
+			opt.shell_mode = false;
+			break;
+		default:
+			ShowCommands();
+			throw StackTraceExcept("Unknown Command \"" + command + "\"", __STACKINFO__);
 	}
 }
 
 int main(int argc, char *argv[])
 {
-	MgrOpt opt;
 	try
 	{
 		opt.GetArgs(argc, argv);
-	}
-	catch(const std::exception& e)
-	{
-		std::cerr << e.what() << std::endl;
-		//TODO : 사용 가능한 옵션에 대한 설명 출력
-		pool.Close();
-		return -1;
-	}
-
-	try
-	{
-		pool.Connect(opt.addr, opt.port, opt.remote_keyword, [](ByteQueue request){return ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION);});
-		
-		while(pool.GetAuthorized() < 1)	//Connect 될때까지 기다리기.
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));	//TODO : 대기가 아닌 연결 실패 시, 즉시 종료 필요.
-
-		keyword = opt.remote_keyword;
-
+		if(opt.commands.empty())
+			opt.shell_mode = true;
 		while(!opt.commands.empty())
-			Process(std::ref(opt.commands));
-		
-		if(!opt.shell_mode)
 		{
-			pool.Close();
-			return 0;
+			commands.push(opt.commands.front());
+			opt.commands.pop();
 		}
 	}
 	catch(const std::exception& e)
 	{
 		std::cerr << e.what() << std::endl;
-		pool.Close();
+		ShowHowToUse(std::string(argv[0]));
 		return -1;
 	}
 
-	std::queue<std::string> commands;
-	std::string input;
-	std::cout << "[Command] : ";
-	while(std::getline(std::cin, input) && input.length() > 0)
+	ManagerServiceClient client(opt.addr, opt.port);
+
+	std::string input = "";
+	do
 	{
 		static std::string trimmer = " \t\n\r\f\v";
 		try
@@ -200,7 +171,8 @@ int main(int argc, char *argv[])
 			if(input.length() > 0)
 				commands.push(input);
 
-			Process(std::ref(commands));
+			while(!commands.empty())
+				Process(&client, std::ref(commands));
 		}
 		catch(const std::exception& e)
 		{
@@ -208,10 +180,30 @@ int main(int argc, char *argv[])
 		}
 		
 		input.clear();
+		if(!opt.shell_mode)
+			break;
 		std::cout << "[Command] : ";
 	}
-
-	pool.Close();
+	while(std::getline(std::cin, input) && input.length() > 0);
 	
 	return 0;
+}
+
+void ShowHowToUse(std::string prog_name)
+{
+	std::cout << "[Usage] : " << prog_name << " [-<option> <arg>] [<command> ...]" << std::endl << std::endl;
+	std::cout << "<Options>" << std::endl;
+	std::cout << "	-a, --address		Address of target machine. Default Value is \"localhost\"." << std::endl;
+	std::cout << "	-p, --port			Port of target machine. Default Value is \"52431\"." << std::endl;
+	std::cout << "	-s, --shell			Shell mode. Command like shell. If there are no command argument, it will on automatically." << std::endl << std::endl;
+	ShowCommands();
+}
+
+void ShowCommands()
+{
+	std::cout << "<Commands>" << std::endl;
+	std::cout << "	client			Get How many clients are connected." << std::endl;
+	std::cout << "	connect			Get How many machines are connected with as what name." << std::endl;
+	std::cout << "	usage			Get Usage of the machine. It will only works for \'battle\' Server." << std::endl;
+	std::cout << "	account <id>	Find Account if it is connected." << std::endl;
 }

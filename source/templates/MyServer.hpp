@@ -2,15 +2,19 @@
 #include <memory>
 #include <mutex>
 #include <condition_variable>
+#include <grpcpp/grpcpp.h>
 #include "MyWebsocketServer.hpp"
 #include "MyTCPServer.hpp"
 #include "Thread.hpp"
 #include "Logger.hpp"
-#include "FixedPool.hpp"
+#include "ConfigParser.hpp"
+#include "ManagerServiceServer.hpp"
 
+using grpc::Server;
+using grpc::ServerBuilder;
 using mylib::threads::ThreadExceptHandler;
 using mylib::threads::Thread;
-using mylib::threads::FixedPool;
+using mylib::utils::ConfigParser;
 using mylib::utils::Logger;
 using mylib::utils::StackTraceExcept;
 
@@ -27,9 +31,15 @@ class MyServer : public ThreadExceptHandler
 		int port_web;
 		int port_tcp;
 	
+		std::thread ServiceThread;
+		std::unique_ptr<Server> ServiceServer;
+		ManagerServiceServer MgrService;
+
 	protected:
 		MyTCPServer tcp_server;
 		MyWebsocketServer web_server;
+
+		ServerBuilder ServiceBuilder;
 
 	public:
 		MyServer(int, int);
@@ -42,4 +52,10 @@ class MyServer : public ThreadExceptHandler
 		virtual void Open() = 0;
 		virtual void Close() = 0;
 		virtual void AcceptProcess(std::shared_ptr<MyClientSocket>, ErrorCode) = 0;
+
+		//For Manager Service
+		virtual size_t GetUsage();
+		virtual bool CheckAccount(Account_ID_t);
+		virtual std::pair<size_t, size_t> GetClientUsage();
+		virtual std::map<std::string, size_t> GetConnectUsage();
 };
