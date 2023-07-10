@@ -1,8 +1,5 @@
 SET ( LIBS
 	MyClientSocket
-	MyConnectee
-	MyConnector
-	MyConnectorPool
 	MyServerSocket
 	MyTCPTLSClient
 	MyTCPTLSServer
@@ -25,9 +22,6 @@ ENDFOREACH()
 FIND_PACKAGE ( OpenSSL REQUIRED )
 
 TARGET_LINK_LIBRARIES( MyClientSocket PUBLIC Expected ByteQueue PacketProcessor KeyExchanger Encryptor )
-TARGET_LINK_LIBRARIES( MyConnectee PUBLIC ByteQueue PacketProcessor Logger MyTCPServer )
-TARGET_LINK_LIBRARIES( MyConnector PUBLIC ByteQueue PacketProcessor Thread Logger MyTCPClient )
-TARGET_LINK_LIBRARIES( MyConnectorPool PUBLIC MyConnector ThreadExceptHandler )
 TARGET_LINK_LIBRARIES( MyServerSocket PUBLIC MyClientSocket )
 TARGET_LINK_LIBRARIES( MyTCPClient PUBLIC MyClientSocket )
 TARGET_LINK_LIBRARIES( MyTCPServer PUBLIC MyServerSocket MyTCPClient )

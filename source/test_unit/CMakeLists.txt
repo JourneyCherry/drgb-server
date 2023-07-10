@@ -14,7 +14,6 @@ SET ( TESTS
 	PacketProcessor_Test
 	StackTraceExcept_Test
 	Socket_Test
-	Connector_Test
 	BoostTimer_Test
 	Redis_Test
 	RPC_Test
@@ -42,7 +41,6 @@ TARGET_LINK_LIBRARIES ( Notifier_Test PRIVATE Notifier )
 TARGET_LINK_LIBRARIES ( PacketProcessor_Test PRIVATE PacketProcessor )
 TARGET_LINK_LIBRARIES ( StackTraceExcept_Test PRIVATE StackTraceExcept )
 TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClient MyTCPTLSServer MyWebsocketClient MyWebsocketServer MyWebsocketTLSClient MyWebsocketTLSServer pthread )
-TARGET_LINK_LIBRARIES ( Connector_Test PRIVATE MyConnectorPool MyConnectee )
 TARGET_LINK_LIBRARIES ( BoostTimer_Test PRIVATE pthread )
 TARGET_LINK_LIBRARIES ( Redis_Test PRIVATE MyRedis )
 TARGET_LINK_LIBRARIES ( RPC_Test PRIVATE BattleServiceClient MatchServiceServer ManagerServiceClient ManagerServiceServer )
