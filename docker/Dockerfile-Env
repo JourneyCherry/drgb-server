@@ -1,0 +1,19 @@
+FROM ubuntu
+
+ARG HIREDIS_FILE_NAME=hiredis-1.1.0-Linux.deb
+
+#Ubuntu Environment Setting
+RUN apt-get update
+
+RUN mkdir /drgb-server
+WORKDIR /drgb-server
+
+#Required Libraries Install
+COPY ../source/package/${HIREDIS_FILE_NAME} /drgb-server
+RUN dpkg -i ${HIREDIS_FILE_NAME}
+RUN rm ${HIREDIS_FILE_NAME}
+
+RUN apt-get install -y \
+	libgrpc++-dev \
+	libpqxx-dev \
+	libprotobuf-dev
