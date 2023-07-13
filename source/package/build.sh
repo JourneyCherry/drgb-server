@@ -4,13 +4,15 @@ do_separate=0
 do_verbose=0
 do_clean=0
 do_openrc=0
-while getopts "svco" opt
+do_debugmode=0
+while getopts "svcod" opt
 do
 	case $opt in
 		(s) do_separate=1;;
 		(v) do_verbose=1;;
 		(c) do_clean=1;;
 		(o) do_openrc=1;;
+		(d) do_debugmode=1;;
 		(*) echo "Unknown Option : $opt";;
 	esac
 done
@@ -92,8 +94,16 @@ build_target()
 	if [ $do_openrc -ne 0 ]; then
 		openrc="-DSYSTEM_SERVICE_NAME=openrc"
 	fi
-	cmake .. -DBUILD_TARGET=$(echo $@ | sed -e "s/ /;/g") -DCMAKE_BUILD_TYPE=Release $openrc
+	if [ $do_debugmode -ne 0 ]; then
+		build_type="Debug"
+	else
+		build_type="Release"
+	fi
+	echo "cmake .. -DBUILD_TARGET=$(echo $@ | sed -e "s/ /;/g") -DCMAKE_BUILD_TYPE=$build_type $openrc"
+	cmake .. -DBUILD_TARGET=$(echo $@ | sed -e "s/ /;/g") -DCMAKE_BUILD_TYPE=$build_type $openrc
+	echo "make -j $((`nproc` + 2))"
 	make -j $((`nproc` + 2))
+	echo "cpack"
 	cpack
 	cd $current_dir
 }

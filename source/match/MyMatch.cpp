@@ -32,14 +32,6 @@ void MyMatch::Close()
 void MyMatch::AcceptProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec)
 {
 	if(!ec)
-		return;
-
-	client->KeyExchange(std::bind(&MyMatch::EnterProcess, this, std::placeholders::_1, std::placeholders::_2));
-}
-
-void MyMatch::EnterProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec)
-{
-	if(!ec)
 	{
 		Logger::log("Client " + client->ToString() + " Failed to Authenticate : " + ec.message_code(), Logger::LogType::auth);
 		client->Close();
@@ -47,7 +39,7 @@ void MyMatch::EnterProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec)
 	}
 
 	client->StartRecv(std::bind(&MyMatch::AuthenticateProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-	client->SetTimeout(TIME_AUTHENTICATE);
+	client->SetTimeout(TIME_AUTHENTICATE, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
 }
 
 void MyMatch::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
@@ -123,119 +115,121 @@ void MyMatch::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQu
 		throw StackTraceExcept("DB Failed : " + std::string(e.what()), __STACKINFO__);
 	}
 
-	client->StartRecv(std::bind(&MyMatch::ClientProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, account_id));
 	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
-	client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyMatch::SessionProcess, this, std::placeholders::_1, account_id, cookie));
+	ClientProcess(client, account_id);
+	SessionProcess(client, account_id, cookie);
 }
 
-void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec, Account_ID_t account_id)
+void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> target_client, Account_ID_t account_id)
 {
-	if(!recv_ec)
+	target_client->StartRecv([this, account_id](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
-		if(client->isNormalClose(recv_ec))	//TODO : 아무것도 안하고 나갔을 경우, 세션이 제대로 빠지지 않는다. 확인 필요.
-			Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
-		else
-			Logger::log("Account " + std::to_string(account_id) + " logged out with " + recv_ec.message_code(), Logger::LogType::auth);
-		matchmaker.Exit(account_id);
-		auto session = sessions.FindLKey(account_id);
-		if(!session)
-			return;
-		if(session->second.lock() == client)	//dup-accessed when it is false
-			sessions.EraseLKey(account_id);
-		client->Close();
-		return;
-	}
-	byte header = packet.pop<byte>();
-	switch(header)
-	{
-		case REQ_CHPWD:
-			try
-			{
-				Pwd_Hash_t old_pwd = packet.pop<Pwd_Hash_t>();
-				Pwd_Hash_t new_pwd = packet.pop<Pwd_Hash_t>();
-				MyPostgres db;
-				if(db.ChangePwd(account_id, old_pwd, new_pwd))
-				{
-					db.commit();
-					client->Send(ByteQueue::Create<byte>(SUCCESS));
-				}
-				else
-				{
-					client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
-				}
-			}
-			catch(const pqxx::pqxx_exception & e)
-			{
-				client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
-				Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::debug);
-			}
-			break;
-		case REQ_STARTMATCH:	//매치메이커 큐에 넣기.
-			try
-			{
-				MyPostgres db;
-				auto [_, win, draw, loose] = db.GetInfo(account_id);
-				matchmaker.Enter(account_id, win, draw, loose);
-			}
-			catch(const pqxx::pqxx_exception & e)
-			{
-				client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
-				Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::debug);
-			}
-			catch(const std::exception &e)
-			{
-				client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
-				Logger::log("DB Failed : " + std::string(e.what()), Logger::LogType::debug);
-			}
-			break;
-		case REQ_PAUSEMATCH:	//매치메이커 큐에서 빼기.
+		if(!recv_ec)
+		{
+			if(client->isNormalClose(recv_ec))	//TODO : 아무것도 안하고 나갔을 경우, 세션이 제대로 빠지지 않는다. 확인 필요.
+				Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
+			else
+				Logger::log("Account " + std::to_string(account_id) + " logged out with " + recv_ec.message_code(), Logger::LogType::auth);
 			matchmaker.Exit(account_id);
-			break;
-		case REQ_CHNAME:
-			try
-			{
-				Achievement_ID_t nameindex = packet.pop<Achievement_ID_t>();
-				MyPostgres db;
-				db.SetNickName(account_id, nameindex);	//성공하든, 실패하든 항상 정보를 다시 던져준다.
+			auto session = sessions.FindLKey(account_id);
+			if(!session)
+				return;
+			if(session->second.lock() == client)	//dup-accessed when it is false
+				sessions.EraseLKey(account_id);
+			client->Close();
+			return;
+		}
 
-				ByteQueue infopacket = ByteQueue::Create<byte>(GAME_PLAYER_INFO);
-				auto [nickname, win, draw, loose] = db.GetInfo(account_id);
-				infopacket.push<Achievement_ID_t>(nickname);
-				infopacket.push<int>(win);
-				infopacket.push<int>(draw);	
-				infopacket.push<int>(loose);
+		try
+		{
+			byte header = packet.pop<byte>();
+			switch(header)
+			{
+				case ANS_HEARTBEAT:
+					break;
+				case REQ_CHPWD:
+					try
+					{
+						Pwd_Hash_t old_pwd = packet.pop<Pwd_Hash_t>();
+						Pwd_Hash_t new_pwd = packet.pop<Pwd_Hash_t>();
+						MyPostgres db;
+						if(db.ChangePwd(account_id, old_pwd, new_pwd))
+						{
+							db.commit();
+							client->Send(ByteQueue::Create<byte>(SUCCESS));
+						}
+						else
+						{
+							client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+						}
+					}
+					catch(const pqxx::pqxx_exception & e)
+					{
+						client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+						Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::debug);
+					}
+					break;
+				case REQ_STARTMATCH:	//매치메이커 큐에 넣기.
+					{
+						MyPostgres db;
+						auto [_, win, draw, loose] = db.GetInfo(account_id);
+						matchmaker.Enter(account_id, win, draw, loose);
+					}
+					break;
+				case REQ_PAUSEMATCH:	//매치메이커 큐에서 빼기.
+					matchmaker.Exit(account_id);
+					break;
+				case REQ_CHNAME:
+					{
+						Achievement_ID_t nameindex = packet.pop<Achievement_ID_t>();
+						MyPostgres db;
+						db.SetNickName(account_id, nameindex);	//성공하든, 실패하든 항상 정보를 다시 던져준다.
 
-				db.commit();
-				client->Send(infopacket);
+						ByteQueue infopacket = ByteQueue::Create<byte>(GAME_PLAYER_INFO);
+						auto [nickname, win, draw, loose] = db.GetInfo(account_id);
+						infopacket.push<Achievement_ID_t>(nickname);
+						infopacket.push<int>(win);
+						infopacket.push<int>(draw);	
+						infopacket.push<int>(loose);
+
+						db.commit();
+						client->Send(infopacket);
+					}
+					break;
+				default:
+					client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+					break;
 			}
-			catch(const pqxx::pqxx_exception & e)
-			{
-				client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
-				client->Close();
-				throw StackTraceExcept("DB Failed : " + std::string(e.base().what()), __STACKINFO__);
-			}
-			catch(const std::exception &e)
-			{
-				client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
-				client->Close();
-				throw StackTraceExcept("DB Failed : " + std::string(e.what()), __STACKINFO__);
-			}
-			break;
-		default:
-			client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
-			break;
-	}
+		}
+		catch(const pqxx::pqxx_exception & e)
+		{
+			Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::debug);
+			client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+			client->Close();
+		}
+		catch(const std::exception &e)
+		{
+			Logger::log("DB Failed : " + std::string(e.what()), Logger::LogType::debug);
+			client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+			client->Close();
+		}
+		ClientProcess(client, account_id);
+	});
 }
 
-void MyMatch::SessionProcess(std::shared_ptr<MyClientSocket> client, const Account_ID_t& account_id, const Hash_t& cookie)
+void MyMatch::SessionProcess(std::shared_ptr<MyClientSocket> target_client, Account_ID_t account_id, Hash_t cookie)
 {
-	if(!client->is_open())
-		return;
+	target_client->SetTimeout(SESSION_TIMEOUT / 2, [this, account_id, cookie](std::shared_ptr<MyClientSocket> client)
+	{
+		if(!client->is_open())
+			return;
 
-	if(redis.RefreshInfo(account_id, cookie, self_keyword))
-		client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyMatch::SessionProcess, this, std::placeholders::_1, account_id, cookie));
-	else
-		client->Close();
+		if(!client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT)) || 
+			!redis.RefreshInfo(account_id, cookie, self_keyword))
+			client->Close();
+		else
+			SessionProcess(client, account_id, cookie);
+	});
 }
 
 void MyMatch::MatchMake()

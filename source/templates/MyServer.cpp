@@ -35,8 +35,17 @@ void MyServer::Start()
 	{
 		this->ServiceServer->Wait();
 	});
-	web_server.StartAccept(std::bind(&MyServer::AcceptProcess, this, std::placeholders::_1, std::placeholders::_2));
-	tcp_server.StartAccept(std::bind(&MyServer::AcceptProcess, this, std::placeholders::_1, std::placeholders::_2));
+	
+	auto accept_handle = [this](std::shared_ptr<MyClientSocket> socket, ErrorCode ec) -> void
+	{
+		if(!ec)
+			return;
+		
+		socket->KeyExchange(std::bind(&MyServer::AcceptProcess, this, std::placeholders::_1, std::placeholders::_2));
+	};
+
+	web_server.StartAccept(accept_handle);
+	tcp_server.StartAccept(accept_handle);
 	Open();
 }
 

@@ -226,7 +226,7 @@ class BasicTestFixture : public SocketTestFixture
 			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
 			if(!ec)
 				throw ErrorCodeExcept(ec, __STACKINFO__);
-			socket->SetTimeout(TIMEOUT);
+			socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
 			socket->StartRecv(std::bind(&BasicTestFixture::ServerRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 		}
 
@@ -244,7 +244,7 @@ class BasicTestFixture : public SocketTestFixture
 			ByteQueue answer = ByteQueue::Create<byte>(ans);
 			socket->Send(answer);
 			server_count.fetch_add(1);
-			socket->SetTimeout(TIMEOUT);
+			socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
 		}
 
 		void ClientEncrypt(std::shared_ptr<MyClientSocket> socket, ErrorCode ec)
@@ -261,7 +261,7 @@ class BasicTestFixture : public SocketTestFixture
 			if(!ec)
 				throw ErrorCodeExcept(ec, __STACKINFO__);
 			socket->Send(ByteQueue::Create<byte>(REQ_STARTMATCH));
-			socket->SetTimeout(TIMEOUT);
+			socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
 			socket->StartRecv(std::bind(&BasicTestFixture::ClientRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 		}
 
@@ -296,7 +296,7 @@ class ServerCloseTestFixture : public BasicTestFixture
 				throw ErrorCodeExcept(ec, __STACKINFO__);
 			//StartRecv를 하지않고 socket->Close()를 호출하는 경우, Client와의 키교환에서 Connection Closed가 발생할 수도 있다.
 			socket->StartRecv(std::bind(&ServerCloseTestFixture::ServerRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-			socket->SetTimeout(TIMEOUT / 2);
+			socket->SetTimeout(TIMEOUT / 2, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
 			server_count.fetch_add(1);
 		}
 
@@ -343,7 +343,7 @@ class TimeoutTestFixture : public BasicTestFixture
 				throw ErrorCodeExcept(ec, __STACKINFO__);
 			socket->StartRecv(std::bind(&TimeoutTestFixture::CommonRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, isServer));
 			if(isServer)
-				socket->SetTimeout(TIMEOUT);
+				socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
 		}
 
 		void CommonRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec, bool isServer)

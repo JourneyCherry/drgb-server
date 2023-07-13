@@ -12,7 +12,6 @@ class MyTCPServer : public MyServerSocket
 	protected:
 		boost::asio::ip::tcp::acceptor acceptor;
 
-		void Accept_Handle(boost::system::error_code, boost::asio::ip::tcp::socket);
 		virtual std::shared_ptr<MyClientSocket> GetClient(boost::asio::ip::tcp::socket&, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>);
 		void CloseSocket() override;
 

@@ -29,7 +29,6 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		int Port;
 		PacketProcessor recvbuffer;
 		bool initiateClose;
-		bool initiateRecv;
 		std::mutex mtx;
 		
 		std::queue<boost::asio::ip::basic_resolver_entry<boost::asio::ip::tcp>> endpoints;
@@ -39,18 +38,14 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		std::unique_ptr<timer_t> timer;
 
 		//For User of Client Socket
-		std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> connHandler;
-		std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> keHandler;
-		std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> msgHandler;
 		std::function<void(std::shared_ptr<MyClientSocket>)> cleanHandler;
 		Expected<ByteQueue> Recv();
 
 		virtual void DoRecv(std::function<void(boost::system::error_code, size_t)>) = 0;
 		virtual void GetRecv(size_t) = 0;
 		virtual ErrorCode DoSend(const byte*, const size_t&) = 0;
-		virtual void Connect_Handle(const boost::system::error_code&) = 0;
-		void KE_Handle(boost::system::error_code, size_t);
-		void Recv_Handle(std::shared_ptr<MyClientSocket>, boost::system::error_code, size_t);
+		virtual void Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>, const boost::system::error_code&) = 0;
+		void Recv_Handle(std::shared_ptr<MyClientSocket>, boost::system::error_code, size_t, std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)>);
 		void CleanUp();
 		virtual boost::asio::any_io_executor GetContext() = 0;
 		virtual bool isReadable() const = 0;
@@ -75,7 +70,7 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 
 		ErrorCode Send(ByteQueue);
 		ErrorCode Send(std::vector<byte>);
-		void SetTimeout(const int&, std::function<void(std::shared_ptr<MyClientSocket>)> = nullptr);
+		void SetTimeout(const int&, std::function<void(std::shared_ptr<MyClientSocket>)>);
 		void SetCleanUp(std::function<void(std::shared_ptr<MyClientSocket>)>);
 		void CancelTimeout();
 

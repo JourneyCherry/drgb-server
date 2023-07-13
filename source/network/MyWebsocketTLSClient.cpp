@@ -33,14 +33,12 @@ MyWebsocketTLSClient::~MyWebsocketTLSClient()
 
 void MyWebsocketTLSClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
-	connHandler = callback;
-	
 	auto self_ptr = shared_from_this();
-	ws.next_layer().async_handshake(boost::asio::ssl::stream_base::server, [this, self_ptr](boost::system::error_code handshake_code)
+	ws.next_layer().async_handshake(boost::asio::ssl::stream_base::server, [this, self_ptr, callback](boost::system::error_code handshake_code)
 	{
 		if(handshake_code.failed())
 		{
-			this->connHandler(self_ptr, ErrorCode(handshake_code));
+			callback(self_ptr, ErrorCode(handshake_code));
 		}
 		else
 		{
@@ -48,14 +46,14 @@ void MyWebsocketTLSClient::Prepare(std::function<void(std::shared_ptr<MyClientSo
 				res.set(boost::beast::http::field::server, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-server-sync");
 			}));
 
-			ws.async_accept([this, self_ptr](boost::system::error_code accept_code)
+			ws.async_accept([this, self_ptr, callback](boost::system::error_code accept_code)
 			{
 				if(!accept_code.failed())
 				{
 					this->ws.binary(true);
 					this->ws.next_layer().next_layer().socket().non_blocking(false);
 				}
-				this->connHandler(self_ptr, ErrorCode(accept_code));
+				callback(self_ptr, ErrorCode(accept_code));
 			});
 		}
 	});
@@ -94,7 +92,7 @@ ErrorCode MyWebsocketTLSClient::DoSend(const byte* bytes, const size_t &len)
 	//ws.async_write(send_buffer, std::bind(&MyWebsocketTLSClient::Send_Handle, this, std::placeholders::_1, std::placeholders::_2));
 }
 
-void MyWebsocketTLSClient::Connect_Handle(const boost::system::error_code &error_code)
+void MyWebsocketTLSClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler, const boost::system::error_code &error_code)
 {
 	if(!error_code.failed())
 	{
@@ -125,11 +123,11 @@ void MyWebsocketTLSClient::Connect_Handle(const boost::system::error_code &error
 		ws.set_option(boost::beast::websocket::stream_base::timeout::suggested(boost::beast::role_type::client));
 
 		auto self_ptr = shared_from_this();
-		ws.next_layer().async_handshake(boost::asio::ssl::stream_base::client, [this, self_ptr](boost::system::error_code ssl_handshake_code)
+		ws.next_layer().async_handshake(boost::asio::ssl::stream_base::client, [this, self_ptr, handler](boost::system::error_code ssl_handshake_code)
 		{
 			if(ssl_handshake_code.failed())
 			{
-				this->Connect_Handle(ssl_handshake_code);
+				this->Connect_Handle(handler, ssl_handshake_code);
 			}
 			else
 			{
@@ -137,17 +135,17 @@ void MyWebsocketTLSClient::Connect_Handle(const boost::system::error_code &error
 					res.set(boost::beast::http::field::user_agent, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-client-sync");
 				}));
 
-				ws.async_handshake(DomainStr, "/", [this, self_ptr](boost::system::error_code handshake_code)
+				ws.async_handshake(DomainStr, "/", [this, self_ptr, handler](boost::system::error_code handshake_code)
 				{
 					if(handshake_code.failed())
 					{
-						this->Connect_Handle(handshake_code);
+						this->Connect_Handle(handler, handshake_code);
 					}
 					else
 					{
 						this->ws.binary(true);
 						this->ws.next_layer().next_layer().socket().non_blocking(false);
-						this->connHandler(self_ptr, ErrorCode(handshake_code));
+						handler(self_ptr, ErrorCode(handshake_code));
 					}
 				});
 
@@ -159,13 +157,13 @@ void MyWebsocketTLSClient::Connect_Handle(const boost::system::error_code &error
 	{
 		if(endpoints.empty())
 		{
-			connHandler(shared_from_this(), ErrorCode(error_code));
+			handler(shared_from_this(), ErrorCode(error_code));
 			return;
 		}
 		auto ep = endpoints.front();
 		endpoints.pop();
 
-		ws.next_layer().next_layer().async_connect(ep, std::bind(&MyWebsocketTLSClient::Connect_Handle, this, std::placeholders::_1));
+		ws.next_layer().next_layer().async_connect(ep, std::bind(&MyWebsocketTLSClient::Connect_Handle, this, handler, std::placeholders::_1));
 	}
 }
 

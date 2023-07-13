@@ -26,6 +26,6 @@ class MyAuth : public MyServer
 		void Open() override;
 		void Close() override;
 		void AcceptProcess(std::shared_ptr<MyClientSocket>, ErrorCode) override;
-		void EnterProcess(std::shared_ptr<MyClientSocket>, ErrorCode);
-		void ClientProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
+		void ClientProcess(std::shared_ptr<MyClientSocket>);
+		void SessionProcess(std::shared_ptr<MyClientSocket>);
 };

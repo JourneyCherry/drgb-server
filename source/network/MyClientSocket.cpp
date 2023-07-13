@@ -1,37 +1,64 @@
 #include "MyClientSocket.hpp"
 
-MyClientSocket::MyClientSocket() : encryptor(true), decryptor(false), isSecure(false), initiateClose(false), initiateRecv(false)
+MyClientSocket::MyClientSocket() : encryptor(true), decryptor(false), isSecure(false), initiateClose(false)
 {
 }
 
 void MyClientSocket::KeyExchange(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler)
 {
-	keHandler = handler;
 	auto pkey = exchanger.GetPublicKey();
 	if(!pkey)
 	{
-		keHandler(shared_from_this(), pkey.error());
+		handler(shared_from_this(), pkey.error());
 		return;
 	}
 	ErrorCode ec = Send(*pkey);
 	if(!ec)
 	{
-		keHandler(shared_from_this(), ec);
+		handler(shared_from_this(), ec);
+		return;
+	}
+
+	if(!isReadable())
+	{
+		handler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
 		return;
 	}
 	
-	SetTimeout(TIME_KEYEXCHANGE, [this](std::shared_ptr<MyClientSocket> socket){
-		this->keHandler(socket, ErrorCode(ERR_TIMEOUT));
+	SetTimeout(TIME_KEYEXCHANGE, [this, handler](std::shared_ptr<MyClientSocket> socket){
+		Cancel();
 	});
-	
-	std::unique_lock<std::mutex> lk(mtx);
-	if(isReadable())
-		DoRecv(std::bind(&MyClientSocket::KE_Handle, this, std::placeholders::_1, std::placeholders::_2));
-	else
+
+	StartRecv([this, handler](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
 		CancelTimeout();
-		keHandler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
-	}
+		if(!recv_ec)
+		{
+			handler(client, recv_ec);
+			return;
+		}
+
+		auto secret = exchanger.ComputeKey(packet.vector());
+		if(!secret)
+		{
+			handler(client, ErrorCode(ERR_PROTOCOL_VIOLATION));
+			return;
+		}
+		auto derived = KeyExchanger::KDF(*secret, 48);
+		if(derived.size() != 48)
+		{
+			handler(client, ErrorCode(ERR_OUT_OF_CAPACITY));
+			return;
+		}
+		
+		auto [key, iv] = Encryptor::SplitKey(derived);
+
+		encryptor.SetKey(key, iv);
+		decryptor.SetKey(key, iv);
+
+		isSecure = true;
+		handler(client, ErrorCode(SUCCESS));
+	});
 }
 
 Expected<ByteQueue> MyClientSocket::Recv()
@@ -46,90 +73,39 @@ Expected<ByteQueue> MyClientSocket::Recv()
 	return {};
 }
 
-void MyClientSocket::KE_Handle(boost::system::error_code error_code, size_t bytes_written)
+void MyClientSocket::StartRecv(std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> handler)
 {
-	if(error_code.failed())
-	{
-		keHandler(shared_from_this(), ErrorCode(error_code));
-		return;
-	}
-	else
-		GetRecv(bytes_written);
-
-	auto result = Recv();
-	if(!result)
-	{
-		DoRecv(std::bind(&MyClientSocket::KE_Handle, this, std::placeholders::_1, std::placeholders::_2));
-		return;
-	}
-	CancelTimeout();
-
-	auto secret = exchanger.ComputeKey(result->vector());
-	if(!secret)
-	{
-		keHandler(shared_from_this(), ErrorCode(ERR_PROTOCOL_VIOLATION));
-		return;
-	}
-	auto derived = KeyExchanger::KDF(*secret, 48);
-	if(derived.size() != 48)
-	{
-		keHandler(shared_from_this(), ErrorCode(ERR_OUT_OF_CAPACITY));
-		return;
-	}
-	
-	auto [key, iv] = Encryptor::SplitKey(derived);
-
-	encryptor.SetKey(key, iv);
-	decryptor.SetKey(key, iv);
-
-	isSecure = true;
-	keHandler(shared_from_this(), ErrorCode(SUCCESS));
-}
-
-void MyClientSocket::StartRecv(std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> callback)
-{
-	msgHandler = callback;
-
 	std::unique_lock<std::mutex> lk(mtx);
 	if(!isReadable() || initiateClose)
 		return;
+	lk.unlock();
 
-	if(!initiateRecv)
-	{
-		initiateRecv = true;
-		DoRecv(std::bind(&MyClientSocket::Recv_Handle, this, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
-	}
+	auto msg = Recv();
+	if(msg)
+		handler(shared_from_this(), *msg, ErrorCode(SUCCESS));
+	else
+		DoRecv(std::bind(&MyClientSocket::Recv_Handle, this, shared_from_this(), std::placeholders::_1, std::placeholders::_2, handler));
 }
 
-void MyClientSocket::Recv_Handle(std::shared_ptr<MyClientSocket> self_ptr, boost::system::error_code error_code, size_t bytes_written)
+void MyClientSocket::Recv_Handle(std::shared_ptr<MyClientSocket> self_ptr, boost::system::error_code error_code, size_t bytes_written, std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> handler)
 {
 	if(self_ptr == nullptr)
 		return;
 
-	self_ptr->GetRecv(bytes_written);
-	
-	while(msgHandler != nullptr && recvbuffer.isMsgIn())
-	{
-		auto result = Recv();
-		if(!result)
-			break;
-		msgHandler(shared_from_this(), *result, ErrorCode(SUCCESS));
-	}
-
 	if(error_code.failed())
 	{
-		if(msgHandler != nullptr)
-			msgHandler(shared_from_this(), ByteQueue{}, ErrorCode{error_code});
+		handler(self_ptr, ByteQueue{}, ErrorCode{error_code});
 		self_ptr->Close();
-		initiateRecv = false;
 		return;
 	}
 
-	std::unique_lock<std::mutex> lk(mtx);
-	if(!isReadable() || initiateClose)
-		return;
-
-	DoRecv(std::bind(&MyClientSocket::Recv_Handle, this, shared_from_this(), std::placeholders::_1, std::placeholders::_2));	//읽을 수 있으면 계속 읽는다.
+	self_ptr->GetRecv(bytes_written);
+	
+	auto result = Recv();
+	if(result)
+		handler(self_ptr, *result, ErrorCode(SUCCESS));
+	else
+		StartRecv(handler);
 }
 
 ErrorCode MyClientSocket::Send(ByteQueue bytes)
@@ -161,8 +137,6 @@ void MyClientSocket::Connect(std::string addr, int port, std::function<void(std:
 	while(!endpoints.empty())
 		endpoints.pop();
 
-	connHandler = handler;
-
 	//For Websocket
 	Address = addr;
 	Port = port;
@@ -176,7 +150,7 @@ void MyClientSocket::Connect(std::string addr, int port, std::function<void(std:
 	for(auto &endpoint : results)
 		endpoints.push(endpoint);
 
-	Connect_Handle(boost::asio::error::connection_refused);
+	Connect_Handle(handler, boost::asio::error::connection_refused);
 }
 
 void MyClientSocket::SetTimeout(const int& ms, std::function<void(std::shared_ptr<MyClientSocket>)> callback)
@@ -188,12 +162,7 @@ void MyClientSocket::SetTimeout(const int& ms, std::function<void(std::shared_pt
 	timer->async_wait([this, self_ptr, callback](const boost::system::error_code& error_code)
 	{
 		if(error_code != boost::asio::error::operation_aborted)
-		{
-			if(callback == nullptr)
-				this->msgHandler(self_ptr, ByteQueue(), ErrorCode(ERR_TIMEOUT));
-			else
-				callback(self_ptr);
-		}
+			callback(self_ptr);
 	});
 }
 
@@ -217,9 +186,6 @@ void MyClientSocket::CancelTimeout()
 void MyClientSocket::Close()
 {
 	std::unique_lock<std::mutex> lk(mtx);
-	if(!is_open())
-		return;
-	
 	if(initiateClose)
 		return;
 

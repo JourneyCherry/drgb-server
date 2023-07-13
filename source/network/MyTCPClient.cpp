@@ -27,12 +27,10 @@ MyTCPClient::~MyTCPClient()
 
 void MyTCPClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
-	connHandler = callback;
-
 	auto self_ptr = shared_from_this();
-	boost::asio::post(ioc_ref, [this, self_ptr]()
+	boost::asio::post(ioc_ref, [this, self_ptr, callback]()
 	{
-		this->connHandler(self_ptr, ErrorCode(SUCCESS));
+		callback(self_ptr, ErrorCode(SUCCESS));
 	});
 }
 
@@ -58,7 +56,7 @@ ErrorCode MyTCPClient::DoSend(const byte* bytes, const size_t &len)
 	//socket.async_send(send_buffer, std::bind(&MyTCPClient::Send_Handle, this, std::placeholders::_1, std::placeholders::_2));
 }
 
-void MyTCPClient::Connect_Handle(const boost::system::error_code& error_code)
+void MyTCPClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler, const boost::system::error_code& error_code)
 {
 	if(!error_code.failed())
 	{
@@ -68,19 +66,19 @@ void MyTCPClient::Connect_Handle(const boost::system::error_code& error_code)
 
 		socket.non_blocking(false);
 		
-		connHandler(shared_from_this(), ErrorCode(error_code));
+		handler(shared_from_this(), ErrorCode(error_code));
 	}
 	else
 	{
 		if(endpoints.empty())
 		{
-			connHandler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
+			handler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
 			return;
 		}
 		auto ep = endpoints.front();
 		endpoints.pop();
 		
-		socket.async_connect(ep, std::bind(&MyTCPClient::Connect_Handle, this, std::placeholders::_1));
+		socket.async_connect(ep, std::bind(&MyTCPClient::Connect_Handle, this, handler, std::placeholders::_1));
 	}
 }
 

@@ -20,16 +20,16 @@ class MyServerSocket
 		int port;
 		boost::asio::thread_pool threadpool;
 		boost::asio::io_context ioc;
+		boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard;
 		std::mutex mtx_client;
 		std::vector<std::shared_ptr<MyClientSocket>> clients;
 
 		void AddClient(std::shared_ptr<MyClientSocket>);
-		std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> enterHandle;
 		virtual void CloseSocket() = 0;
 		void StartThread();
 
 	public:
-		MyServerSocket(int p, int t) : port(p), ioc{(t>0)?t:0}, threadpool((t>1)?t:1), thread_count((t>1)?t:1) {}
+		MyServerSocket(int p, int t) : port(p), ioc{(t>0)?t:0}, work_guard(boost::asio::make_work_guard(ioc)), threadpool((t>1)?t:1), thread_count((t>1)?t:1) {}
 		MyServerSocket(const MyServerSocket&) = delete;
 		MyServerSocket(MyServerSocket&&) = delete;
 		virtual ~MyServerSocket() = default;

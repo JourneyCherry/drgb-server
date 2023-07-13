@@ -34,7 +34,7 @@ ADD_COMPILE_OPTIONS ( -std=c++17 )
 #별도의 BUILD_TARGET이 설정되면 TEST_TARGET은 사라진다.
 IF( NOT BUILD_TARGET )
 	SET ( BUILD_TARGET auth match battle )
-	LIST ( APPEND TEST_TARGET test_unit test_stress )
+	SET ( TEST_TARGET test_unit test_stress )
 	include(CTest)
 	enable_testing()
 ELSE()
@@ -44,7 +44,7 @@ ELSE()
 	SET ( CPACK_GENERATOR "DEB" )
 	SET ( CPACK_DEBIAN_PACKAGE_MAINTAINER "${PROJECT_NAME}")	#Default Value: CPACK_PACKAGE_CONTACT. Default variable을 SET해도 된다.
 	SET ( CPACK_PACKAGE_DIRECTORY "${CMAKE_SOURCE_DIR}/package")
-	SET ( CPACK_DEBIAN_PACKAGE_DEPENDS "libgrpc++-dev, libpqxx-dev, libprotobuf-dev, libboost-dev" )
+	SET ( CPACK_DEBIAN_PACKAGE_DEPENDS "libgrpc++-dev, libpqxx-dev, libprotobuf-dev" )
 
 	#Target 수에 따라 패키지 파일의 꼬리이름을 변경.
 	LIST ( LENGTH BUILD_TARGET TARGET_COUNT )

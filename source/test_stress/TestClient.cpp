@@ -72,8 +72,8 @@ void TestClient::DoLogin()
 			loginReq.push<Hash_t>(Hasher::sha256((const unsigned char*)(this->pwd.c_str()), this->pwd.length()));
 			loginReq.push<std::string>(id);
 
-			ke_socket->SetTimeout(LoginTimeout);
-			ke_socket->StartRecv(std::bind(&TestClient::LoginProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+			ke_socket->SetTimeout(LoginTimeout, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
+			LoginProcess(ke_socket);
 			auto send_ec = ke_socket->Send(loginReq);
 			if(!send_ec)
 			{
@@ -91,7 +91,7 @@ void TestClient::DoMatch()
 	
 	now_state = STATE_MATCH;
 
-	std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> handle = std::bind(&TestClient::MatchProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+	std::function<void(std::shared_ptr<MyClientSocket>)> handle = std::bind(&TestClient::MatchProcess, this, std::placeholders::_1);
 	std::function<void()> process = std::bind(&TestClient::AccessProcess, this, 1, handle);
 	boost::asio::post(*pioc, process);
 }
@@ -102,7 +102,7 @@ void TestClient::DoBattle()
 
 	now_state = STATE_BATTLE;
 
-	std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> handle = std::bind(&TestClient::BattleProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+	std::function<void(std::shared_ptr<MyClientSocket>)> handle = std::bind(&TestClient::BattleProcess, this, std::placeholders::_1);
 	std::function<void()> process = std::bind(&TestClient::AccessProcess, this, 1 + battle_seed, handle);
 	boost::asio::post(*pioc, process);
 }
@@ -144,61 +144,63 @@ void TestClient::Close()
 		timer->cancel();
 }
 
-void TestClient::LoginProcess(std::shared_ptr<MyClientSocket> socket, ByteQueue answer, ErrorCode ec)
+void TestClient::LoginProcess(std::shared_ptr<MyClientSocket> target_socket)
 {
-	socket->CancelTimeout();
-	if(!ec)
+	target_socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
-		if(now_state == STATE_LOGIN)
+		client->CancelTimeout();
+		if(!recv_ec)
 		{
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ec, __STACKINFO__)));
+			if(!client->isNormalClose(recv_ec))
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(recv_ec, __STACKINFO__)));
 			DoRestart();
 			return;
 		}
-		if(!socket->isNormalClose(ec))
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ec, __STACKINFO__)));
-		return;
-	}
 
-	byte header = answer.pop<byte>();
-	switch(header)
-	{
-		case SUCCESS:
-		case ERR_EXIST_ACCOUNT_MATCH:
-		case ERR_EXIST_ACCOUNT_BATTLE:
-			cookie = answer.pop<Hash_t>();
-			if(header == ERR_EXIST_ACCOUNT_BATTLE)
-				battle_seed = answer.pop<Seed_t>();
-			else
-				battle_seed = -1;
+		byte header = packet.pop<byte>();
+		switch(header)
+		{
+			case ANS_HEARTBEAT:		//연결 확인
+				break;
+			case SUCCESS:
+			case ERR_EXIST_ACCOUNT_MATCH:
+			case ERR_EXIST_ACCOUNT_BATTLE:
+				cookie = packet.pop<Hash_t>();
+				if(header == ERR_EXIST_ACCOUNT_BATTLE)
+					battle_seed = packet.pop<Seed_t>();
+				else
+					battle_seed = -1;
 
-			if(battle_seed < 0)
-				DoMatch();
-			else
-				DoBattle();
-			break;
-		case ERR_NO_MATCH_ACCOUNT:
-			{	//Try Register
-				ByteQueue regReq = ByteQueue::Create<byte>(REQ_REGISTER);
-				regReq.push<Hash_t>(Hasher::sha256((const unsigned char*)(this->pwd.c_str()), this->pwd.length()));
-				regReq.push<std::string>(id);
-				socket->SetTimeout(LoginTimeout);
-				auto send_ec = socket->Send(regReq);
-				if(!send_ec)
-				{
-					parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
-					DoRestart();
+				if(battle_seed < 0)
+					DoMatch();
+				else
+					DoBattle();
+				return;
+			case ERR_NO_MATCH_ACCOUNT:
+				{	//Try Register
+					ByteQueue regReq = ByteQueue::Create<byte>(REQ_REGISTER);
+					regReq.push<Hash_t>(Hasher::sha256((const unsigned char*)(this->pwd.c_str()), this->pwd.length()));
+					regReq.push<std::string>(id);
+					client->SetTimeout(LoginTimeout, [](std::shared_ptr<MyClientSocket> client){client->Close();});
+					auto send_ec = client->Send(regReq);
+					if(!send_ec)
+					{
+						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
+						DoRestart();
+						return;
+					}
 				}
-			}
-			break;
-		default:
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
-			DoRestart();
-			break;
-	}
+				break;
+			default:
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
+				DoRestart();
+				return;
+		}
+		LoginProcess(client);
+	});
 }
 
-void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> handler)
+void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<MyClientSocket>)> handler)
 {
 	socket = std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(*pioc));
 	socket->Connect(addrs[server].first, addrs[server].second, [this, handler](std::shared_ptr<MyClientSocket> conn_socket, ErrorCode conn_ec)
@@ -219,7 +221,7 @@ void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<My
 				return;
 			}
 
-			ke_socket->StartRecv(handler);
+			handler(ke_socket);
 			auto send_ec = ke_socket->Send(ByteQueue::Create<Hash_t>(cookie));
 			if(!send_ec)
 			{
@@ -231,128 +233,140 @@ void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<My
 	});
 }
 
-void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> socket, ByteQueue answer, ErrorCode ec)
+void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 {
-	if(!ec)
+	target_socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
-		if(!socket->isNormalClose(ec))
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ec, __STACKINFO__)));
-		if(now_state == STATE_MATCH)
+		if(!recv_ec)
+		{
+			if(!client->isNormalClose(recv_ec))
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(recv_ec, __STACKINFO__)));
 			DoRestart();
-		return;
-	}
+			return;
+		}
 
-	byte header = answer.pop<byte>();
-	switch(header)
-	{
-		case ERR_PROTOCOL_VIOLATION:	//프로토콜 위반
-		case ERR_DB_FAILED:				//db query 실패
-		case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
-		case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
-			DoRestart();
-			break;
-		case GAME_PLAYER_INFO:
-			nickname = answer.pop<Achievement_ID_t>();
-			win = answer.pop<int>();
-			draw = answer.pop<int>();
-			loose = answer.pop<int>();
+		byte header = packet.pop<byte>();
+		switch(header)
+		{
+			case ANS_HEARTBEAT:		//연결 확인
+				break;
+			case ERR_PROTOCOL_VIOLATION:	//프로토콜 위반
+			case ERR_DB_FAILED:				//db query 실패
+			case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
+			case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
+				DoRestart();
+				return;
+			case GAME_PLAYER_INFO:
+				nickname = packet.pop<Achievement_ID_t>();
+				win = packet.pop<int>();
+				draw = packet.pop<int>();
+				loose = packet.pop<int>();
 
-			{
-				auto send_ec = socket->Send(ByteQueue::Create<byte>(REQ_STARTMATCH));
-				if(!send_ec)
 				{
-					parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
-					DoRestart();
+					auto send_ec = client->Send(ByteQueue::Create<byte>(REQ_STARTMATCH));
+					if(!send_ec)
+					{
+						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
+						DoRestart();
+						return;
+					}
 				}
-			}
-			break;
-		case ANS_MATCHMADE:
-			battle_seed = answer.pop<int>();
-			DoBattle();
-			break;
-		default:
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
-			DoRestart();
-			break;
-	}
+				break;
+			case ANS_MATCHMADE:
+				battle_seed = packet.pop<int>();
+				DoBattle();
+				return;
+			default:
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
+				DoRestart();
+				return;
+		}
+		MatchProcess(client);
+	});
 }
 
-void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> socket, ByteQueue answer, ErrorCode ec)
+void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 {
-	if(!ec)
+	target_socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
-		if(!socket->isNormalClose(ec))
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ec, __STACKINFO__)));
-		if(now_state == STATE_BATTLE)
+		if(!recv_ec)
+		{
+			if(!client->isNormalClose(recv_ec))
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(recv_ec, __STACKINFO__)));
 			DoRestart();
-		return;
-	}
+			return;
+		}
 
-	byte header = answer.pop<byte>();
-	switch(header)
-	{
-		case ERR_PROTOCOL_VIOLATION:	//프로토콜 위반
-		case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
-		case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
-			DoRestart();
-			break;
-		case GAME_PLAYER_INFO_NAME:
-			//TODO : Check if information is correct
-			nickname = answer.pop<Achievement_ID_t>();
-			win = answer.pop<int>();
-			draw = answer.pop<int>();
-			loose = answer.pop<int>();
+		byte header = packet.pop<byte>();
+		switch(header)
+		{
+			case ANS_HEARTBEAT:		//연결 확인
+				break;
+			case ERR_PROTOCOL_VIOLATION:	//프로토콜 위반
+			case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
+			case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
+				DoRestart();
+				return;
+			case GAME_PLAYER_INFO_NAME:
+				//TODO : Check if information is correct
+				nickname = packet.pop<Achievement_ID_t>();
+				win = packet.pop<int>();
+				draw = packet.pop<int>();
+				loose = packet.pop<int>();
 
-			enemy_nickname = answer.pop<Achievement_ID_t>();
-			enemy_win = answer.pop<int>();
-			enemy_draw = answer.pop<int>();
-			enemy_loose = answer.pop<int>();
-			break;
-		case GAME_PLAYER_DISCONNEDTED:	//상대 연결 끊어짐
-			break;
-		case GAME_PLAYER_ALL_CONNECTED:	//상대 접속
-		case GAME_ROUND_RESULT:
-			round = answer.pop<int>();
-			if(round >= 0)
-			{
-				action = answer.pop<byte>();
-				health = answer.pop<int>();
-				energy = answer.pop<int>();
-				
-				enemy_action = answer.pop<byte>();
-				enemy_health = answer.pop<int>();
-				enemy_energy = answer.pop<int>();
-			}
-			{
-				int next_action = GetRandomAction();
-				ByteQueue actionreq = ByteQueue::Create<byte>(REQ_GAME_ACTION);
-				actionreq.push<int>(next_action);
-				auto send_ec = socket->Send(actionreq);
-				if(!send_ec)
+				enemy_nickname = packet.pop<Achievement_ID_t>();
+				enemy_win = packet.pop<int>();
+				enemy_draw = packet.pop<int>();
+				enemy_loose = packet.pop<int>();
+				break;
+			case GAME_PLAYER_DISCONNEDTED:	//상대 연결 끊어짐
+				break;
+			case GAME_PLAYER_ALL_CONNECTED:	//상대 접속
+			case GAME_ROUND_RESULT:
+				round = packet.pop<int>();
+				if(round >= 0)
 				{
-					parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
-					DoRestart();
+					action = packet.pop<byte>();
+					health = packet.pop<int>();
+					energy = packet.pop<int>();
+					
+					enemy_action = packet.pop<byte>();
+					enemy_health = packet.pop<int>();
+					enemy_energy = packet.pop<int>();
 				}
-			}
-			break;
-		case GAME_FINISHED_WIN:
-		case GAME_FINISHED_DRAW:
-		case GAME_FINISHED_LOOSE:
-		case GAME_CRASHED:
-			DoMatch();
-			break;
-		case GAME_PLAYER_ACHIEVE:	//도전과제 달성.
-			{
-				Achievement_ID_t achieve = answer.pop<Achievement_ID_t>();
-			}
-			break;
-		default:
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
-			DoRestart();
-			break;
-	}
+				{
+					int next_action = GetRandomAction();
+					ByteQueue actionreq = ByteQueue::Create<byte>(REQ_GAME_ACTION);
+					actionreq.push<int>(next_action);
+					auto send_ec = client->Send(actionreq);
+					if(!send_ec)
+					{
+						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
+						DoRestart();
+						return;
+					}
+				}
+				break;
+			case GAME_FINISHED_WIN:
+			case GAME_FINISHED_DRAW:
+			case GAME_FINISHED_LOOSE:
+			case GAME_CRASHED:
+				DoMatch();
+				return;
+			case GAME_PLAYER_ACHIEVE:	//도전과제 달성.
+				{
+					Achievement_ID_t achieve = packet.pop<Achievement_ID_t>();
+				}
+				break;
+			default:
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
+				DoRestart();
+				return;
+		}
+		BattleProcess(client);
+	});
 }
 
 int TestClient::GetId()

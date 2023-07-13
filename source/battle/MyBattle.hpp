@@ -37,11 +37,10 @@ class MyBattle : public MyServer
 
 	private:
 		void AcceptProcess(std::shared_ptr<MyClientSocket>, ErrorCode) override;
-		void EnterProcess(std::shared_ptr<MyClientSocket>, ErrorCode);
 		void AuthenticateProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
-		void ClientProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode, Account_ID_t, int, std::shared_ptr<MyGame>);
+		void ClientProcess(std::shared_ptr<MyClientSocket>, Account_ID_t, int, std::shared_ptr<MyGame>);
 		void GameProcess(std::shared_ptr<boost::asio::steady_timer>, std::shared_ptr<MyGame>, const boost::system::error_code&);
-		void SessionProcess(std::shared_ptr<MyClientSocket>, const Account_ID_t&, const Hash_t&);
+		void SessionProcess(std::shared_ptr<MyClientSocket>, Account_ID_t, Hash_t);
 
 		void MatchTransfer(const Account_ID_t&, const Account_ID_t&);
 	

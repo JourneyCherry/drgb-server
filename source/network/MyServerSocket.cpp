@@ -63,6 +63,7 @@ void MyServerSocket::Close()
 {
 	if(!is_open())
 		return;
+	work_guard.reset();
 	CloseSocket();
 	ioc.stop();
 	threadpool.join();

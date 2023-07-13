@@ -35,14 +35,6 @@ void MyBattle::Close()
 void MyBattle::AcceptProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec)
 {
 	if(!ec)
-		return;
-
-	client->KeyExchange(std::bind(&MyBattle::EnterProcess, this, std::placeholders::_1, std::placeholders::_2));
-}
-
-void MyBattle::EnterProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec)
-{
-	if(!ec)
 	{
 		Logger::log("Client " + client->ToString() + " Failed to Authenticate : " + ec.message_code(), Logger::LogType::auth);
 		client->Close();
@@ -50,7 +42,7 @@ void MyBattle::EnterProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec
 	}
 
 	client->StartRecv(std::bind(&MyBattle::AuthenticateProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-	client->SetTimeout(TIME_AUTHENTICATE);
+	client->SetTimeout(TIME_AUTHENTICATE, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
 }
 
 void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
@@ -109,54 +101,64 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 		client->Send(info);
 	}
 
-	client->StartRecv(std::bind(&MyBattle::ClientProcess, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, account_id, side, GameSession));
 	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
+	ClientProcess(client, account_id, side, GameSession);
 	client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyBattle::SessionProcess, this, std::placeholders::_1, account_id, cookie));
 }
 
-void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec, Account_ID_t account_id, int side, std::shared_ptr<MyGame> GameSession)
+void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> target_client, Account_ID_t account_id, int side, std::shared_ptr<MyGame> GameSession)
 {
-	if(!recv_ec)
+	target_client->StartRecv([this, account_id, side, GameSession](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
-		GameSession->Disconnect(side, client);
-		if(client->isNormalClose(recv_ec))
-			Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
-		else
-			Logger::log("Account " + std::to_string(account_id) + " logged out with " + recv_ec.message_code(), Logger::LogType::auth);
-		client->Close();
-		return;
-	}
+		if(!recv_ec)
+		{
+			GameSession->Disconnect(side, client);
+			if(client->isNormalClose(recv_ec))
+				Logger::log("Account " + std::to_string(account_id) + " logged out", Logger::LogType::auth);
+			else
+				Logger::log("Account " + std::to_string(account_id) + " logged out with " + recv_ec.message_code(), Logger::LogType::auth);
+			client->Close();
+			return;
+		}
 
-	byte header = packet.pop<byte>();
-	switch(header)
-	{
-		case REQ_GAME_ACTION:
-			try
-			{
-				int action = packet.pop<int>();
-				GameSession->Action(side, action);
-			}
-			catch(const std::exception &e)
-			{
+		byte header = packet.pop<byte>();
+		switch(header)
+		{
+			case ANS_HEARTBEAT:
+				break;
+			case REQ_GAME_ACTION:
+				try
+				{
+					int action = packet.pop<int>();
+					GameSession->Action(side, action);
+				}
+				catch(const std::exception &e)
+				{
+					client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+					Logger::log(e.what(), Logger::LogType::error);
+				}
+				break;
+			default:
 				client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
-				Logger::log(e.what(), Logger::LogType::error);
-			}
-			break;
-		default:
-			client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
-			break;
-	}
+				break;
+		}
+		ClientProcess(client, account_id, side, GameSession);
+	});
 }
 
-void MyBattle::SessionProcess(std::shared_ptr<MyClientSocket> client, const Account_ID_t& account_id, const Hash_t& cookie)
+void MyBattle::SessionProcess(std::shared_ptr<MyClientSocket> target_client, Account_ID_t account_id, Hash_t cookie)
 {
-	if(!client->is_open())
-		return;
-	
-	if(redis.RefreshInfo(account_id, cookie, self_keyword))
-		client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyBattle::SessionProcess, this, std::placeholders::_1, account_id, cookie));
-	else
-		client->Close();
+	target_client->SetTimeout(SESSION_TIMEOUT / 2, [this, account_id, cookie](std::shared_ptr<MyClientSocket> client)
+	{
+		if(!client->is_open())
+			return;
+
+		if(!client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT)) ||
+			!redis.RefreshInfo(account_id, cookie, self_keyword))
+			client->Close();
+		else
+			SessionProcess(client, account_id, cookie);
+	});
 }
 
 void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std::shared_ptr<MyGame> game, const boost::system::error_code &error_code)

@@ -36,10 +36,9 @@ class MyMatch : public MyServer
 
 	private:
 		void AcceptProcess(std::shared_ptr<MyClientSocket>, ErrorCode) override;
-		void EnterProcess(std::shared_ptr<MyClientSocket>, ErrorCode);
 		void AuthenticateProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
-		void ClientProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode, Account_ID_t);
-		void SessionProcess(std::shared_ptr<MyClientSocket>, const Account_ID_t&, const Hash_t&);
+		void ClientProcess(std::shared_ptr<MyClientSocket>, Account_ID_t);
+		void SessionProcess(std::shared_ptr<MyClientSocket>, Account_ID_t, Hash_t);
 
 		void MatchMake();
 

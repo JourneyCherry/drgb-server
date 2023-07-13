@@ -4,6 +4,13 @@
 #include "ManagerServiceClient.hpp"
 #include "StackTraceExcept.hpp"
 
+//Inquiry among Servers
+static constexpr byte INQ_QUIT = 0;				//프로그램 종료
+static constexpr byte INQ_ACCOUNT_CHECK = 131;	//계정 접속/만료 여부 확인.
+static constexpr byte INQ_USAGE = 134;			//사용량(서버 내 자원) 확인.
+static constexpr byte INQ_CLIENTUSAGE = 135;	//사용량(클라이언트 접속량) 확인. 동시접속자 수와 동일
+static constexpr byte INQ_CONNUSAGE = 136;		//사용량(Connector 접속량) 확인.
+
 using mylib::utils::ErrorCodeExcept;
 
 std::map<std::string, byte> cmdtable = {
@@ -12,7 +19,7 @@ std::map<std::string, byte> cmdtable = {
 	{"usage", INQ_USAGE},
 	{"account", INQ_ACCOUNT_CHECK},
 	{"help", ERR_DB_FAILED},
-	{"quit", 0}
+	{"quit", INQ_QUIT}
 };
 MgrOpt opt;
 std::queue<std::string> commands;

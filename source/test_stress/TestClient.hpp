@@ -90,8 +90,8 @@ class TestClient
 		bool isConnected();
 	
 	protected:
-		void LoginProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
-		void AccessProcess(int, std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)>);
-		void MatchProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
-		void BattleProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
+		void LoginProcess(std::shared_ptr<MyClientSocket>);
+		void AccessProcess(int, std::function<void(std::shared_ptr<MyClientSocket>)>);
+		void MatchProcess(std::shared_ptr<MyClientSocket>);
+		void BattleProcess(std::shared_ptr<MyClientSocket>);
 };

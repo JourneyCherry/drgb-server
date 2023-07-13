@@ -36,17 +36,15 @@ MyWebsocketClient::~MyWebsocketClient()
 
 void MyWebsocketClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
-	connHandler = callback;
-
 	auto self_ptr = shared_from_this();
-	ws.async_accept([this, self_ptr](boost::system::error_code accept_code)
+	ws.async_accept([this, self_ptr, callback](boost::system::error_code accept_code)
 	{
 		if(!accept_code.failed())
 		{
 			ws.binary(true);
 			ws.next_layer().socket().non_blocking(false);
 		}
-		this->connHandler(self_ptr, ErrorCode(accept_code));
+		callback(self_ptr, ErrorCode(accept_code));
 	});
 }
 
@@ -83,7 +81,7 @@ ErrorCode MyWebsocketClient::DoSend(const byte* bytes, const size_t &len)
 	//ws.async_write(send_buffer, std::bind(&MyWebsocketClient::Send_Handle, this, std::placeholders::_1, std::placeholders::_2));
 }
 
-void MyWebsocketClient::Connect_Handle(const boost::system::error_code &error_code)
+void MyWebsocketClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler, const boost::system::error_code &error_code)
 {
 	if(!error_code.failed())
 	{
@@ -104,17 +102,17 @@ void MyWebsocketClient::Connect_Handle(const boost::system::error_code &error_co
 		}));
 
 		auto self_ptr = shared_from_this();
-		ws.async_handshake(DomainStr, "/", [this, self_ptr](boost::system::error_code handshake_code)
+		ws.async_handshake(DomainStr, "/", [this, self_ptr, handler](boost::system::error_code handshake_code)
 		{
 			if(handshake_code.failed())
 			{
-				this->Connect_Handle(handshake_code);
+				this->Connect_Handle(handler, handshake_code);
 			}
 			else
 			{
 				this->ws.binary(true);
 				this->ws.next_layer().socket().non_blocking(false);
-				this->connHandler(self_ptr, ErrorCode(handshake_code));
+				handler(self_ptr, ErrorCode(handshake_code));
 			}
 		});
 
@@ -123,13 +121,13 @@ void MyWebsocketClient::Connect_Handle(const boost::system::error_code &error_co
 	{
 		if(endpoints.empty())
 		{
-			connHandler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
+			handler(shared_from_this(), ErrorCode(ERR_CONNECTION_CLOSED));
 			return;
 		}
 		auto ep = endpoints.front();
 		endpoints.pop();
 
-		ws.next_layer().async_connect(ep, std::bind(&MyWebsocketClient::Connect_Handle, this, std::placeholders::_1));
+		ws.next_layer().async_connect(ep, std::bind(&MyWebsocketClient::Connect_Handle, this, handler, std::placeholders::_1));
 	}
 }
 

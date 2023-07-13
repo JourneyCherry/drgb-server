@@ -97,14 +97,23 @@ int main(int argc, char *argv[])
 		clients.push_back(client);
 	}
 
+	std::string input;
 	int key_input = 0;
+	int recent_success = 'b';
 	while(key_input >= 0 && !kill_signal)
 	{
-		key_input = fgetc(stdin);
+		std::getline(std::cin, input);
+		if(input.length() <= 0)
+			key_input = recent_success;
+		else
+			key_input = input[0];	//TODO : manager처럼 arg를 받아서 i에 넣을 클라이언트 수도 받을 수 있게 변경 필요
+		if(key_input <= 0)
+			key_input = 0;
 		switch(key_input)
 		{
 			case 'i':
 			case 'I':
+				recent_success = 'i';
 				{
 					auto client = std::make_shared<TestClient>(id++);
 					client->DoLogin();
@@ -113,6 +122,7 @@ int main(int argc, char *argv[])
 				break;
 			case 's':
 			case 'S':
+				recent_success = 's';
 				//Show all client's state
 				for(auto &client : clients)
 				{
@@ -132,6 +142,7 @@ int main(int argc, char *argv[])
 				break;
 			case 'b':
 			case 'B':
+				recent_success = 'b';
 				//Brief all client's state
 				{
 					std::array<int, 5> counters = {0, 0, 0, 0, 0};
@@ -151,6 +162,7 @@ int main(int argc, char *argv[])
 				break;
 			case 'r':
 			case 'R':
+				recent_success = 'r';
 				for(auto &client : clients)
 				{
 					if(client->GetState() != 0 && !client->isConnected())
@@ -159,7 +171,11 @@ int main(int argc, char *argv[])
 				break;
 			case 'q':
 			case 'Q':
+				recent_success = 'q';
 				key_input = -1;
+				break;
+			default:
+				g_Show("Unknown Input : " + std::to_string(key_input));
 				break;
 		}
 	}
