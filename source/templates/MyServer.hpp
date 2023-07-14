@@ -5,15 +5,16 @@
 #include <grpcpp/grpcpp.h>
 #include "MyWebsocketServer.hpp"
 #include "MyTCPServer.hpp"
-#include "Thread.hpp"
+#include "ThreadExceptHandler.hpp"
 #include "Logger.hpp"
 #include "ConfigParser.hpp"
 #include "ManagerServiceServer.hpp"
+#include "MyRedis.hpp"
+#include "MyPostgresPool.hpp"
 
 using grpc::Server;
 using grpc::ServerBuilder;
 using mylib::threads::ThreadExceptHandler;
-using mylib::threads::Thread;
 using mylib::utils::ConfigParser;
 using mylib::utils::Logger;
 using mylib::utils::StackTraceExcept;
@@ -36,13 +37,15 @@ class MyServer : public ThreadExceptHandler
 		ManagerServiceServer MgrService;
 
 	protected:
-		MyTCPServer tcp_server;
 		MyWebsocketServer web_server;
 
 		ServerBuilder ServiceBuilder;
 
+		MyPostgresPool dbpool;
+		MyRedis redis;
+
 	public:
-		MyServer(int, int);
+		MyServer(int);
 		virtual ~MyServer();
 		void Start();
 		void Stop();
@@ -56,6 +59,6 @@ class MyServer : public ThreadExceptHandler
 		//For Manager Service
 		virtual size_t GetUsage();
 		virtual bool CheckAccount(Account_ID_t);
-		virtual std::pair<size_t, size_t> GetClientUsage();
+		virtual size_t GetClientUsage();
 		virtual std::map<std::string, size_t> GetConnectUsage();
 };

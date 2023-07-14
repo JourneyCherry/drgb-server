@@ -22,7 +22,9 @@ int MyMain::main(int argc, char *argv[])
 {
 	int exit_code = 0;
 
-	Thread::SetThreadName("Base");
+#ifdef __DEBUG__
+	pthread_setname_np(pthread_self(), "Main");
+#endif
 
 	try
 	{

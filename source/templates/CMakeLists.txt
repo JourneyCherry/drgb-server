@@ -12,8 +12,8 @@ FOREACH( LIB IN LISTS LIBS )
 	ENDIF()
 ENDFOREACH()
 
-TARGET_LINK_LIBRARIES ( MyMain PUBLIC Daemonizer ConfigParser MyServerOpt Thread )
-TARGET_LINK_LIBRARIES ( MyServer PUBLIC Thread Logger MyTCPServer MyWebsocketServer ManagerServiceServer ConfigParser )
+TARGET_LINK_LIBRARIES ( MyMain PUBLIC Daemonizer ConfigParser MyServerOpt )
+TARGET_LINK_LIBRARIES ( MyServer PUBLIC Logger MyTCPServer MyWebsocketServer ManagerServiceServer ConfigParser ThreadExceptHandler )
 TARGET_LINK_LIBRARIES ( MyServerOpt PUBLIC GetArg Logger )
 
 UNSET ( LIBS )

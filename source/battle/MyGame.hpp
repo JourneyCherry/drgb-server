@@ -5,8 +5,8 @@
 #include <chrono>
 #include <boost/asio/error.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include "MyPostgresPool.hpp"
 #include "MyCodes.hpp"
-#include "MyPostgres.hpp"
 #include "MyClientSocket.hpp"
 
 #ifdef __linux__
@@ -31,6 +31,8 @@ class MyGame
 		static const std::chrono::seconds Round_Time;
 		static const std::chrono::seconds Dis_Time;	//디스 시간.
 		static const std::map<int, int> required_energy;
+
+		MyPostgresPool *dbpool;
 
 	public:
 		static constexpr int MAX_PLAYER = 2;
@@ -60,7 +62,7 @@ class MyGame
 		static constexpr int PUNCH = 1 << 3;
 		static constexpr int FIRE = 1 << 4;
 
-		MyGame(Account_ID_t, Account_ID_t, std::shared_ptr<boost::asio::steady_timer>);
+		MyGame(Account_ID_t, Account_ID_t, std::shared_ptr<boost::asio::steady_timer>, MyPostgresPool*);
 		~MyGame() = default;
 		int Connect(Account_ID_t, std::shared_ptr<MyClientSocket>);
 		void Disconnect(int, std::shared_ptr<MyClientSocket>);

@@ -36,6 +36,7 @@ class TestClient
 		static void AddAddr(std::string, int);
 		static void SetInfo(ThreadExceptHandler*, boost::asio::io_context*);
 		static int GetRandomAction();
+		static std::string GetStateName(int);
 
 	private:
 		std::shared_ptr<MyWebsocketClient> socket;
@@ -76,6 +77,10 @@ class TestClient
 		//Game Info
 		int round;
 
+		std::mutex last_error_mtx;
+		std::string last_error;
+		void RecordError(std::string, std::string, int, std::string);
+
 	public:
 		TestClient(int);
 		~TestClient();
@@ -88,6 +93,8 @@ class TestClient
 		Seed_t GetSeed();
 		int GetState();
 		bool isConnected();
+		std::string GetLastError() const;
+		void ClearLastError();
 	
 	protected:
 		void LoginProcess(std::shared_ptr<MyClientSocket>);

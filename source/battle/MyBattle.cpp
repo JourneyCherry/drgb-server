@@ -5,9 +5,8 @@ MyBattle::MyBattle() :
 	self_keyword("battle" + std::to_string(machine_id)),
 	keyword_match("match"),
 	BattleService(ConfigParser::GetString("Match_Addr"), ConfigParser::GetInt("Service_Port", 52431), machine_id, this),
-	redis(SESSION_TIMEOUT),
 	gamepool(1, this),
-	MyServer(ConfigParser::GetInt("Battle_ClientPort_Web", 54324), ConfigParser::GetInt("Battle_ClientPort_TCP", 54424))
+	MyServer(ConfigParser::GetInt("Battle_ClientPort", 54324))
 {
 	BattleService.SetCallback(std::bind(&MyBattle::MatchTransfer, this, std::placeholders::_1, std::placeholders::_2));
 }
@@ -18,7 +17,6 @@ MyBattle::~MyBattle()
 
 void MyBattle::Open()
 {
-	MyPostgres::Open();
 	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
 	Logger::log("Battle Server Start as " + self_keyword, Logger::LogType::info);
 }
@@ -28,7 +26,6 @@ void MyBattle::Close()
 	gamepool.Stop();
 	BattleService.Close();
 	redis.Close();
-	MyPostgres::Close();
 	Logger::log("Battle Server Stop", Logger::LogType::info);
 }
 
@@ -59,20 +56,28 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 
 	//Session Server에서 Session 찾기
 	auto info = redis.GetInfoFromCookie(cookie);
-	if(!info || info->second != self_keyword)
+	if(!info)	//Session이 없는 경우
 	{
+		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No Session Found", Logger::LogType::auth);
 		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 		client->Close();
-		Logger::log("Client " + client->ToString() + " Failed to Authenticate", Logger::LogType::auth);
 		return;
 	}
 	Account_ID_t account_id = info->first;
+	if(info->second != self_keyword)	//Session은 있지만 대상이 Battle 서버가 아닌 경우
+	{
+		Logger::log("Account " + std::to_string(account_id) + " Failed to Authenticate : Session Mismatched", Logger::LogType::auth);
+		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
+		client->Close();
+		return;
+	}
 
 	//Local Server에서 Session찾기
 	auto session = this->sessions.FindRKey(cookie);
 	if(!session)	//세션이 match로부터 오지 않는 경우
 	{
-		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Game", Logger::LogType::auth);
+		Logger::log("Account " + std::to_string(account_id) + " Failed to Authenticate : No Matching Game", Logger::LogType::auth);
+		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 		redis.SetInfo(account_id, cookie, keyword_match);	//battle서버에 있을 필요 없는 세션은 match서버로 보낸다.
 		client->Close();
 		return;
@@ -80,10 +85,10 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 	std::shared_ptr<MyGame> GameSession = session->second;
 
 	//Game에 접속 보내기.
-	int side = GameSession->Connect(account_id, client);
+	int side = GameSession->Connect(account_id, client);	//여기에서 Dup-Access를 처리한다.
 	if(side < 0)	//게임이 종료되었거나 올바르지 않은 세션이 올라온 경우
 	{
-		Logger::log("Client " + client->ToString() + " Failed to Authenticate : No matching Game", Logger::LogType::auth);
+		Logger::log("Account " + std::to_string(account_id) + " Failed to Authenticate : Wrong Game Found", Logger::LogType::auth);
 		this->sessions.EraseLKey(account_id);
 		client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
 		redis.SetInfo(account_id, cookie, keyword_match);	//battle서버에 있을 필요 없는 세션은 match서버로 보낸다.
@@ -181,8 +186,6 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 
 		while(!players.empty())
 		{
-			//Seed_t match_server_seed = 1;	//TODO : 추후, Match Server가 distributed되면 Load Balancing 하도록 변경 필요
-
 			auto player = players.front();
 			players.pop();
 			auto erase_result = sessions.EraseLKey(player.id);
@@ -235,7 +238,7 @@ void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 		{
 			Hash_t lpcookie = lpresult->first;
 			Hash_t rpcookie = rpresult->first;
-			std::shared_ptr<MyGame> new_game = std::make_shared<MyGame>(lpid, rpid, timer);
+			std::shared_ptr<MyGame> new_game = std::make_shared<MyGame>(lpid, rpid, timer, &dbpool);
 
 			sessions.Insert(lpid, lpcookie, new_game);
 			sessions.Insert(rpid, rpcookie, new_game);

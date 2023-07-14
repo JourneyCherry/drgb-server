@@ -34,7 +34,7 @@ class RPCTestFixture : public ::testing::Test
 
 		virtual size_t GetUsage() { return 0; }
 		virtual bool CheckAccount(Account_ID_t) { return false; }
-		virtual std::pair<size_t, size_t> GetClientUsage() { return {0, 0}; }
+		virtual size_t GetClientUsage() { return 0; }
 		virtual std::map<std::string, size_t> GetConnectUsage() 
 		{
 			std::map<std::string, size_t> connected;
@@ -115,7 +115,7 @@ class ManagerTestFixture : public RPCTestFixture
 	protected:
 		size_t GetUsage() override { return 5; }
 		bool CheckAccount(Account_ID_t id) override { return (id == 5); }
-		std::pair<size_t, size_t> GetClientUsage() override { return {7, 9}; }
+		size_t GetClientUsage() override { return 9; }
 		std::map<std::string, size_t> GetConnectUsage() override
 		{
 			std::map<std::string, size_t> connected = RPCTestFixture::GetConnectUsage();
@@ -145,8 +145,7 @@ TEST_F(ManagerTestFixture, ManagerTest)
 
 	auto client = mgr.GetClientUsage();
 	ASSERT_TRUE(client.isSuccessed());
-	auto [tcp, web] = *client;
-	EXPECT_EQ(tcp, 7);
+	auto web = *client;
 	EXPECT_EQ(web, 9);
 
 	auto connect = mgr.GetConnectUsage();

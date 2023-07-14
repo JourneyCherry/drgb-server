@@ -1,8 +1,7 @@
 #include "MyAuth.hpp"
 
 MyAuth::MyAuth() : 
-	redis(SESSION_TIMEOUT),
-	MyServer(ConfigParser::GetInt("Auth_ClientPort_Web", 54322), ConfigParser::GetInt("Auth_ClientPort_TCP", 54422))
+	MyServer(ConfigParser::GetInt("Auth_ClientPort", 54322))
 {
 }
 
@@ -12,15 +11,11 @@ MyAuth::~MyAuth()
 
 void MyAuth::Open()
 {
-	MyPostgres::Open();
-	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
 	Logger::log("Auth Server Start", Logger::LogType::info);
 }
 
 void MyAuth::Close()
 {
-	redis.Close();
-	MyPostgres::Close();
 	Logger::log("Auth Server Stop", Logger::LogType::info);
 }
 
@@ -75,22 +70,22 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> target_client)
 
 			//Chceck Account from DB
 			{
-				dbsystem db;
+				auto db = dbpool.GetConnection();
 				if(header == REQ_REGISTER)
-					account_id = db.RegisterAccount(email, pwd_hash);
+					account_id = db->RegisterAccount(email, pwd_hash);
 				else if(header == REQ_LOGIN)
-					account_id = db.FindAccount(email, pwd_hash);
+					account_id = db->FindAccount(email, pwd_hash);
 				if(account_id <= 0)
 				{
 					account_id = 0;
 					Logger::log("Client " + client->ToString() + " Failed to login \'" + email + "\' for Password Mismatch", Logger::LogType::auth);
 					client->Send(ByteQueue::Create<byte>(ERR_NO_MATCH_ACCOUNT));
-					db.abort();
+					db->abort();
 				}
 				else
 				{
 					Logger::log("Client " + client->ToString() + " Success to Login \'" + std::to_string(account_id) + "\'", Logger::LogType::auth);
-					db.commit();
+					db->commit();
 				}
 			}
 

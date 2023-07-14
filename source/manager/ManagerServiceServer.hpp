@@ -12,7 +12,6 @@ using grpc::ServerContext;
 using ServerService::Usage;
 using ServerService::Account;
 using ServerService::CheckResult;
-using ServerService::ClientUsage;
 using ServerService::ConnectionUsage;
 using google::protobuf::Empty;
 using ServerService::MgrToServer;
@@ -22,7 +21,7 @@ class ManagerServiceServer : public MgrToServer::Service
 	private:
 		using GetUsage_t = std::function<size_t()>;
 		using CheckAccount_t = std::function<bool(Account_ID_t)>;
-		using GetClientUsage_t = std::function<std::pair<size_t, size_t>()>;
+		using GetClientUsage_t = std::function<size_t()>;
 		using GetConnectUsage_t = std::function<std::map<std::string, size_t>()>;
 		GetUsage_t handler_GetUsage;
 		CheckAccount_t handler_CheckAccount;
@@ -31,7 +30,7 @@ class ManagerServiceServer : public MgrToServer::Service
 	private:
 		Status GetUsage(ServerContext*, const Empty*, Usage*) override;
 		Status CheckAccount(ServerContext*, const Account*, CheckResult*) override;
-		Status GetClientUsage(ServerContext*, const Empty*, ClientUsage*) override;
+		Status GetClientUsage(ServerContext*, const Empty*, Usage*) override;
 		Status GetConnectUsage(ServerContext*, const Empty*, ConnectionUsage*) override;
 	public:
 		ManagerServiceServer(const GetUsage_t&, const CheckAccount_t&, const GetClientUsage_t&, const GetConnectUsage_t&);

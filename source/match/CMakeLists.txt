@@ -2,7 +2,6 @@ SET ( TARGET match )
 SET ( LIBS
 	MyMatch
 	MyMatchMaker
-	MyNotifyMsgs
 	MatchServiceServer
 )
 
@@ -17,11 +16,6 @@ ENDFOREACH()
 ADD_EXECUTABLE ( ${TARGET} main.cpp )
 SET_TARGET_PROPERTIES ( ${TARGET} PROPERTIES OUTPUT_NAME ${PROJECT_NAME}-${TARGET} )
 
-TARGET_LINK_LIBRARIES ( MyNotifyMsgs INTERFACE 
-	ByteQueue
-	Notifier
-)
-
 TARGET_LINK_LIBRARIES ( MyMatchMaker PUBLIC
 	MyTypes
 )
@@ -31,8 +25,7 @@ TARGET_LINK_LIBRARIES ( MyMatch PUBLIC
 	ConfigParser
 	MyCodes
 	MyMatchMaker
-	MyNotifyMsgs
-	MyPostgres
+	MyPostgresPool
 	MyRedis
 	MatchServiceServer
 )

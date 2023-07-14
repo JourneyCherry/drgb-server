@@ -12,7 +12,8 @@ const std::chrono::seconds MyGame::Round_Time = std::chrono::seconds(2);
 const std::chrono::seconds MyGame::Dis_Time = std::chrono::seconds(15);
 const std::chrono::seconds MyGame::StartAnim_Time = std::chrono::seconds(2) + MyGame::Round_Time;	//Start Animation이 그려진 뒤, 자동으로 한 라운드를 진행하므로 사용자 입력을 기다리는 Round_Time이 추가되어야 한다.
 
-MyGame::MyGame(Account_ID_t lpid, Account_ID_t rpid, std::shared_ptr<boost::asio::steady_timer> t) : timer(t), state_level(0), now_round(-1)
+MyGame::MyGame(Account_ID_t lpid, Account_ID_t rpid, std::shared_ptr<boost::asio::steady_timer> t, MyPostgresPool *pool)
+ : timer(t), state_level(0), now_round(-1), dbpool(pool)
 {
 	ulock lk(mtx);
 	players[0].id = lpid;
@@ -30,8 +31,10 @@ MyGame::MyGame(Account_ID_t lpid, Account_ID_t rpid, std::shared_ptr<boost::asio
 		players[i].consecutive = 0;
 		try
 		{
-			MyPostgres db;
-			auto [name, win, draw, loose] = db.GetInfo(players[i].id);
+			auto db = dbpool->GetConnection();
+			if(!db)
+				throw pqxx::broken_connection();
+			auto [name, win, draw, loose] = db->GetInfo(players[i].id);
 			players[i].info.push<Achievement_ID_t>(name);	//nickname
 			players[i].info.push<int>(win);	//win
 			players[i].info.push<int>(draw);	//draw
@@ -62,9 +65,9 @@ int MyGame::Connect(Account_ID_t id, std::shared_ptr<MyClientSocket> socket)
 			{
 				lk.unlock();
 				Disconnect(i, existing);
+				Logger::log("Account " + std::to_string(id) + " has dup access : " + existing->ToString() + " -> " + socket->ToString(), Logger::LogType::auth);
 				existing->Send(ByteQueue::Create<byte>(ERR_DUPLICATED_ACCESS));
 				existing->Close();
-				Logger::log("Account " + std::to_string(id) + " has dup access : " + existing->ToString() + " -> " + socket->ToString(), Logger::LogType::auth);
 				lk.lock();
 			}
 			players[i].socket = socket;
@@ -136,7 +139,6 @@ bool MyGame::Work(const bool& interrupted)
 					players[i].result = GAME_CRASHED;
 				lk.unlock();
 				
-				Logger::log(logtitlestr + " : Crashed by disconnect", Logger::LogType::info);
 				ProcessResult(true, true);
 				return false;
 			}
@@ -237,14 +239,16 @@ void MyGame::ProcessResult(bool drawed, bool crashed)
 
 	try
 	{
-		MyPostgres db;
+		auto db = dbpool->GetConnection();
+		if(!db)
+			throw pqxx::broken_connection();
 		Account_ID_t winner_id = players[0].id;
 		Account_ID_t looser_id = players[1].id;
 		if(winner == 1)
 			std::swap(winner_id, looser_id);
 
-		db.ArchiveBattle(winner_id, looser_id, drawed, crashed);
-		db.commit();
+		db->ArchiveBattle(winner_id, looser_id, drawed, crashed);
+		db->commit();
 	}
 	catch(const pqxx::pqxx_exception &e)
 	{
@@ -362,6 +366,7 @@ bool MyGame::CheckAction(int action)
 
 bool MyGame::isAllIn()
 {
+	std::unique_lock<std::mutex> lk(mtx);
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
 		if(!players[i].socket)
@@ -394,8 +399,10 @@ void MyGame::AchieveCount(Account_ID_t id, Achievement_ID_t achieve, std::shared
 {
 	try
 	{
-		MyPostgres db;
-		if(db.Achieve(id, achieve))
+		auto db = dbpool->GetConnection();
+		if(!db)
+			throw pqxx::broken_connection();
+		if(db->Achieve(id, achieve))
 		{
 			ByteQueue packet = ByteQueue::Create<byte>(GAME_PLAYER_ACHIEVE);
 			packet.push<Achievement_ID_t>(achieve);
@@ -416,8 +423,10 @@ void MyGame::AchieveProgress(Account_ID_t id, Achievement_ID_t achieve, int coun
 {
 	try
 	{
-		MyPostgres db;
-		if(db.AchieveProgress(id, achieve, count))
+		auto db = dbpool->GetConnection();
+		if(!db)
+			throw pqxx::broken_connection();
+		if(db->AchieveProgress(id, achieve, count))
 		{
 			ByteQueue packet = ByteQueue::Create<byte>(GAME_PLAYER_ACHIEVE);
 			packet.push<Achievement_ID_t>(achieve);

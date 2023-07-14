@@ -24,11 +24,9 @@ Status ManagerServiceServer::CheckAccount(ServerContext* context, const Account*
 	return Status::OK;	
 }
 
-Status ManagerServiceServer::GetClientUsage(ServerContext* context, const Empty* request, ClientUsage* reply)
+Status ManagerServiceServer::GetClientUsage(ServerContext* context, const Empty* request, Usage* reply)
 {
-	auto pair = handler_GetClientUsage();
-	reply->mutable_tcp()->set_usage(pair.first);
-	reply->mutable_web()->set_usage(pair.second);
+	reply->set_usage(handler_GetClientUsage());
 	return Status::OK;
 }
 

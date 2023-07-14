@@ -14,7 +14,6 @@ using google::protobuf::Empty;
 using ServerService::Usage;
 using ServerService::Account;
 using ServerService::CheckResult;
-using ServerService::ClientUsage;
 using ServerService::ConnectionUsage;
 using ServerService::MgrToServer;
 
@@ -29,6 +28,6 @@ class ManagerServiceClient
 
 		Expected<size_t, ErrorCode> GetUsage();
 		Expected<bool, ErrorCode> CheckAccount(const Account_ID_t&);
-		Expected<std::pair<size_t, size_t>, ErrorCode> GetClientUsage();
+		Expected<size_t, ErrorCode> GetClientUsage();
 		Expected<std::map<std::string, size_t>, ErrorCode> GetConnectUsage();
 };

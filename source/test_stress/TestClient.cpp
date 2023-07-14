@@ -56,6 +56,7 @@ void TestClient::DoLogin()
 		if(!conn_ec)
 		{
 			this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(conn_ec, __STACKINFO__)));
+			RecordError(__STACKINFO__, "Failed Connect : " + conn_ec.message_code());
 			this->DoRestart();
 			return;
 		}
@@ -65,6 +66,7 @@ void TestClient::DoLogin()
 			if(!ke_ec)
 			{
 				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ke_ec, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed KeyExchange : " + ke_ec.message_code());
 				this->DoRestart();
 				return;
 			}
@@ -72,12 +74,17 @@ void TestClient::DoLogin()
 			loginReq.push<Hash_t>(Hasher::sha256((const unsigned char*)(this->pwd.c_str()), this->pwd.length()));
 			loginReq.push<std::string>(id);
 
-			ke_socket->SetTimeout(LoginTimeout, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
+			ke_socket->SetTimeout(LoginTimeout, [this](std::shared_ptr<MyClientSocket> socket)
+			{
+				RecordError(__STACKINFO__, "Timeout at Login");
+				socket->Close();
+			});
 			LoginProcess(ke_socket);
 			auto send_ec = ke_socket->Send(loginReq);
 			if(!send_ec)
 			{
 				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed Send Login : " + send_ec.message_code());
 				this->DoRestart();
 				return;
 			}
@@ -133,7 +140,6 @@ void TestClient::Close()
 	now_state = STATE_CLOSED;
 	if(socket != nullptr)
 	{
-		//socket->StartRecv([](std::shared_ptr<MyClientSocket> close_socket, ByteQueue answer, ErrorCode ec){});
 		socket->CancelTimeout();
 		if(socket->is_open())
 			socket->Close();
@@ -152,8 +158,14 @@ void TestClient::LoginProcess(std::shared_ptr<MyClientSocket> target_socket)
 		if(!recv_ec)
 		{
 			if(!client->isNormalClose(recv_ec))
+			{
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(recv_ec, __STACKINFO__)));
-			DoRestart();
+				RecordError(__STACKINFO__, "Failed Login : " + recv_ec.message_code());
+			}
+			if(now_state == STATE_LOGIN)
+				DoRestart();
+			else
+				RecordError(__STACKINFO__, "Late Close at " + GetStateName(STATE_LOGIN) + " to " + GetStateName(now_state));
 			return;
 		}
 
@@ -181,11 +193,16 @@ void TestClient::LoginProcess(std::shared_ptr<MyClientSocket> target_socket)
 					ByteQueue regReq = ByteQueue::Create<byte>(REQ_REGISTER);
 					regReq.push<Hash_t>(Hasher::sha256((const unsigned char*)(this->pwd.c_str()), this->pwd.length()));
 					regReq.push<std::string>(id);
-					client->SetTimeout(LoginTimeout, [](std::shared_ptr<MyClientSocket> client){client->Close();});
+					client->SetTimeout(LoginTimeout, [this](std::shared_ptr<MyClientSocket> client)
+					{
+						RecordError(__STACKINFO__, "Timeout at Login");
+						client->Close();
+					});
 					auto send_ec = client->Send(regReq);
 					if(!send_ec)
 					{
 						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
+						RecordError(__STACKINFO__, "Failed Register : " + send_ec.message_code());
 						DoRestart();
 						return;
 					}
@@ -193,6 +210,7 @@ void TestClient::LoginProcess(std::shared_ptr<MyClientSocket> target_socket)
 				break;
 			default:
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed from Server " + std::to_string(header));
 				DoRestart();
 				return;
 		}
@@ -208,6 +226,7 @@ void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<My
 		if(!conn_ec)
 		{
 			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(conn_ec, __STACKINFO__)));
+			RecordError(__STACKINFO__, "Failed Connect : " + conn_ec.message_code());
 			DoRestart();
 			return;
 		}
@@ -217,6 +236,7 @@ void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<My
 			if(!ke_ec)
 			{
 				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ke_ec, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed KeyExchange : " + ke_ec.message_code());
 				this->DoRestart();
 				return;
 			}
@@ -226,6 +246,7 @@ void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<My
 			if(!send_ec)
 			{
 				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ke_ec, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed Access : " + send_ec.message_code());
 				this->DoRestart();
 				return;
 			}
@@ -240,8 +261,14 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 		if(!recv_ec)
 		{
 			if(!client->isNormalClose(recv_ec))
+			{
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(recv_ec, __STACKINFO__)));
-			DoRestart();
+				RecordError(__STACKINFO__, "Failed Match : " + recv_ec.message_code());
+			}
+			if(now_state == STATE_MATCH)
+				DoRestart();
+			else
+				RecordError(__STACKINFO__, "Late Close at " + GetStateName(STATE_MATCH) + " to " + GetStateName(now_state));
 			return;
 		}
 
@@ -250,13 +277,6 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 		{
 			case ANS_HEARTBEAT:		//연결 확인
 				break;
-			case ERR_PROTOCOL_VIOLATION:	//프로토콜 위반
-			case ERR_DB_FAILED:				//db query 실패
-			case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
-			case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
-				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
-				DoRestart();
-				return;
 			case GAME_PLAYER_INFO:
 				nickname = packet.pop<Achievement_ID_t>();
 				win = packet.pop<int>();
@@ -268,6 +288,7 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 					if(!send_ec)
 					{
 						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
+						RecordError(__STACKINFO__, "Failed Enqueue : " + send_ec.message_code());
 						DoRestart();
 						return;
 					}
@@ -277,8 +298,13 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 				battle_seed = packet.pop<int>();
 				DoBattle();
 				return;
+			case ERR_PROTOCOL_VIOLATION:	//프로토콜 위반
+			case ERR_DB_FAILED:				//db query 실패
+			case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
+			case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
 			default:
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed from Server " + std::to_string(header));
 				DoRestart();
 				return;
 		}
@@ -293,8 +319,14 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 		if(!recv_ec)
 		{
 			if(!client->isNormalClose(recv_ec))
+			{
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(recv_ec, __STACKINFO__)));
-			DoRestart();
+				RecordError(__STACKINFO__, "Failed Battle : " + recv_ec.message_code());
+			}
+			if(now_state == STATE_BATTLE)
+				DoRestart();
+			else
+				RecordError(__STACKINFO__, "Late Close at " + GetStateName(STATE_BATTLE) + " to " + GetStateName(now_state));
 			return;
 		}
 
@@ -303,12 +335,6 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 		{
 			case ANS_HEARTBEAT:		//연결 확인
 				break;
-			case ERR_PROTOCOL_VIOLATION:	//프로토콜 위반
-			case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
-			case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
-				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
-				DoRestart();
-				return;
 			case GAME_PLAYER_INFO_NAME:
 				//TODO : Check if information is correct
 				nickname = packet.pop<Achievement_ID_t>();
@@ -344,6 +370,7 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 					if(!send_ec)
 					{
 						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
+						RecordError(__STACKINFO__, "Failed Action : " + send_ec.message_code());
 						DoRestart();
 						return;
 					}
@@ -353,6 +380,8 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 			case GAME_FINISHED_DRAW:
 			case GAME_FINISHED_LOOSE:
 			case GAME_CRASHED:
+				if(header == GAME_CRASHED)
+					RecordError(__STACKINFO__, "Game Crashed");
 				DoMatch();
 				return;
 			case GAME_PLAYER_ACHIEVE:	//도전과제 달성.
@@ -360,8 +389,12 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 					Achievement_ID_t achieve = packet.pop<Achievement_ID_t>();
 				}
 				break;
+			case ERR_PROTOCOL_VIOLATION:	//프로토콜 위반
+			case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
+			case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
 			default:
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed from Server " + std::to_string(header));
 				DoRestart();
 				return;
 		}
@@ -389,4 +422,37 @@ bool TestClient::isConnected()
 	if(socket == nullptr)
 		return false;
 	return socket->is_open();
+}
+
+void TestClient::RecordError(std::string file, std::string func, int line, std::string reason)
+{
+	std::unique_lock lk(last_error_mtx);
+	last_error = reason + " at " + func + " in " + file + ":" + std::to_string(line);
+}
+
+std::string TestClient::GetLastError() const
+{
+	return last_error;
+}
+
+void TestClient::ClearLastError()
+{
+	if(last_error_mtx.try_lock())
+	{
+		last_error = "";
+		last_error_mtx.unlock();
+	}
+}
+
+std::string TestClient::GetStateName(int state)
+{
+	switch(state)
+	{
+		case STATE_CLOSED:	return "Closed";
+		case STATE_RESTART:	return "Restart";
+		case STATE_LOGIN:	return "Login";
+		case STATE_MATCH:	return "Match";
+		case STATE_BATTLE:	return "Batle";
+	}
+	return "Unknown";
 }

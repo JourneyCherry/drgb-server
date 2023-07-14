@@ -9,8 +9,6 @@ SET ( TESTS
 	ErrorCode_Test
 	Expected_Test
 	GetArg_Test
-	Invoker_Test
-	Notifier_Test
 	PacketProcessor_Test
 	StackTraceExcept_Test
 	Socket_Test
@@ -36,8 +34,6 @@ TARGET_LINK_LIBRARIES ( Encoder_Test PRIVATE Encoder )
 TARGET_LINK_LIBRARIES ( ErrorCode_Test PRIVATE ErrorCode )
 TARGET_LINK_LIBRARIES ( Expected_Test PRIVATE Expected )
 TARGET_LINK_LIBRARIES ( GetArg_Test PRIVATE GetArg )
-TARGET_LINK_LIBRARIES ( Invoker_Test PRIVATE Invoker )
-TARGET_LINK_LIBRARIES ( Notifier_Test PRIVATE Notifier )
 TARGET_LINK_LIBRARIES ( PacketProcessor_Test PRIVATE PacketProcessor )
 TARGET_LINK_LIBRARIES ( StackTraceExcept_Test PRIVATE StackTraceExcept )
 TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClient MyTCPTLSServer MyWebsocketClient MyWebsocketServer MyWebsocketTLSClient MyWebsocketTLSServer pthread )

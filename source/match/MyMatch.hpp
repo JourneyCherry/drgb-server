@@ -4,15 +4,9 @@
 #include "ConfigParser.hpp"
 #include "MyCodes.hpp"
 #include "MyMatchMaker.hpp"
-#include "MyNotifyMsgs.hpp"
-#include "MyPostgres.hpp"
-#include "MyRedis.hpp"
 #include "DeMap.hpp"
 
-using mylib::utils::Notifier;
-using mylib::utils::NotifyTarget;
 using mylib::utils::DeMap;
-using mylib::threads::Thread;
 using mylib::utils::Expected;
 
 class MyMatch : public MyServer
@@ -24,9 +18,7 @@ class MyMatch : public MyServer
 
 		MatchServiceServer MatchService;
 		MyMatchMaker matchmaker;
-		Thread t_matchmaker;
-
-		MyRedis redis;
+		std::thread t_matchmaker;
 
 	public:
 		MyMatch();	//TODO : Join에서 t_matchmaker가 exception으로 죽으면 다시 올려야 한다.

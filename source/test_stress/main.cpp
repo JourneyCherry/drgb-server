@@ -140,6 +140,26 @@ int main(int argc, char *argv[])
 					g_Show(txt_id + " : " + state + connected);
 				}
 				break;
+			case 'e':
+			case 'E':
+				recent_success = 'e';
+				//Show All client's last error
+				{
+					unsigned int count = 0;
+					for(auto &client : clients)
+					{
+						std::string txt_id = std::to_string(client->GetId());
+						std::string last_error = client->GetLastError();
+						if(last_error.length() <= 0)
+							continue;
+						client->ClearLastError();
+						g_Show(txt_id + " : " + last_error);
+						count++;
+					}
+					if(count <= 0)
+						g_Show("There is no Error");
+				}
+				break;
 			case 'b':
 			case 'B':
 				recent_success = 'b';
@@ -181,7 +201,7 @@ int main(int argc, char *argv[])
 	}
 
 	TestClient::SetRestart(true);
-	for(auto iter = clients.begin();iter != clients.end();iter = clients.erase(iter))
+	for(auto iter = clients.begin();iter != clients.end();iter++)
 		(*iter)->Close();	//TODO : Close하기 전, 결과 출력하기.
 	clients.clear();
 

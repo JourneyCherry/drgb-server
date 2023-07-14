@@ -77,7 +77,7 @@ void Process(ManagerServiceClient* client, std::queue<std::string> &commands)
 				if(!answer)
 					throw ErrorCodeExcept(answer.error(), __STACKINFO__);
 				
-				std::cout << "[Mgr] : Server Usage " << *answer << std::endl;
+				std::cout << "[Mgr] : Server Usage : " << *answer << std::endl;
 			}
 			break;
 		case INQ_ACCOUNT_CHECK:
@@ -106,9 +106,7 @@ void Process(ManagerServiceClient* client, std::queue<std::string> &commands)
 				if(!answer)
 					throw ErrorCodeExcept(answer.error(), __STACKINFO__);
 				
-				std::cout << "[Mgr] : Clients" << std::endl;
-				std::cout << "TCP Client : " << answer->first << std::endl;
-				std::cout << "WEB Client : " << answer->second << std::endl;
+				std::cout << "[Mgr] : Clients : " << *answer << std::endl;
 			}
 			break;
 		case INQ_CONNUSAGE:

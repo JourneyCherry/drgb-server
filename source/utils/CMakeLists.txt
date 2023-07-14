@@ -7,11 +7,9 @@ SET ( LIBS
 	ErrorCode
 	Expected	#Interface
 	GetArg
-	Invoker		#Interface
 	Logger
 	MyCodes		#Interface
 	MyTypes		#Interface
-	Notifier
 	PacketProcessor
 	StackTraceExcept
 )
@@ -34,11 +32,9 @@ TARGET_LINK_LIBRARIES ( Encoder PUBLIC MyTypes )
 TARGET_LINK_LIBRARIES ( ErrorCode PUBLIC MyCodes ${OPENSSL_LIBRARIES} )
 TARGET_LINK_LIBRARIES ( Expected INTERFACE )
 TARGET_LINK_LIBRARIES ( GetArg PUBLIC StackTraceExcept )
-TARGET_LINK_LIBRARIES ( Invoker INTERFACE )
 TARGET_LINK_LIBRARIES ( Logger PUBLIC )
 TARGET_LINK_LIBRARIES ( MyCodes INTERFACE MyTypes )
 TARGET_LINK_LIBRARIES ( MyTypes INTERFACE )
-TARGET_LINK_LIBRARIES ( Notifier PUBLIC Expected )
 TARGET_LINK_LIBRARIES ( PacketProcessor PUBLIC ByteQueue StackTraceExcept )
 TARGET_LINK_LIBRARIES ( StackTraceExcept PUBLIC ErrorCode )
 

@@ -6,7 +6,6 @@
 #include "MyGame.hpp"
 #include "DeMap.hpp"
 #include "TimerPool.hpp"
-#include "MyRedis.hpp"
 #include "BattleServiceClient.hpp"
 
 using mylib::utils::StackTraceExcept;
@@ -23,8 +22,6 @@ class MyBattle : public MyServer
 		std::string keyword_match;
 
 		BattleServiceClient BattleService;	//Match To Battle Service Client
-
-		MyRedis redis;
 
 		DeMap<Account_ID_t, Hash_t, std::shared_ptr<MyGame>> sessions;
 		TimerPool gamepool;

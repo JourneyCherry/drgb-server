@@ -2,8 +2,6 @@
 #include <array>
 #include "ConfigParser.hpp"
 #include "MyServer.hpp"
-#include "MyPostgres.hpp"
-#include "MyRedis.hpp"
 #include "Encoder.hpp"
 #include "MyCodes.hpp"
 #include "Hasher.hpp"
@@ -15,9 +13,6 @@ using mylib::utils::ErrorCodeExcept;
 class MyAuth : public MyServer
 {
 	private:
-		using dbsystem = MyPostgres;
-
-		MyRedis redis;
 		const std::string keyword_match = "match";
 
 	public:

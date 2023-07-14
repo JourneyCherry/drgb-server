@@ -38,11 +38,11 @@ Expected<bool, ErrorCode> ManagerServiceClient::CheckAccount(const Account_ID_t&
 	return reply.result();
 }
 
-Expected<std::pair<size_t, size_t>, ErrorCode> ManagerServiceClient::GetClientUsage()
+Expected<size_t, ErrorCode> ManagerServiceClient::GetClientUsage()
 {
 	ClientContext context;
 	Empty request;
-	ClientUsage reply;
+	Usage reply;
 
 	Status status = stub_->GetClientUsage(&context, request, &reply);
 	if(!status.ok())
@@ -52,7 +52,7 @@ Expected<std::pair<size_t, size_t>, ErrorCode> ManagerServiceClient::GetClientUs
 		return ec;
 	}
 
-	return std::make_pair<size_t, size_t>(reply.tcp().usage(), reply.web().usage());
+	return reply.usage();
 }
 
 Expected<std::map<std::string, size_t>, ErrorCode> ManagerServiceClient::GetConnectUsage()

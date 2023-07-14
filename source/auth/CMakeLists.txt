@@ -17,7 +17,7 @@ SET_TARGET_PROPERTIES ( ${TARGET} PROPERTIES OUTPUT_NAME ${PROJECT_NAME}-${TARGE
 TARGET_LINK_LIBRARIES ( MyAuth PUBLIC
 	ConfigParser
 	MyServer
-	MyPostgres
+	MyPostgresPool
 	MyRedis
 	Encoder
 	MyCodes

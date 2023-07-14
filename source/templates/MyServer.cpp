@@ -1,14 +1,23 @@
 #include "MyServer.hpp"
 
-MyServer::MyServer(int web, int tcp)
- : web_server(web, 2), tcp_server(tcp, 2), 	//TODO : thread 수를 core 수에 맞추거나 별도 설정(Configfile)으로 결정 필요.
- isRunning(false),
- MgrService(
-	std::bind(&MyServer::GetUsage, this),
-	std::bind(&MyServer::CheckAccount, this, std::placeholders::_1),
-	std::bind(&MyServer::GetClientUsage, this),
-	std::bind(&MyServer::GetConnectUsage, this)
- )
+MyServer::MyServer(int port)
+ : web_server(port, ConfigParser::GetInt("ClientThread", std::thread::hardware_concurrency())),
+	isRunning(false),
+	redis(SESSION_TIMEOUT),
+	dbpool(
+		ConfigParser::GetString("DBAddr", "localhost"),
+		ConfigParser::GetInt("DBPort", 5432),
+		ConfigParser::GetString("DBName", "drgb_db"),
+		ConfigParser::GetString("DBUser", "drgb_user"),
+		ConfigParser::GetString("DBPwd", "drgbpassword"),
+		ConfigParser::GetInt("DBPoolSize", 1)
+	),
+	MgrService(
+		std::bind(&MyServer::GetUsage, this),
+		std::bind(&MyServer::CheckAccount, this, std::placeholders::_1),
+		std::bind(&MyServer::GetClientUsage, this),
+		std::bind(&MyServer::GetConnectUsage, this)
+	)
 {
 	grpc::EnableDefaultHealthCheckService(true);
 	ServiceBuilder.AddListeningPort(
@@ -44,8 +53,8 @@ void MyServer::Start()
 		socket->KeyExchange(std::bind(&MyServer::AcceptProcess, this, std::placeholders::_1, std::placeholders::_2));
 	};
 
+	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
 	web_server.StartAccept(accept_handle);
-	tcp_server.StartAccept(accept_handle);
 	Open();
 }
 
@@ -56,10 +65,10 @@ void MyServer::Stop()
 
 	isRunning = false;
 	web_server.Close();
-	tcp_server.Close();
 	ServiceServer->Shutdown();
 	if(ServiceThread.joinable())
 		ServiceThread.join();
+	redis.Close();
 		
 	Close();
 	GracefulWakeUp();
@@ -90,14 +99,17 @@ bool MyServer::CheckAccount(Account_ID_t id)
 	return false;
 }
 
-std::pair<size_t, size_t> MyServer::GetClientUsage()
+size_t MyServer::GetClientUsage()
 {
-	return {tcp_server.GetConnected(), web_server.GetConnected()};
+	return web_server.GetConnected();
 }
 
 std::map<std::string, size_t> MyServer::GetConnectUsage()
 {
 	std::map<std::string, size_t> connected;
+	connected.insert({"Redis", redis.is_open()?1:0});
+	connected.insert({"Postgres", dbpool.GetConnectUsage()});
+	connected.insert({"PostgresPool", dbpool.GetPoolUsage()});
 
 	return connected;
 }
