@@ -2,11 +2,14 @@
 #include <memory>
 #include <thread>
 #include <functional>
-#include <grpcpp/grpcpp.h>
 #include <limits>
+#include <condition_variable>
+#include <mutex>
+#include <chrono>
+#include <grpcpp/grpcpp.h>
 #include "DeMap.hpp"
 #include "ServerService.grpc.pb.h"
-#include "MyCodes.hpp"
+#include "MyTypes.hpp"
 
 using mylib::utils::DeMap;
 using grpc::Channel;
@@ -20,13 +23,20 @@ using ServerService::MatchToBattle;
 
 class MatchServiceServer final : public MatchToBattle::Service
 {
+	public:
+		static constexpr int RESPONSE_TIME = 500;	//ms
 	private:
-		using id_t = uint64_t;
 		Status SessionStream(ServerContext*, ServerReaderWriter<MatchTransfer, Usage>*) override;
 		DeMap<Seed_t, ServerReaderWriter<MatchTransfer, Usage>*, size_t> streams;
+
+		//For Waiting result of Transfer
+		unsigned int ReceiveCount;
+		std::mutex mtx;
+		std::condition_variable cv;
 	
 	public:
-		Seed_t TransferMatch(const id_t&, const id_t&);
+		MatchServiceServer();
+		Seed_t TransferMatch(const Account_ID_t&, const Account_ID_t&);
 		std::vector<Seed_t> GetStreams();
 		size_t GetUsage() const;
 };

@@ -1,5 +1,10 @@
 #include "MatchServiceServer.hpp"
 
+MatchServiceServer::MatchServiceServer() : ReceiveCount(0)
+{
+
+}
+
 Status MatchServiceServer::SessionStream(ServerContext *context, ServerReaderWriter<MatchTransfer, Usage>* stream)
 {
 	if(streams.Size() >= std::numeric_limits<Seed_t>::max() - 1)	//이미 수용량 초과일 경우
@@ -22,6 +27,10 @@ Status MatchServiceServer::SessionStream(ServerContext *context, ServerReaderWri
 		size_t usage = msg.usage();
 		//현재 stream이 저장된 데이터에 usage 저장
 		streams.InsertLKeyValue(stream_id, usage);
+		std::unique_lock lk(mtx);
+		ReceiveCount++;
+		lk.unlock();
+		cv.notify_all();
 	}
 
 	//저장된 현재 stream 제거
@@ -29,7 +38,7 @@ Status MatchServiceServer::SessionStream(ServerContext *context, ServerReaderWri
 	return Status::OK;
 }
 
-Seed_t MatchServiceServer::TransferMatch(const id_t& lpid, const id_t& rpid)
+Seed_t MatchServiceServer::TransferMatch(const Account_ID_t& lpid, const Account_ID_t& rpid)
 {
 	//저장된 stream 찾아서 stream->Write(send)
 	auto vec = streams.GetAll();
@@ -43,6 +52,12 @@ Seed_t MatchServiceServer::TransferMatch(const id_t& lpid, const id_t& rpid)
 
 	if(!std::get<1>(*result)->Write(send))
 		return -1;
+
+	std::unique_lock lk(mtx);
+	cv.wait_for(lk, std::chrono::milliseconds(RESPONSE_TIME), [this](){ return ReceiveCount > 0; });
+	ReceiveCount = 0;
+	lk.unlock();
+
 	return std::get<0>(*result);
 }
 
