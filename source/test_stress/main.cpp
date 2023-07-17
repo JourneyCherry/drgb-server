@@ -202,12 +202,13 @@ int main(int argc, char *argv[])
 
 	TestClient::isRunning = false;
 	TestClient::SetRestart(true);
+	kill_signal = true;
 	for(auto iter = clients.begin();iter != clients.end();iter++)
 	{
-		(*iter)->Shutdown();	//TODO : Close하기 전, 결과 출력하기.
+		if((*iter)->isConnected())
+			(*iter)->Shutdown();	//TODO : Close하기 전, 결과 출력하기.
 	}
 
-	kill_signal = true;
 	ioc.stop();
 	threads.join();
 	clients.clear();

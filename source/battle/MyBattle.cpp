@@ -194,8 +194,10 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 			auto [id, cookie, _g] = *erase_result;
 			auto socket = player.socket;
 			if(!socket)		//소켓이 nullptr이면 게임 중간에 나간 것이므로 무시.
+			{
+				redis.ClearInfo(id, cookie, self_keyword);	//단, 이미 나갔기 때문에 세션은 지운다.
 				continue;
-
+			}
 			redis.SetInfo(id, cookie, keyword_match);	//battle서버에 있을 필요 없는 세션은 match서버로 보낸다.
 
 			ByteQueue packet = ByteQueue::Create<byte>(player.result);

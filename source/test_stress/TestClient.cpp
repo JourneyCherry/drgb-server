@@ -148,16 +148,17 @@ void TestClient::DoRestart()
 
 void TestClient::Shutdown()
 {
-	if(timer != nullptr)
-		timer->cancel();
-	now_state = STATE_CLOSING;
+	if(socket == nullptr)
+	{
+		now_state = STATE_CLOSING;
+	}
 	if(socket != nullptr)
 	{
-		socket->SetCleanUp([](std::shared_ptr<MyClientSocket> client)
+		socket->SetCleanUp([this](std::shared_ptr<MyClientSocket> client)
 		{
-
+			now_state = STATE_CLOSING;
 		});
-		socket->Close();
+		Close();
 	}
 }
 
