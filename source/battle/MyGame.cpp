@@ -198,7 +198,10 @@ bool MyGame::Work(const bool& interrupted)
 				{
 					ulock lk(mtx);
 					for(int i = 0;i<MAX_PLAYER;i++)
-						players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
+					{
+						if(players[i].socket != nullptr)
+							players[i].socket->Send(result + GetPlayerByte(std::ref(players[i])) + GetPlayerByte(std::ref(players[players[i].target])));
+					}
 					for(int i = 0;i<MAX_PLAYER;i++)
 						players[i].action = MEDITATE;
 				}
@@ -226,6 +229,8 @@ void MyGame::ProcessResult(bool drawed, bool crashed)
 {
 	//DB에 경기결과 기록 및 사용자들에게 경기결과 전달 + 연결 종료.
 	int winner = GetWinner();
+	if(winner < 0)	//경기 결과는 승패가 나뉘었지만 최종판결 전에 플레이어가 모두 나가는 경우, 무승부처리된다.
+		drawed = true;
 	if(drawed && !crashed)	//무승부의 경우.
 	{
 		for(int i = 0;i<MAX_PLAYER;i++)
@@ -377,12 +382,11 @@ bool MyGame::isAllIn()
 
 void MyGame::SendAll(ByteQueue byte)
 {
+	std::unique_lock lk(mtx);
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
 		if(players[i].socket != nullptr)
-		{
 			players[i].socket->Send(byte);
-		}
 	}
 }
 
@@ -406,7 +410,8 @@ void MyGame::AchieveCount(Account_ID_t id, Achievement_ID_t achieve, std::shared
 		{
 			ByteQueue packet = ByteQueue::Create<byte>(GAME_PLAYER_ACHIEVE);
 			packet.push<Achievement_ID_t>(achieve);
-			socket->Send(packet);
+			if(socket != nullptr && socket->is_open())
+				socket->Send(packet);
 		}
 	}
 	catch(const pqxx::pqxx_exception & e)
@@ -430,7 +435,8 @@ void MyGame::AchieveProgress(Account_ID_t id, Achievement_ID_t achieve, int coun
 		{
 			ByteQueue packet = ByteQueue::Create<byte>(GAME_PLAYER_ACHIEVE);
 			packet.push<Achievement_ID_t>(achieve);
-			socket->Send(packet);
+			if(socket != nullptr && socket->is_open())
+				socket->Send(packet);
 		}
 	}
 	catch(const pqxx::pqxx_exception & e)
