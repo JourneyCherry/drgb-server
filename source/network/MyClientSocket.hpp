@@ -46,11 +46,9 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		virtual ErrorCode DoSend(const byte*, const size_t&) = 0;
 		virtual void Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>, const boost::system::error_code&) = 0;
 		void Recv_Handle(std::shared_ptr<MyClientSocket>, boost::system::error_code, size_t, std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)>);
-		void CleanUp();
 		virtual boost::asio::any_io_executor GetContext() = 0;
 		virtual bool isReadable() const = 0;
-		virtual void Cancel() = 0;
-		virtual void Shutdown() = 0;
+		virtual void DoClose() = 0;
 
 	public:
 		static constexpr int TIME_KEYEXCHANGE = 2000;

@@ -1,6 +1,6 @@
 #include "MyClientSocket.hpp"
 
-MyClientSocket::MyClientSocket() : encryptor(true), decryptor(false), isSecure(false), initiateClose(false)
+MyClientSocket::MyClientSocket() : cleanHandler(nullptr), encryptor(true), decryptor(false), isSecure(false), initiateClose(false)
 {
 }
 
@@ -26,7 +26,7 @@ void MyClientSocket::KeyExchange(std::function<void(std::shared_ptr<MyClientSock
 	}
 	
 	SetTimeout(TIME_KEYEXCHANGE, [this, handler](std::shared_ptr<MyClientSocket> socket){
-		Cancel();
+		Close();
 	});
 
 	StartRecv([this, handler](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
@@ -171,13 +171,6 @@ void MyClientSocket::SetCleanUp(std::function<void(std::shared_ptr<MyClientSocke
 	cleanHandler = callback;
 }
 
-void MyClientSocket::CleanUp()
-{
-	if(cleanHandler == nullptr)
-		return;
-	boost::asio::post(ioc_ref, std::bind(cleanHandler, shared_from_this()));
-}
-
 void MyClientSocket::CancelTimeout()
 {
 	timer->cancel();
@@ -190,12 +183,16 @@ void MyClientSocket::Close()
 		return;
 
 	initiateClose = true;
-	CancelTimeout();
-	Cancel();
-	Shutdown();
 	lk.unlock();
 
-	CleanUp();
+	CancelTimeout();
+	if(isReadable())
+		DoClose();
+	else
+	{
+		if(cleanHandler != nullptr)
+			cleanHandler(shared_from_this());
+	}
 }
 
 bool MyClientSocket::isNormalClose(const ErrorCode &ec)

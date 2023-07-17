@@ -118,10 +118,32 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> target_client)
 				{
 					ByteQueue cookie = ByteQueue::Create<Hash_t>(info->first);
 					std::string serverName = info->second;
-					if(serverName == keyword_match)
+					if(serverName == keyword_match)	//Session이 Match 서버에 연결된 경우
 						client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_MATCH) + cookie);
 					else
-						client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE) + ByteQueue::Create<Seed_t>(1));
+					{
+						std::regex reg("\\d+$");	//여기서 battle까지 탐색하면 result[0]에 숫자만이 아니라 battle문자도 같이 들어간다.
+						std::smatch result;
+						Seed_t server_id = -1;
+						if(std::regex_search(serverName, result, reg))
+						{
+							try
+							{
+								if(result.prefix() != "battle")
+									server_id = -1;
+								else
+									server_id = std::stoi(result[0]);
+							}
+							catch(...)
+							{
+								server_id = -1;
+							}
+						}
+						if(server_id > 0)
+							client->Send(ByteQueue::Create<byte>(ERR_EXIST_ACCOUNT_BATTLE) + cookie + ByteQueue::Create<Seed_t>(server_id));
+						else		//Cookie는 있는데 Session이 알 수 없는 서버에 연결된 경우
+							client->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
+					}
 					client->Close();
 				}
 			}

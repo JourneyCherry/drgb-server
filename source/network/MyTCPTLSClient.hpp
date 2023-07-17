@@ -24,14 +24,13 @@ class MyTCPTLSClient : public MyClientSocket
 		void Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>, const boost::system::error_code&) override;
 		boost::asio::any_io_executor GetContext() override;
 		bool isReadable() const override;
-		void Cancel() override;
-		void Shutdown() override;
+		void DoClose() override;
 
 	public:
 		MyTCPTLSClient(boost::asio::ssl::context&, boost::asio::ip::tcp::socket);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
 		MyTCPTLSClient(const MyTCPTLSClient&) = delete;
 		MyTCPTLSClient(MyTCPTLSClient&&) = delete;
-		~MyTCPTLSClient();
+		~MyTCPTLSClient() = default;
 
 		void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
 		bool is_open() const override;

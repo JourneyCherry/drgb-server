@@ -9,6 +9,7 @@ std::mt19937_64 TestClient::gen(rd());
 std::uniform_int_distribution<int> TestClient::dis(0, 4);
 std::uniform_int_distribution<int> TestClient::millidis(100, 1000);
 bool TestClient::doNotRestart = false;
+bool TestClient::isRunning = true;
 
 void TestClient::SetRestart(const bool& notRestart)
 {
@@ -39,29 +40,200 @@ TestClient::TestClient(int num)
 {
 }
 
-TestClient::~TestClient()
-{
-	Close();
-}
-
 void TestClient::DoLogin()
 {
-	Close();
+	if(!isRunning)
+		return;
+	if(socket == nullptr)
+	{
+		now_state = STATE_LOGIN;
+		LoginProcess();
+	}
+	else
+	{
+		socket->SetCleanUp([this](std::shared_ptr<MyClientSocket> client)
+		{
+			now_state = STATE_LOGIN;
+			LoginProcess();
+		});
+		Close();
+	}
+}
 
-	now_state = STATE_LOGIN;
+void TestClient::DoMatch()
+{
+	if(!isRunning)
+		return;
+	if(socket == nullptr)
+	{
+		now_state = STATE_MATCH;
+		AccessProcess(1, std::bind(&TestClient::MatchProcess, this, std::placeholders::_1));
+	}
+	else
+	{
+		socket->SetCleanUp([this](std::shared_ptr<MyClientSocket> client)
+		{
+			now_state = STATE_MATCH;
+			AccessProcess(1, std::bind(&TestClient::MatchProcess, this, std::placeholders::_1));
+		});
+		Close();
+	}
+}
 
+void TestClient::DoBattle()
+{
+	if(!isRunning)
+		return;
+	if(socket == nullptr)
+	{
+		now_state = STATE_BATTLE;
+		AccessProcess(1 + battle_seed, std::bind(&TestClient::BattleProcess, this, std::placeholders::_1));
+	}
+	else
+	{
+		socket->SetCleanUp([this](std::shared_ptr<MyClientSocket> client)
+		{
+			now_state = STATE_BATTLE;
+			AccessProcess(1 + battle_seed, std::bind(&TestClient::BattleProcess, this, std::placeholders::_1));
+		});
+		Close();
+	}
+}
+
+void TestClient::DoRestart()
+{
+	if(!isRunning)
+		return;
+	if(socket == nullptr)
+	{
+		now_state = STATE_RESTART;
+		if(doNotRestart)
+			return;
+		timer->expires_after(std::chrono::milliseconds(millidis(gen)));
+		timer->async_wait([this](const boost::system::error_code &ec)
+		{
+			if(ec.failed())
+				return;
+			if(doNotRestart)
+				return;
+			if(!isRunning)
+				return;
+
+			LoginProcess();
+		});
+	}
+	else
+	{
+		socket->SetCleanUp([this](std::shared_ptr<MyClientSocket> client)
+		{
+			now_state = STATE_RESTART;
+			if(doNotRestart)
+				return;
+			timer->expires_after(std::chrono::milliseconds(millidis(gen)));
+			timer->async_wait([this](const boost::system::error_code &ec)
+			{
+				if(ec.failed())
+					return;
+				if(doNotRestart)
+					return;
+				if(!isRunning)
+					return;
+
+				LoginProcess();
+			});
+		});
+		Close();
+	}
+}
+
+void TestClient::Shutdown()
+{
+	if(timer != nullptr)
+		timer->cancel();
+	now_state = STATE_CLOSING;
+	if(socket != nullptr)
+	{
+		socket->SetCleanUp([](std::shared_ptr<MyClientSocket> client)
+		{
+
+		});
+		socket->Close();
+	}
+}
+
+void TestClient::Close()
+{
+	now_state = STATE_CLOSED;
+	if(timer == nullptr)
+		timer = std::make_shared<boost::asio::steady_timer>(*pioc);
+	else
+		timer->cancel();
+	if(socket != nullptr)
+		socket->Close();
+}
+
+void TestClient::LoginProcess()
+{
+	if(!isRunning)
+		return;
 	socket = std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(*pioc));
 	socket->Connect(addrs[0].first, addrs[0].second, [this](std::shared_ptr<MyClientSocket> conn_socket, ErrorCode conn_ec)
 	{
 		if(!conn_ec)
 		{
-			this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(conn_ec, __STACKINFO__)));
+			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(conn_ec, __STACKINFO__)));
 			RecordError(__STACKINFO__, "Failed Connect : " + conn_ec.message_code());
-			this->DoRestart();
+			DoRestart();
 			return;
 		}
 
 		conn_socket->KeyExchange([this](std::shared_ptr<MyClientSocket> ke_socket, ErrorCode ke_ec)
+		{
+			if(!ke_ec)
+			{
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ke_ec, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed KeyExchange : " + ke_ec.message_code());
+				DoRestart();
+				return;
+			}
+			ByteQueue loginReq = ByteQueue::Create<byte>(REQ_LOGIN);
+			loginReq.push<Hash_t>(Hasher::sha256((const unsigned char*)(pwd.c_str()), pwd.length()));
+			loginReq.push<std::string>(id);
+
+			ke_socket->SetTimeout(LoginTimeout, [this](std::shared_ptr<MyClientSocket> socket)
+			{
+				RecordError(__STACKINFO__, "Timeout at Login");
+				socket->Close();
+			});
+			AuthProcess(ke_socket);
+			auto send_ec = ke_socket->Send(loginReq);
+			if(!send_ec)
+			{
+				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed Send Login : " + send_ec.message_code());
+				DoRestart();
+				return;
+			}
+		});
+	});
+}
+
+void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<MyClientSocket>)> handler)
+{
+	if(!isRunning)
+		return;
+	socket = std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(*pioc));
+	socket->Connect(addrs[server].first, addrs[server].second, [this, handler](std::shared_ptr<MyClientSocket> conn_socket, ErrorCode conn_ec)
+	{
+		if(!conn_ec)
+		{
+			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(conn_ec, __STACKINFO__)));
+			RecordError(__STACKINFO__, "Failed Connect : " + conn_ec.message_code());
+			DoRestart();
+			return;
+		}
+
+		conn_socket->KeyExchange([this, handler](std::shared_ptr<MyClientSocket> ke_socket, ErrorCode ke_ec)
 		{
 			if(!ke_ec)
 			{
@@ -70,21 +242,13 @@ void TestClient::DoLogin()
 				this->DoRestart();
 				return;
 			}
-			ByteQueue loginReq = ByteQueue::Create<byte>(REQ_LOGIN);
-			loginReq.push<Hash_t>(Hasher::sha256((const unsigned char*)(this->pwd.c_str()), this->pwd.length()));
-			loginReq.push<std::string>(id);
 
-			ke_socket->SetTimeout(LoginTimeout, [this](std::shared_ptr<MyClientSocket> socket)
-			{
-				RecordError(__STACKINFO__, "Timeout at Login");
-				socket->Close();
-			});
-			LoginProcess(ke_socket);
-			auto send_ec = ke_socket->Send(loginReq);
+			handler(ke_socket);
+			auto send_ec = ke_socket->Send(ByteQueue::Create<Hash_t>(cookie));
 			if(!send_ec)
 			{
-				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
-				RecordError(__STACKINFO__, "Failed Send Login : " + send_ec.message_code());
+				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ke_ec, __STACKINFO__)));
+				RecordError(__STACKINFO__, "Failed Access : " + send_ec.message_code());
 				this->DoRestart();
 				return;
 			}
@@ -92,66 +256,10 @@ void TestClient::DoLogin()
 	});
 }
 
-void TestClient::DoMatch()
+void TestClient::AuthProcess(std::shared_ptr<MyClientSocket> target_socket)
 {
-	Close();
-	
-	now_state = STATE_MATCH;
-
-	std::function<void(std::shared_ptr<MyClientSocket>)> handle = std::bind(&TestClient::MatchProcess, this, std::placeholders::_1);
-	std::function<void()> process = std::bind(&TestClient::AccessProcess, this, 1, handle);
-	boost::asio::post(*pioc, process);
-}
-
-void TestClient::DoBattle()
-{
-	Close();
-
-	now_state = STATE_BATTLE;
-
-	std::function<void(std::shared_ptr<MyClientSocket>)> handle = std::bind(&TestClient::BattleProcess, this, std::placeholders::_1);
-	std::function<void()> process = std::bind(&TestClient::AccessProcess, this, 1 + battle_seed, handle);
-	boost::asio::post(*pioc, process);
-}
-
-void TestClient::DoRestart()
-{
-	Close();
-
-	now_state = STATE_RESTART;
-
-	if(doNotRestart)
+	if(!isRunning)
 		return;
-
-	timer->expires_after(std::chrono::milliseconds(millidis(gen)));
-	timer->async_wait([this](const boost::system::error_code &ec)
-	{
-		if(ec.failed())
-			return;
-		if(this->doNotRestart)
-			return;
-
-		this->DoLogin();
-	});
-}
-
-void TestClient::Close()
-{
-	now_state = STATE_CLOSED;
-	if(socket != nullptr)
-	{
-		socket->CancelTimeout();
-		if(socket->is_open())
-			socket->Close();
-	}
-	if(timer == nullptr)
-		timer = std::make_shared<boost::asio::steady_timer>(*pioc);
-	else
-		timer->cancel();
-}
-
-void TestClient::LoginProcess(std::shared_ptr<MyClientSocket> target_socket)
-{
 	target_socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
 		client->CancelTimeout();
@@ -214,48 +322,14 @@ void TestClient::LoginProcess(std::shared_ptr<MyClientSocket> target_socket)
 				DoRestart();
 				return;
 		}
-		LoginProcess(client);
-	});
-}
-
-void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<MyClientSocket>)> handler)
-{
-	socket = std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(*pioc));
-	socket->Connect(addrs[server].first, addrs[server].second, [this, handler](std::shared_ptr<MyClientSocket> conn_socket, ErrorCode conn_ec)
-	{
-		if(!conn_ec)
-		{
-			parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(conn_ec, __STACKINFO__)));
-			RecordError(__STACKINFO__, "Failed Connect : " + conn_ec.message_code());
-			DoRestart();
-			return;
-		}
-
-		conn_socket->KeyExchange([this, handler](std::shared_ptr<MyClientSocket> ke_socket, ErrorCode ke_ec)
-		{
-			if(!ke_ec)
-			{
-				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ke_ec, __STACKINFO__)));
-				RecordError(__STACKINFO__, "Failed KeyExchange : " + ke_ec.message_code());
-				this->DoRestart();
-				return;
-			}
-
-			handler(ke_socket);
-			auto send_ec = ke_socket->Send(ByteQueue::Create<Hash_t>(cookie));
-			if(!send_ec)
-			{
-				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ke_ec, __STACKINFO__)));
-				RecordError(__STACKINFO__, "Failed Access : " + send_ec.message_code());
-				this->DoRestart();
-				return;
-			}
-		});
+		AuthProcess(client);
 	});
 }
 
 void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 {
+	if(!isRunning)
+		return;
 	target_socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
 		if(!recv_ec)
@@ -314,6 +388,8 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 
 void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 {
+	if(!isRunning)
+		return;
 	target_socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode recv_ec)
 	{
 		if(!recv_ec)

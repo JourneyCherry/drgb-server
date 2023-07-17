@@ -26,11 +26,6 @@ MyWebsocketTLSClient::MyWebsocketTLSClient(boost::asio::ssl::context &sslctx_, b
 	ws.set_option(boost::beast::websocket::stream_base::timeout::suggested(boost::beast::role_type::server));
 }
 
-MyWebsocketTLSClient::~MyWebsocketTLSClient()
-{
-	Shutdown();
-}
-
 void MyWebsocketTLSClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
 	auto self_ptr = shared_from_this();
@@ -167,25 +162,19 @@ void MyWebsocketTLSClient::Connect_Handle(std::function<void(std::shared_ptr<MyC
 	}
 }
 
-void MyWebsocketTLSClient::Cancel()
+void MyWebsocketTLSClient::DoClose()
 {
-	boost::system::error_code error_code;
-	ws.next_layer().next_layer().socket().cancel(error_code);
-}
-
-void MyWebsocketTLSClient::Shutdown()
-{
-	if(isReadable())
+	//boost::system::error_code error_code;
+	//ws.close(boost::beast::websocket::close_code::normal, error_code);
+	auto self_ptr = shared_from_this();
+	ws.async_close(boost::beast::websocket::close_code::normal, [this, self_ptr](boost::system::error_code error_code)
 	{
-		//boost::system::error_code error_code;
-		//ws.close(boost::beast::websocket::close_code::normal, error_code);
-		auto self_ptr = shared_from_this();
-		ws.async_close(boost::beast::websocket::close_code::normal, [this, self_ptr](boost::system::error_code error_code)
+		if(error_code.failed())
 		{
-			if(self_ptr->is_open())
-				this->ws.next_layer().next_layer().socket().close(error_code);
-		});
-	}
+
+		}
+		cleanHandler(self_ptr);
+	});
 }
 
 boost::asio::any_io_executor MyWebsocketTLSClient::GetContext()

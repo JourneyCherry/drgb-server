@@ -200,14 +200,17 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	TestClient::isRunning = false;
 	TestClient::SetRestart(true);
 	for(auto iter = clients.begin();iter != clients.end();iter++)
-		(*iter)->Close();	//TODO : Close하기 전, 결과 출력하기.
-	clients.clear();
+	{
+		(*iter)->Shutdown();	//TODO : Close하기 전, 결과 출력하기.
+	}
 
 	kill_signal = true;
 	ioc.stop();
 	threads.join();
+	clients.clear();
 
 	return 0;
 }

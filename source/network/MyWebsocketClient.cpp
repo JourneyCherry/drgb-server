@@ -29,11 +29,6 @@ MyWebsocketClient::MyWebsocketClient(boost::asio::ip::tcp::socket socket_) : ws(
 	}));
 }
 
-MyWebsocketClient::~MyWebsocketClient()
-{
-	Shutdown();
-}
-
 void MyWebsocketClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
 	auto self_ptr = shared_from_this();
@@ -72,6 +67,9 @@ void MyWebsocketClient::GetRecv(size_t bytes_written)
 
 ErrorCode MyWebsocketClient::DoSend(const byte* bytes, const size_t &len)
 {
+	if(initiateClose)
+		return ErrorCode(ERR_CONNECTION_CLOSED);
+		
 	boost::asio::const_buffer send_buffer(bytes, len);
 
 	boost::system::error_code ec;
@@ -131,25 +129,20 @@ void MyWebsocketClient::Connect_Handle(std::function<void(std::shared_ptr<MyClie
 	}
 }
 
-void MyWebsocketClient::Cancel()
+void MyWebsocketClient::DoClose()
 {
-	boost::system::error_code error_code;
-	ws.next_layer().socket().cancel(error_code);
-}
-
-void MyWebsocketClient::Shutdown()
-{
-	if(isReadable())
+	//boost::system::error_code error_code;
+	//ws.close(boost::beast::websocket::close_code::normal, error_code);
+	auto self_ptr = shared_from_this();
+	ws.async_close(boost::beast::websocket::close_code::normal, [this, self_ptr](boost::system::error_code error_code)
 	{
-		//boost::system::error_code error_code;
-		//ws.close(boost::beast::websocket::close_code::normal, error_code);
-		auto self_ptr = shared_from_this();
-		ws.async_close(boost::beast::websocket::close_code::normal, [this, self_ptr](boost::system::error_code error_code)
+		if(error_code.failed())
 		{
-			if(self_ptr->is_open())
-				this->ws.next_layer().socket().close(error_code);
-		});
-	}
+
+		}
+		if(cleanHandler != nullptr)
+			cleanHandler(self_ptr);
+	});
 }
 
 boost::asio::any_io_executor MyWebsocketClient::GetContext()

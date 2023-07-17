@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <regex>
 #include "ConfigParser.hpp"
 #include "MyServer.hpp"
 #include "Encoder.hpp"

@@ -19,11 +19,6 @@ MyTCPTLSClient::MyTCPTLSClient(boost::asio::ssl::context &sslctx_, boost::asio::
 	Port = ep.port();
 }
 
-MyTCPTLSClient::~MyTCPTLSClient()
-{
-	Shutdown();
-}
-
 void MyTCPTLSClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
 	auto self_ptr = shared_from_this();
@@ -96,22 +91,15 @@ void MyTCPTLSClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientS
 	}
 }
 
-void MyTCPTLSClient::Cancel()
-{
-	boost::system::error_code error_code;
-	ws.next_layer().cancel(error_code);
-	//ErrorCode ec(error_code);
-	//if(!isNormalClose(ec))
-	//	throw ErrorCodeExcept(ec, __STACKINFO__);
-}
-
-void MyTCPTLSClient::Shutdown()
+void MyTCPTLSClient::DoClose()
 {
 	boost::system::error_code error_code;
 	ws.next_layer().close(error_code);
 	//ErrorCode ec(error_code);
 	//if(!isNormalClose(ec))
 	//	throw ErrorCodeExcept(ec, __STACKINFO__);
+	if(cleanHandler != nullptr)
+		cleanHandler(shared_from_this());
 }
 
 boost::asio::any_io_executor MyTCPTLSClient::GetContext()

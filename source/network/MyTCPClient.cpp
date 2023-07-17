@@ -20,11 +20,6 @@ MyTCPClient::MyTCPClient(boost::asio::ip::tcp::socket _socket) : socket(std::mov
 	socket.non_blocking(false);
 }
 
-MyTCPClient::~MyTCPClient()
-{
-	Shutdown();
-}
-
 void MyTCPClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
 	auto self_ptr = shared_from_this();
@@ -82,22 +77,12 @@ void MyTCPClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientSock
 	}
 }
 
-void MyTCPClient::Cancel()
-{
-	boost::system::error_code error_code;
-	socket.cancel(error_code);
-	//ErrorCode ec(error_code);
-	//if(!isNormalClose(ec))
-	//	throw ErrorCodeExcept(ec, __STACKINFO__);
-}
-
-void MyTCPClient::Shutdown()
+void MyTCPClient::DoClose()
 {
 	boost::system::error_code error_code;
 	socket.close(error_code);
-	//ErrorCode ec(error_code);
-	//if(!isNormalClose(ec))
-	//	throw ErrorCodeExcept(ec, __STACKINFO__);
+	if(cleanHandler != nullptr)
+		cleanHandler(shared_from_this());
 }
 
 boost::asio::any_io_executor MyTCPClient::GetContext()

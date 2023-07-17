@@ -31,14 +31,13 @@ class MyWebsocketTLSClient : public MyClientSocket
 		void Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>, const boost::system::error_code&) override;
 		boost::asio::any_io_executor GetContext() override;
 		bool isReadable() const override;
-		void Cancel() override;
-		void Shutdown() override;
+		void DoClose() override;
 
 	public:
 		MyWebsocketTLSClient(boost::asio::ssl::context&, boost::asio::ip::tcp::socket);
 		MyWebsocketTLSClient(const MyWebsocketTLSClient&) = delete;
 		MyWebsocketTLSClient(MyWebsocketTLSClient&&) = delete;
-		~MyWebsocketTLSClient();
+		~MyWebsocketTLSClient() = default;
 
 		void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
 		bool is_open() const override;

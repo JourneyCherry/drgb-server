@@ -26,11 +26,13 @@ class TestClient
 		static std::uniform_int_distribution<int> millidis;
 
 		static bool doNotRestart;
+		static bool isRunning;
 		static constexpr int STATE_CLOSED = -1;
 		static constexpr int STATE_RESTART = 0;
 		static constexpr int STATE_LOGIN = 1;
 		static constexpr int STATE_MATCH = 2;
 		static constexpr int STATE_BATTLE = 3;
+		static constexpr int STATE_CLOSING = 4;
 		
 		static void SetRestart(const bool&);
 		static void AddAddr(std::string, int);
@@ -83,12 +85,13 @@ class TestClient
 
 	public:
 		TestClient(int);
-		~TestClient();
+		~TestClient() = default;
 		void DoLogin();
 		void DoMatch();
 		void DoBattle();
 		void DoRestart();
 		void Close();
+		void Shutdown();
 		int GetId();
 		Seed_t GetSeed();
 		int GetState();
@@ -97,8 +100,9 @@ class TestClient
 		void ClearLastError();
 	
 	protected:
-		void LoginProcess(std::shared_ptr<MyClientSocket>);
+		void LoginProcess();
 		void AccessProcess(int, std::function<void(std::shared_ptr<MyClientSocket>)>);
+		void AuthProcess(std::shared_ptr<MyClientSocket>);
 		void MatchProcess(std::shared_ptr<MyClientSocket>);
 		void BattleProcess(std::shared_ptr<MyClientSocket>);
 };
