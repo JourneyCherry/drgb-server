@@ -2,8 +2,7 @@
 
 MyTCPClient::MyTCPClient(boost::asio::ip::tcp::socket _socket) : socket(std::move(_socket)), MyClientSocket()
 {
-	ioc_ref = socket.get_executor();
-	timer = std::make_unique<timer_t>(ioc_ref);
+	timer = std::make_unique<boost::asio::steady_timer>(socket.get_executor());
 
 	boost::system::error_code error_code;
 	boost::asio::ip::tcp::endpoint ep = socket.remote_endpoint(error_code);
@@ -23,7 +22,7 @@ MyTCPClient::MyTCPClient(boost::asio::ip::tcp::socket _socket) : socket(std::mov
 void MyTCPClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
 	auto self_ptr = shared_from_this();
-	boost::asio::post(ioc_ref, [this, self_ptr, callback]()
+	boost::asio::post(socket.get_executor(), [this, self_ptr, callback]()
 	{
 		callback(self_ptr, ErrorCode(SUCCESS));
 	});

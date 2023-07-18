@@ -538,10 +538,10 @@ TEST_P(CongestionTestFixture, CongestionTest)
 
 boost::asio::ssl::context sslctx{boost::asio::ssl::context::tlsv12};
 auto parameters = ::testing::Values(
-	SocketArgument("TCP", [](){ return std::make_shared<MyTCPServer>(0, THREAD_NUM); }, [](boost::asio::io_context& cioc){ return std::make_shared<MyTCPClient>(boost::asio::ip::tcp::socket(cioc)); }, true),
-	SocketArgument("TCPTLS", [](){ return std::make_shared<MyTCPTLSServer>(0, THREAD_NUM, CERT_FILE, KEY_FILE); }, [](boost::asio::io_context& cioc){ return std::make_shared<MyTCPTLSClient>(sslctx, boost::asio::ip::tcp::socket(cioc)); }, false),
-	SocketArgument("Websocket", [](){ return std::make_shared<MyWebsocketServer>(0, THREAD_NUM); }, [](boost::asio::io_context& cioc){ return std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(cioc)); }, true),
-	SocketArgument("WebsocketTLS", [](){ return std::make_shared<MyWebsocketTLSServer>(0, THREAD_NUM, CERT_FILE, KEY_FILE); }, [](boost::asio::io_context& cioc){ return std::make_shared<MyWebsocketTLSClient>(sslctx, boost::asio::ip::tcp::socket(cioc)); }, false)
+	SocketArgument("TCP", [](){ return std::make_shared<MyTCPServer>(0, THREAD_NUM); }, [](boost::asio::io_context& cioc){ return std::make_shared<MyTCPClient>(boost::asio::ip::tcp::socket(boost::asio::make_strand(cioc))); }, true),
+	SocketArgument("TCPTLS", [](){ return std::make_shared<MyTCPTLSServer>(0, THREAD_NUM, CERT_FILE, KEY_FILE); }, [](boost::asio::io_context& cioc){ return std::make_shared<MyTCPTLSClient>(sslctx, boost::asio::ip::tcp::socket(boost::asio::make_strand(cioc))); }, false),
+	SocketArgument("Websocket", [](){ return std::make_shared<MyWebsocketServer>(0, THREAD_NUM); }, [](boost::asio::io_context& cioc){ return std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(boost::asio::make_strand(cioc))); }, true),
+	SocketArgument("WebsocketTLS", [](){ return std::make_shared<MyWebsocketTLSServer>(0, THREAD_NUM, CERT_FILE, KEY_FILE); }, [](boost::asio::io_context& cioc){ return std::make_shared<MyWebsocketTLSClient>(sslctx, boost::asio::ip::tcp::socket(boost::asio::make_strand(cioc))); }, false)
 );
 
 INSTANTIATE_TEST_CASE_P(SocketTest, BasicTestFixture, parameters, SocketTestFixture::PrintToStringParamName());

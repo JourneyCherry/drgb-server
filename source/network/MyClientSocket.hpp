@@ -33,9 +33,7 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		
 		std::queue<boost::asio::ip::basic_resolver_entry<boost::asio::ip::tcp>> endpoints;
 
-		using timer_t = boost::asio::steady_timer;
-		boost::asio::any_io_executor ioc_ref;
-		std::unique_ptr<timer_t> timer;
+		std::unique_ptr<boost::asio::steady_timer> timer;
 
 		//For User of Client Socket
 		std::function<void(std::shared_ptr<MyClientSocket>)> cleanHandler;

@@ -1,5 +1,6 @@
 #pragma once
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <memory>
 #include <thread>

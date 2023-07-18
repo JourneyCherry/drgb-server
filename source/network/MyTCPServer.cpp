@@ -25,7 +25,8 @@ void MyTCPServer::CloseSocket()
 
 void MyTCPServer::StartAccept(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handle)
 {
-	acceptor.async_accept([this, handle](boost::system::error_code error_code, boost::asio::ip::tcp::socket socket)
+	//각 Accept된 Socket들에 대해 개개인의 strand를 생성
+	acceptor.async_accept(boost::asio::make_strand(ioc), [this, handle](boost::system::error_code error_code, boost::asio::ip::tcp::socket socket)
 	{
 		if(error_code.failed())
 		{

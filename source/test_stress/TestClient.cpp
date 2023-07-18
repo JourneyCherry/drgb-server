@@ -177,7 +177,7 @@ void TestClient::LoginProcess()
 {
 	if(!isRunning)
 		return;
-	socket = std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(*pioc));
+	socket = std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(boost::asio::make_strand(*pioc)));
 	socket->Connect(addrs[0].first, addrs[0].second, [this](std::shared_ptr<MyClientSocket> conn_socket, ErrorCode conn_ec)
 	{
 		if(!conn_ec)
@@ -223,7 +223,7 @@ void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<My
 {
 	if(!isRunning)
 		return;
-	socket = std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(*pioc));
+	socket = std::make_shared<MyWebsocketClient>(boost::asio::ip::tcp::socket(boost::asio::make_strand(*pioc)));
 	socket->Connect(addrs[server].first, addrs[server].second, [this, handler](std::shared_ptr<MyClientSocket> conn_socket, ErrorCode conn_ec)
 	{
 		if(!conn_ec)

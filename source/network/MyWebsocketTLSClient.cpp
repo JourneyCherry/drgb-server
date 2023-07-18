@@ -3,8 +3,7 @@
 MyWebsocketTLSClient::MyWebsocketTLSClient(boost::asio::ssl::context &sslctx_, boost::asio::ip::tcp::socket socket)
  : sslctx(boost::asio::ssl::context::tlsv12), ws(std::move(socket), sslctx_), MyClientSocket()
 {
-	ioc_ref = ws.get_executor();
-	timer = std::make_unique<timer_t>(ioc_ref);
+	timer = std::make_unique<boost::asio::steady_timer>(ws.get_executor());
 
 	boost::beast::error_code ec;
 	boost::asio::ip::tcp::endpoint ep = boost::beast::get_lowest_layer(ws).socket().remote_endpoint(ec);
@@ -173,7 +172,8 @@ void MyWebsocketTLSClient::DoClose()
 		{
 
 		}
-		cleanHandler(self_ptr);
+		if(cleanHandler != nullptr)
+			cleanHandler(self_ptr);
 	});
 }
 

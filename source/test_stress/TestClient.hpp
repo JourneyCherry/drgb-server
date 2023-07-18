@@ -5,6 +5,7 @@
 #include <utility>
 #include <random>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/strand.hpp>
 #include "MyWebsocketClient.hpp"
 #include "ThreadExceptHandler.hpp"
 #include "Hasher.hpp"

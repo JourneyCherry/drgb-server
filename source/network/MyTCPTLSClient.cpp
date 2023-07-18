@@ -3,8 +3,7 @@
 MyTCPTLSClient::MyTCPTLSClient(boost::asio::ssl::context &sslctx_, boost::asio::ip::tcp::socket socket)
  : sslctx(boost::asio::ssl::context::tlsv12), ws(std::move(socket), sslctx_), MyClientSocket()
 {
-	ioc_ref = ws.get_executor();
-	timer = std::make_unique<timer_t>(ioc_ref);
+	timer = std::make_unique<boost::asio::steady_timer>(ws.get_executor());
 	
 	boost::system::error_code error_code;
 	auto ep = ws.lowest_layer().remote_endpoint(error_code);
@@ -93,13 +92,18 @@ void MyTCPTLSClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientS
 
 void MyTCPTLSClient::DoClose()
 {
-	boost::system::error_code error_code;
-	ws.next_layer().close(error_code);
-	//ErrorCode ec(error_code);
-	//if(!isNormalClose(ec))
-	//	throw ErrorCodeExcept(ec, __STACKINFO__);
-	if(cleanHandler != nullptr)
-		cleanHandler(shared_from_this());
+	auto self_ptr = shared_from_this();
+	ws.async_shutdown([this, self_ptr](boost::system::error_code error_code)
+	{
+		if(error_code.failed())
+		{
+
+		}
+		if(cleanHandler != nullptr)
+			cleanHandler(self_ptr);
+	});
+	//boost::system::error_code error_code;
+	//ws.next_layer().close(error_code);
 }
 
 boost::asio::any_io_executor MyTCPTLSClient::GetContext()

@@ -2,8 +2,7 @@
 
 MyWebsocketClient::MyWebsocketClient(boost::asio::ip::tcp::socket socket_) : ws(std::move(socket_)), MyClientSocket()
 {
-	ioc_ref = ws.get_executor();
-	timer = std::make_unique<timer_t>(ioc_ref);
+	timer = std::make_unique<boost::asio::steady_timer>(ws.get_executor());
 	
 	boost::system::error_code error_code;
 	boost::asio::ip::tcp::endpoint ep = ws.next_layer().socket().remote_endpoint(error_code);
