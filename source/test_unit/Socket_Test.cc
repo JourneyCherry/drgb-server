@@ -16,7 +16,7 @@
 #define KEY_FILE "../../resources/drgb.key"
 #define TIMEOUT 300
 #define THREAD_NUM 16
-#define CLIENT_NUM 100	//TODO : 약 200명 이상으로 늘면 KeyExchange에서 Timeout이 발생한다.
+#define CLIENT_NUM 100
 
 class SocketArgument
 {
@@ -74,21 +74,13 @@ class SocketTestFixture : public ::testing::TestWithParam<SocketArgument>
 				std::string thrown = "";
 				try
 				{
-					SetClient(client);
 					client->SetCleanUp([&](std::shared_ptr<MyClientSocket> socket)
 					{
-						std::unique_lock<std::mutex> lk(mtx);
-						for(auto iter = Clients.begin(); iter != Clients.end();iter++)
-						{
-							if(iter->get() == socket.get())
-							{
-								Clients.erase(iter);
-								return;
-							}
-						}
-						if(Clients.empty())
-							client_ioc.stop();
+						client_num.fetch_sub(1);
+						client_cv.notify_all();
 					});
+					SetClient(client);
+					client_num.fetch_add(1);
 				}
 				catch(const std::exception& e)
 				{
@@ -105,9 +97,12 @@ class SocketTestFixture : public ::testing::TestWithParam<SocketArgument>
 			for(int i = 0;i<THREAD_NUM;i++)
 				boost::asio::post(client_thread, [this](){ this->ClientLoop(); });
 
-			client_thread.join();
-			client_ioc.stop();
-			Server->Close();
+			std::unique_lock lk(mtx);
+			client_cv.wait(lk, [this](){return client_num.load() <= 0; });
+			Clients.clear();
+
+			for(auto &client : Clients)
+				client->Close();
 			
 			EXPECT_EQ(server_count, CLIENT_NUM);
 			EXPECT_EQ(client_count, CLIENT_NUM);
@@ -115,28 +110,23 @@ class SocketTestFixture : public ::testing::TestWithParam<SocketArgument>
 
 		void TearDown() override
 		{
-			if(Server != nullptr) Server->Close();
-			for(auto &client : Clients)
-				client->Close();
-			Clients.clear();
+			client_work_guard.reset();
+			Server->Close();
+			client_thread.join();
 		}
 
 		void ClientLoop()
 		{
-			do
+			std::string thrown = "";
+			try
 			{
-				std::string thrown = "";
-				try
-				{
-					client_ioc.run();
-				}
-				catch(const std::exception& e)
-				{
-					thrown = e.what();
-				}
-				EXPECT_EQ(thrown.length(), 0) << "Client : " << thrown;
+				client_ioc.run();
 			}
-			while(!client_ioc.stopped());
+			catch(const std::exception& e)
+			{
+				thrown = e.what();
+			}
+			EXPECT_EQ(thrown.length(), 0) << "Client : " << thrown;
 		}
 
 	public:
@@ -178,7 +168,7 @@ class SocketTestFixture : public ::testing::TestWithParam<SocketArgument>
 			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
 		}
 
-		SocketTestFixture() : client_thread(THREAD_NUM), client_ioc(THREAD_NUM) {}
+		SocketTestFixture() : client_thread(THREAD_NUM), client_ioc(THREAD_NUM), client_num(0), client_work_guard(boost::asio::make_work_guard(client_ioc)) {}
 
 	private:
 		boost::asio::thread_pool client_thread;
@@ -186,6 +176,9 @@ class SocketTestFixture : public ::testing::TestWithParam<SocketArgument>
 		std::vector<std::shared_ptr<MyClientSocket>> Clients;
 		std::mutex mtx;
 		boost::asio::io_context client_ioc;
+		boost::asio::executor_work_guard<boost::asio::io_context::executor_type> client_work_guard;
+		std::atomic<size_t> client_num;
+		std::condition_variable client_cv;
 	
 	protected:
 		bool onEncryption;
@@ -202,81 +195,89 @@ class BasicTestFixture : public SocketTestFixture
 	protected:
 		void SetServer(std::shared_ptr<MyServerSocket> socket) override
 		{
-			socket->StartAccept(std::bind(&BasicTestFixture::ServerEncrypt, this, std::placeholders::_1, std::placeholders::_2));
+			socket->StartAccept([this](std::shared_ptr<MyClientSocket> client, ErrorCode acpt_ec)
+			{
+				EXPECT_TRUE(acpt_ec.isSuccessed()) << acpt_ec.message_code();
+				if(!acpt_ec)
+					throw ErrorCodeExcept(acpt_ec, __STACKINFO__);
+				client->KeyExchange([this](std::shared_ptr<MyClientSocket> ke_client, ErrorCode ke_ec)
+				{
+					EXPECT_TRUE(ke_ec.isSuccessed()) << ke_ec.message_code();
+					if(!ke_ec)
+						throw ErrorCodeExcept(ke_ec, __STACKINFO__);
+					ServerAccept(ke_client);
+				});
+			});
+		}
+
+		virtual void ServerAccept(std::shared_ptr<MyClientSocket> socket)
+		{
+			socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
+			ServerRecv(socket);
+		}
+
+		virtual void ServerRecv(std::shared_ptr<MyClientSocket> socket)
+		{
+			socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
+			{
+				client->CancelTimeout();
+				if(!ec)
+				{
+					CheckEC(ec);
+					client->Close();
+					return;
+				}
+				byte req = packet.pop<byte>();
+				EXPECT_EQ(req, REQ_STARTMATCH);
+				byte ans = (req == REQ_STARTMATCH)?ANS_MATCHMADE:ERR_PROTOCOL_VIOLATION;
+				ByteQueue answer = ByteQueue::Create<byte>(ans);
+				client->Send(answer);
+				server_count.fetch_add(1);
+				client->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
+				ServerRecv(client);
+			});
 		}
 
 		void SetClient(std::shared_ptr<MyClientSocket> socket) override
 		{
-			socket->Connect("localhost", server_port, std::bind(&BasicTestFixture::ClientEncrypt, this, std::placeholders::_1, std::placeholders::_2));
-		}
-
-		void ServerEncrypt(std::shared_ptr<MyClientSocket> socket, ErrorCode ec)
-		{
-			if(onEncryption && ec)
-				socket->KeyExchange([this](std::shared_ptr<MyClientSocket> ke_client, ErrorCode ke_ec)
-				{
-					this->ServerAccept(ke_client, ke_ec);
-				});
-			else
-				ServerAccept(socket, ec);
-		}
-
-		virtual void ServerAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec)
-		{
-			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
-			socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
-			socket->StartRecv(std::bind(&BasicTestFixture::ServerRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-		}
-
-		virtual void ServerRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec)
-		{
-			socket->CancelTimeout();
-			if(!ec)
+			socket->Connect("localhost", server_port, [this](std::shared_ptr<MyClientSocket> client, ErrorCode acpt_ec)
 			{
-				CheckEC(ec);
-				return;
-			}
-			byte req = packet.pop<byte>();
-			EXPECT_EQ(req, REQ_STARTMATCH);
-			byte ans = (req == REQ_STARTMATCH)?ANS_MATCHMADE:ERR_PROTOCOL_VIOLATION;
-			ByteQueue answer = ByteQueue::Create<byte>(ans);
-			socket->Send(answer);
-			server_count.fetch_add(1);
-			socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
+				EXPECT_TRUE(acpt_ec.isSuccessed()) << acpt_ec.message_code();
+				if(!acpt_ec)
+					throw ErrorCodeExcept(acpt_ec, __STACKINFO__);
+				client->KeyExchange([this](std::shared_ptr<MyClientSocket> ke_socket, ErrorCode ke_ec)
+				{
+					EXPECT_TRUE(ke_ec.isSuccessed()) << ke_ec.message_code();
+					if(!ke_ec)
+						throw ErrorCodeExcept(ke_ec, __STACKINFO__);
+					ClientAccept(ke_socket);
+				});
+			});
 		}
 
-		void ClientEncrypt(std::shared_ptr<MyClientSocket> socket, ErrorCode ec)
+		virtual void ClientAccept(std::shared_ptr<MyClientSocket> socket)
 		{
-			if(onEncryption && ec)
-				socket->KeyExchange([this](std::shared_ptr<MyClientSocket> ke_client, ErrorCode ke_ec){ ClientAccept(ke_client, ke_ec); });
-			else
-				ClientAccept(socket, ec);
-		}
-
-		virtual void ClientAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec)
-		{
-			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
 			socket->Send(ByteQueue::Create<byte>(REQ_STARTMATCH));
 			socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
-			socket->StartRecv(std::bind(&BasicTestFixture::ClientRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+			ClientRecv(socket);
 		}
 
-		virtual void ClientRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec)
+		virtual void ClientRecv(std::shared_ptr<MyClientSocket> socket)
 		{
-			socket->CancelTimeout();
-			if(!ec)
+			socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
 			{
-				CheckEC(ec);
-				return;
-			}
-			byte answer = packet.pop<byte>();
-			EXPECT_EQ(answer, ANS_MATCHMADE);
-			client_count.fetch_add(1);
-			socket->Close();
+				client->CancelTimeout();
+				if(!ec)
+				{
+					CheckEC(ec);
+					client->Close();
+					return;
+				}
+				byte answer = packet.pop<byte>();
+				EXPECT_EQ(answer, ANS_MATCHMADE);
+				client_count.fetch_add(1);
+				client->Close();
+			});
 		}
 };
 
@@ -289,39 +290,39 @@ TEST_P(BasicTestFixture, BasicTest)
 class ServerCloseTestFixture : public BasicTestFixture
 {
 	protected:
-		void ServerAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec) override
+		void ServerAccept(std::shared_ptr<MyClientSocket> socket) override
 		{
-			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
-			//StartRecv를 하지않고 socket->Close()를 호출하는 경우, Client와의 키교환에서 Connection Closed가 발생할 수도 있다.
-			socket->StartRecv(std::bind(&ServerCloseTestFixture::ServerRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 			socket->SetTimeout(TIMEOUT / 2, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
+			ServerRecv(socket);
 			server_count.fetch_add(1);
 		}
 
-		void ServerRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec) override
+		void ServerRecv(std::shared_ptr<MyClientSocket> socket) override
 		{
-			socket->Close();	//여기서 server_count를 올리면 timeout때 1번, Closed때 1번 총 2번 올라가게 되므로, 여기서 올리면 안된다.
-		}
-
-		void ClientAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec) override
-		{
-			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
-			if(!ec)
-				socket->Close();
-			socket->StartRecv(std::bind(&ServerCloseTestFixture::ClientRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-		}
-
-		void ClientRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec) override
-		{
-			if(!ec)
+			socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
 			{
-				CheckEC(ec);
-				client_count.fetch_add(1);
-				socket->Close();
-				return;
-			}
+				client->Close();	//여기서 server_count를 올리면 timeout때 1번, Closed때 1번 총 2번 올라가게 되므로, 여기서 올리면 안된다.
+			});
+		}
+
+		void ClientAccept(std::shared_ptr<MyClientSocket> socket) override
+		{
+			ClientRecv(socket);
+		}
+
+		void ClientRecv(std::shared_ptr<MyClientSocket> socket) override
+		{
+			socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
+			{
+				if(!ec)
+				{
+					CheckEC(ec);
+					client_count.fetch_add(1);
+					client->Close();
+					return;
+				}
+				ClientRecv(client);
+			});
 		}
 };
 
@@ -333,40 +334,37 @@ TEST_P(ServerCloseTestFixture, ServerCloseTest)
 class TimeoutTestFixture : public BasicTestFixture
 {
 	protected:
-		void ServerAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec) override { CommonAccept(socket, ec, true); }
-		void ClientAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec) override { CommonAccept(socket, ec, false); }
+		void ServerAccept(std::shared_ptr<MyClientSocket> socket) override { CommonAccept(socket, true); }
+		void ClientAccept(std::shared_ptr<MyClientSocket> socket) override { CommonAccept(socket, false); }
 
-		void CommonAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec, bool isServer)
+		void CommonAccept(std::shared_ptr<MyClientSocket> socket, bool isServer)
 		{
-			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
-			socket->StartRecv(std::bind(&TimeoutTestFixture::CommonRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, isServer));
 			if(isServer)
-				socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> socket){socket->Close();});
-		}
-
-		void CommonRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec, bool isServer)
-		{
-			socket->CancelTimeout();
-			if(!ec)
-			{
-				CheckEC(ec);
-				if(ec.code() == ERR_TIMEOUT)
+				socket->SetTimeout(TIMEOUT, [this](std::shared_ptr<MyClientSocket> socket)
 				{
 					server_count.fetch_add(1);
 					socket->Send(ByteQueue::Create<byte>(ERR_TIMEOUT));
-					//socket->SetTimeout(TIMEOUT, [](std::shared_ptr<MyClientSocket> to_socket){ to_socket->Send(ByteQueue::Create<byte>(ERR_TIMEOUT));});
-					//socket->SetTimeout(TIMEOUT / 2, [](std::shared_ptr<MyClientSocket> to_socket){ to_socket->Close();});
-				}
-				else
 					socket->Close();
-				return;
-			}
-			byte receive_byte = packet.pop<byte>();
-			EXPECT_EQ(receive_byte, ERR_TIMEOUT);
-			client_count.fetch_add(1);
-			socket->Close();
+				});
+			CommonRecv(socket);
+		}
+
+		void CommonRecv(std::shared_ptr<MyClientSocket> socket)
+		{
+			socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
+			{
+				client->CancelTimeout();
+				if(!ec)
+				{
+					CheckEC(ec);
+					client->Close();
+					return;
+				}
+				byte receive_byte = packet.pop<byte>();
+				EXPECT_EQ(receive_byte, ERR_TIMEOUT);
+				client_count.fetch_add(1);
+				client->Close();
+			});
 		}
 };
 
@@ -380,64 +378,64 @@ class BigDataTestFixture : public BasicTestFixture
 	private:
 		ByteQueue src_bigdata;
 	protected:
-		void ServerAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec) override
+		void ServerAccept(std::shared_ptr<MyClientSocket> socket) override
 		{
-			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
-			socket->StartRecv(std::bind(&BigDataTestFixture::ServerRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+			ServerRecv(socket);
 		}
 
-		void ServerRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec) override
+		void ServerRecv(std::shared_ptr<MyClientSocket> socket) override
 		{
-			if(!ec)
+			socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
 			{
-				CheckEC(ec);
-				socket->Close();
-				return;
-			}
-			ByteQueue bigdata = src_bigdata;
-			EXPECT_EQ(packet.Size(), bigdata.Size());
-			int data_count = bigdata.Size() / sizeof(int);
-			for(int i = 0;i<data_count;i++)
-			{
-				int lhs = packet.pop<int>();
-				int rhs = bigdata.pop<int>();
-				EXPECT_EQ(lhs, rhs) << i << "th data";
-				if(lhs != rhs)
+				if(!ec)
 				{
-					socket->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
-					socket->Close();
+					CheckEC(ec);
+					client->Close();
 					return;
 				}
-			}
-			server_count.fetch_add(1);
-			socket->Send(ByteQueue::Create<byte>(SUCCESS));
-			socket->Close();
+				ByteQueue bigdata = src_bigdata;
+				EXPECT_EQ(packet.Size(), bigdata.Size());
+				int data_count = bigdata.Size() / sizeof(int);
+				for(int i = 0;i<data_count;i++)
+				{
+					int lhs = packet.pop<int>();
+					int rhs = bigdata.pop<int>();
+					EXPECT_EQ(lhs, rhs) << i << "th data";
+					if(lhs != rhs)
+					{
+						client->Send(ByteQueue::Create<byte>(ERR_PROTOCOL_VIOLATION));
+						client->Close();
+						return;
+					}
+				}
+				server_count.fetch_add(1);
+				client->Send(ByteQueue::Create<byte>(SUCCESS));
+				client->Close();
+			});
 		}
 
-		void ClientAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec) override
+		void ClientAccept(std::shared_ptr<MyClientSocket> socket) override
 		{
-			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
 			ByteQueue bigdata = src_bigdata;
 			socket->Send(bigdata);
-			socket->StartRecv(std::bind(&BigDataTestFixture::ClientRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+			ClientRecv(socket);
 		}
 
-		void ClientRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec) override
+		void ClientRecv(std::shared_ptr<MyClientSocket> socket) override
 		{
-			if(!ec)
+			socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
 			{
-				CheckEC(ec);
-				socket->Close();
-				return;
-			}
-			byte answer = packet.pop<byte>();
-			if(answer == SUCCESS)
-				client_count.fetch_add(1);
-			socket->Close();
+				if(!ec)
+				{
+					CheckEC(ec);
+					client->Close();
+					return;
+				}
+				byte answer = packet.pop<byte>();
+				if(answer == SUCCESS)
+					client_count.fetch_add(1);
+				client->Close();
+			});
 		}
 	public:
 		void AddData(ByteQueue data)
@@ -464,43 +462,44 @@ class CongestionTestFixture : public BasicTestFixture
 	private:
 		static constexpr int data_count = 100;	//TODO : 이게 2이상 커지면 실패한다.
 	protected:
-		void ServerAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec) override
+		void ServerAccept(std::shared_ptr<MyClientSocket> socket) override
 		{
-			EXPECT_TRUE(ec.isSuccessed()) << "Server : " << ec.message_code();
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
-			socket->StartRecv(std::bind(&CongestionTestFixture::ServerRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::make_shared<int>(0)));
+			ServerRecv(socket, std::make_shared<int>(0));
 		}
 
-		void ServerRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec, std::shared_ptr<int> progress)
+		void ServerRecv(std::shared_ptr<MyClientSocket> socket, std::shared_ptr<int> progress)
 		{
-			if(!ec)
+			socket->StartRecv([this, progress](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
 			{
-				CheckEC(ec);
-				EXPECT_EQ(*progress, data_count) << "Server : " << ec.message_code();
-				socket->Close();
-				return;
-			}
-			int data = packet.pop<int>();
-			EXPECT_EQ(data, *progress + 1) << "Server : " << data;
-			if(data != *progress + 1)
-				socket->Close();
-			else
-			{
-				*progress = data;
-			}
-			if(*progress == data_count)
-			{
-				server_count.fetch_add(1);
-				socket->Send(ByteQueue::Create<byte>(SUCCESS));
-			}
+				if(!ec)
+				{
+					CheckEC(ec);
+					EXPECT_EQ(*progress, data_count) << "Server : " << ec.message_code();
+					client->Close();
+					return;
+				}
+				int data = packet.pop<int>();
+				EXPECT_EQ(data, *progress + 1) << "Server : " << data;
+				if(data != *progress + 1)
+				{
+					client->Close();
+					return;
+				}
+				else
+				{
+					*progress = data;
+				}
+				if(*progress == data_count)
+				{
+					server_count.fetch_add(1);
+					client->Send(ByteQueue::Create<byte>(SUCCESS));
+				}
+				ServerRecv(client, progress);
+			});
 		}
 
-		void ClientAccept(std::shared_ptr<MyClientSocket> socket, ErrorCode ec) override
+		void ClientAccept(std::shared_ptr<MyClientSocket> socket) override
 		{
-			EXPECT_TRUE(ec.isSuccessed()) << "Client : " << ec.message_code();
-			if(!ec)
-				throw ErrorCodeExcept(ec, __STACKINFO__);
 			for(int i = 1;i<=data_count;i++)
 			{
 				ErrorCode ec = socket->Send(ByteQueue::Create<int>(i));
@@ -510,22 +509,25 @@ class CongestionTestFixture : public BasicTestFixture
 					break;
 				}
 			}
-			socket->StartRecv(std::bind(&CongestionTestFixture::ClientRecv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+			ClientRecv(socket);
 		}
 
-		void ClientRecv(std::shared_ptr<MyClientSocket> socket, ByteQueue packet, ErrorCode ec) override
+		void ClientRecv(std::shared_ptr<MyClientSocket> socket) override
 		{
-			if(!ec)
+			socket->StartRecv([this](std::shared_ptr<MyClientSocket> client, ByteQueue packet, ErrorCode ec)
 			{
-				CheckEC(ec);
-				socket->Close();
-				return;
-			}
-			byte answer = packet.pop<byte>();
-			EXPECT_EQ(answer, SUCCESS) << "Client : " << (int)answer;
-			if(answer == SUCCESS)
-				client_count.fetch_add(1);
-			socket->Close();
+				if(!ec)
+				{
+					CheckEC(ec);
+					client->Close();
+					return;
+				}
+				byte answer = packet.pop<byte>();
+				EXPECT_EQ(answer, SUCCESS) << "Client : " << (int)answer;
+				if(answer == SUCCESS)
+					client_count.fetch_add(1);
+				client->Close();
+			});
 		}
 };
 

@@ -6,9 +6,11 @@ SET ( TESTS
 	Daemonizer_Test
 	DeMap_Test
 	Encoder_Test
+	Encryptor_Test	#Including KeyExchanger
 	ErrorCode_Test
 	Expected_Test
 	GetArg_Test
+	Hasher_Test
 	PacketProcessor_Test
 	StackTraceExcept_Test
 	Socket_Test
@@ -31,9 +33,11 @@ TARGET_LINK_LIBRARIES ( ConfigParser_Test PRIVATE ConfigParser )
 TARGET_LINK_LIBRARIES ( Daemonizer_Test PRIVATE Daemonizer )
 TARGET_LINK_LIBRARIES ( DeMap_Test PRIVATE DeMap )
 TARGET_LINK_LIBRARIES ( Encoder_Test PRIVATE Encoder )
+TARGET_LINK_LIBRARIES ( Encryptor_Test PRIVATE Encryptor KeyExchanger )
 TARGET_LINK_LIBRARIES ( ErrorCode_Test PRIVATE ErrorCode )
 TARGET_LINK_LIBRARIES ( Expected_Test PRIVATE Expected )
 TARGET_LINK_LIBRARIES ( GetArg_Test PRIVATE GetArg )
+TARGET_LINK_LIBRARIES ( Hasher_Test PRIVATE Hasher )
 TARGET_LINK_LIBRARIES ( PacketProcessor_Test PRIVATE PacketProcessor )
 TARGET_LINK_LIBRARIES ( StackTraceExcept_Test PRIVATE StackTraceExcept )
 TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClient MyTCPTLSServer MyWebsocketClient MyWebsocketServer MyWebsocketTLSClient MyWebsocketTLSServer pthread )
