@@ -17,8 +17,10 @@ class MyMatch : public MyServer
 		DeMap<Account_ID_t, Hash_t, std::weak_ptr<MyClientSocket>> sessions;	//Local Server Session
 
 		MatchServiceServer MatchService;
-		MyMatchMaker matchmaker;
 		std::thread t_matchmaker;
+		MyMatchMaker matchmaker;
+		std::mutex matchmaker_mtx;
+		std::condition_variable matchmaker_cv;
 
 	public:
 		MyMatch();	//TODO : Join에서 t_matchmaker가 exception으로 죽으면 다시 올려야 한다.

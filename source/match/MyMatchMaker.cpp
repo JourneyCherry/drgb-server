@@ -1,5 +1,7 @@
 #include "MyMatchMaker.hpp"
 
+double queue_element::Interpolate = 0.1f;
+
 queue_element::queue_element() : id(0), win(0), draw(0), loose(0), wait_count(std::make_shared<int>(1))
 {
 
@@ -26,6 +28,15 @@ bool queue_element::operator<(const queue_element& rhs) const
 		return (id < rhs.id);
 	else
 		return (ratio() < rhs.ratio());
+}
+
+void swap(queue_element& lhs, queue_element& rhs)
+{
+	std::swap(lhs.id, rhs.id);
+	std::swap(lhs.win, rhs.win);
+	std::swap(lhs.draw, rhs.draw);
+	std::swap(lhs.loose, rhs.loose);
+	std::swap(*(lhs.wait_count), *(rhs.wait_count));
 }
 
 bool queue_element::isMatchable(const queue_element& rhs) const
@@ -56,8 +67,16 @@ double queue_element::ratio() const
 	return (double)win / (double)sum;
 }
 
+MyMatchMaker::MyMatchMaker(const double& interpolate_ratio)
+{
+	queue_element::Interpolate = interpolate_ratio;
+}
+
 void MyMatchMaker::Enter(Account_ID_t id, int win, int draw, int loose)
 {
+	if(id <= 0)
+		return;
+
 	ulock lk(mtx);
 	wait_queue.emplace(id, win, draw, loose);
 }
@@ -129,4 +148,9 @@ void MyMatchMaker::PopMatch()
 	if(match_queue.empty())
 		return;
 	match_queue.pop();
+}
+
+size_t MyMatchMaker::Size() const
+{
+	return wait_queue.size();
 }

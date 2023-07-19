@@ -18,6 +18,7 @@ SET ( TESTS
 	Redis_Test
 	RPC_Test
 	TimerPool_Test
+	MatchMaker_Test
 )
 
 FIND_PACKAGE ( hiredis REQUIRED )
@@ -45,5 +46,6 @@ TARGET_LINK_LIBRARIES ( BoostTimer_Test PRIVATE pthread )
 TARGET_LINK_LIBRARIES ( Redis_Test PRIVATE MyRedis )
 TARGET_LINK_LIBRARIES ( RPC_Test PRIVATE BattleServiceClient MatchServiceServer ManagerServiceClient ManagerServiceServer )
 TARGET_LINK_LIBRARIES ( TimerPool_Test PRIVATE TimerPool )
+TARGET_LINK_LIBRARIES ( MatchMaker_Test PRIVATE MyMatchMaker )
 
 UNSET ( TESTS )

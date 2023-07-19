@@ -9,22 +9,27 @@
 class queue_element
 {
 private:
-	static constexpr double Interpolate = 0.1f;	//TODO : 이것을 Config로 처리하자.
 	Account_ID_t id;
 	int win;
 	int draw;
 	int loose;
 	const std::shared_ptr<int> wait_count;
 
+	bool isMatchable(const queue_element&) const;
+	void Wait() const;
+
+	static double Interpolate;
+	
 public:
 	queue_element();
 	queue_element(Account_ID_t, int, int, int);
 	bool operator==(const queue_element&) const;
 	bool operator<(const queue_element&) const;
-	bool isMatchable(const queue_element&) const;
-	void Wait() const;
+	friend void swap(queue_element&, queue_element&);
 	Account_ID_t whoami() const;
 	double ratio() const;
+
+	friend class MyMatchMaker;
 };
 
 class MyMatchMaker
@@ -36,7 +41,7 @@ private:
 	using ulock = std::unique_lock<std::mutex>;
 
 public:
-	MyMatchMaker() = default;
+	MyMatchMaker(const double&);
 	~MyMatchMaker() = default;
 
 	void Enter(Account_ID_t, int, int, int);
@@ -47,4 +52,6 @@ public:
 	bool isThereMatch();
 	std::pair<queue_element, queue_element> GetMatch();
 	void PopMatch();
+
+	size_t Size() const;
 };

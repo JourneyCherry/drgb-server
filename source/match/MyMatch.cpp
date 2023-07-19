@@ -4,6 +4,7 @@ const std::string MyMatch::self_keyword = "match";
 
 MyMatch::MyMatch() : 
 	rematch_delay(ConfigParser::GetInt("Match_Delay", 1000)),
+	matchmaker(ConfigParser::GetDouble("Match_Interpolate", 0.1)),
 	MyServer(ConfigParser::GetInt("Match_ClientPort", 54323))
 {
 	ServiceBuilder.RegisterService(&MatchService);
@@ -23,6 +24,7 @@ void MyMatch::Open()
 void MyMatch::Close()
 {
 	redis.Close();
+	matchmaker_cv.notify_all();	//isRunning은 MyServer::Stop()에서 false로 변경되며, MyMatch::Close()보다 먼저 수행됨.
 	if(t_matchmaker.joinable())
 		t_matchmaker.join();
 	Logger::log("Match Server Stop", Logger::LogType::info);
@@ -186,6 +188,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> target_client, Accou
 							throw pqxx::broken_connection();
 						auto [_, win, draw, loose] = db->GetInfo(account_id);
 						matchmaker.Enter(account_id, win, draw, loose);
+						matchmaker_cv.notify_one();
 					}
 					break;
 				case REQ_PAUSEMATCH:	//매치메이커 큐에서 빼기.
@@ -256,6 +259,9 @@ void MyMatch::MatchMake()
 		try
 		{
 			std::this_thread::sleep_for(rematch_delay);
+			std::unique_lock lk(matchmaker_mtx);
+			matchmaker_cv.wait(lk, [this](){ return (matchmaker.Size() >= 2 || !isRunning); });
+			lk.unlock();
 			matchmaker.Process();
 
 			while(matchmaker.isThereMatch())

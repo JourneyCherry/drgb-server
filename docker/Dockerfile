@@ -17,10 +17,10 @@ RUN rm ${DRGB_FILE_NAME}
 
 #Set Configuration File
 RUN sed -i \
-	-e "0,/Machine_ID = 1/s//Machine_ID = ${MACHINE_ID}/" \
-	-e "0,/DBAddr = localhost/s//DBAddr = ${DBADDR}/" \
-	-e "0,/SessionAddr = localhost/s//SessionAddr = ${SESSIONADDR}/" \
-	-e "0,/Match_Addr = localhost/s//Match_Addr = ${MATCHADDR}/" \
+	-e "0,/^\(Machine_ID\)[[:blank:]]*=[[:blank:]]*\w*\$/s//\1 = ${MACHINE_ID} #Changed by Dockerfile/" \
+	-e "0,/^\(DBAddr\)[[:blank:]]*=[[:blank:]]*\w*\$/s//\1 = ${DBADDR} #Changed by Dockerfile/" \
+	-e "0,/^\(SessionAddr\)[[:blank:]]*=[[:blank:]]*\w*\$/s//\1 = ${SESSIONADDR} #Changed by Dockerfile/" \
+	-e "0,/^\(Match_Addr\)[[:blank:]]*=[[:blank:]]*\w*\$/s//\1 = ${MATCHADDR} #Changed by Dockerfile/" \
 	/etc/drgb/drgb.conf
 
 #Set Entrypoint for Docker
