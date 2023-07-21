@@ -5,9 +5,11 @@
 #include <chrono>
 #include <boost/asio/error.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include "MyPostgresPool.hpp"
+#include <queue>
+#include "Expected.hpp"
 #include "MyCodes.hpp"
-#include "MyClientSocket.hpp"
+
+using mylib::utils::Expected;
 
 #ifdef __linux__
 	#define MYPOPCNT(x)	__builtin_popcount(x)
@@ -21,18 +23,14 @@ class MyGame
 		using ulock = std::unique_lock<std::mutex>;
 
 		std::mutex mtx;
-		std::shared_ptr<boost::asio::steady_timer> timer;
 		std::string logtitlestr;
 
 		int state_level;
 		int now_round;
 
-		static const std::chrono::seconds StartAnim_Time;	//경기 시작/재개 시, 애니메이션 시간.
-		static const std::chrono::seconds Round_Time;
-		static const std::chrono::seconds Dis_Time;	//디스 시간.
 		static const std::map<int, int> required_energy;
 
-		MyPostgresPool *dbpool;
+		std::queue<std::tuple<int, Achievement_ID_t, int>> Achievements;
 
 	public:
 		static constexpr int MAX_PLAYER = 2;
@@ -43,14 +41,10 @@ class MyGame
 
 		struct player_info
 		{
-			Account_ID_t id;
-			std::shared_ptr<MyClientSocket> socket;
 			int action;
 			int health;
 			int energy;
 			int target;
-			ByteQueue info;
-			byte result;
 			//For Record Achievement
 			int prev_action;
 			int consecutive;
@@ -62,21 +56,17 @@ class MyGame
 		static constexpr int PUNCH = 1 << 3;
 		static constexpr int FIRE = 1 << 4;
 
-		MyGame(Account_ID_t, Account_ID_t, std::shared_ptr<boost::asio::steady_timer>, MyPostgresPool*);
+		MyGame();
 		~MyGame() = default;
-		int Connect(Account_ID_t, std::shared_ptr<MyClientSocket>);
-		void Disconnect(int, std::shared_ptr<MyClientSocket>);
 		void Action(int, int);
-		int GetWinner();
-		bool Work(const bool&);
+		int GetWinner() const;
+		bool process();
+		int GetRound() const;
+		std::tuple<byte, int, int> GetPlayerInfo(const int&) const;
+		Expected<std::tuple<int, Achievement_ID_t, int>> GetAchievement();
 	
 	private:
 		void ProcessResult(bool, bool);
-		bool process();
 		bool CheckAction(int);
-		bool isAllIn();
-		void SendAll(ByteQueue);	//같은 패킷 보낼때 씀.
-		ByteQueue GetPlayerByte(const struct player_info&);
-		void AchieveCount(Account_ID_t, Achievement_ID_t, std::shared_ptr<MyClientSocket>);
-		void AchieveProgress(Account_ID_t, Achievement_ID_t, int, std::shared_ptr<MyClientSocket>);
+		void AchieveProgress(int, Achievement_ID_t, int);
 };

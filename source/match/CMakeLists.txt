@@ -22,11 +22,8 @@ TARGET_LINK_LIBRARIES ( MyMatchMaker PUBLIC
 
 TARGET_LINK_LIBRARIES ( MyMatch PUBLIC
 	MyServer
-	ConfigParser
 	MyCodes
 	MyMatchMaker
-	MyPostgresPool
-	MyRedis
 	MatchServiceServer
 )
 

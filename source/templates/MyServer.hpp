@@ -4,7 +4,6 @@
 #include <condition_variable>
 #include <grpcpp/grpcpp.h>
 #include "MyWebsocketServer.hpp"
-#include "MyTCPServer.hpp"
 #include "ThreadExceptHandler.hpp"
 #include "Logger.hpp"
 #include "ConfigParser.hpp"

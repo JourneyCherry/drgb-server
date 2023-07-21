@@ -193,6 +193,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> target_client, Accou
 					break;
 				case REQ_PAUSEMATCH:	//매치메이커 큐에서 빼기.
 					matchmaker.Exit(account_id);
+						matchmaker_cv.notify_one();
 					break;
 				case REQ_CHNAME:
 					{

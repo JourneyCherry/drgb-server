@@ -83,6 +83,10 @@ services:
       - ./initdb.sql:/docker-entrypoint-initdb.d/initdb.sql
       - ./initdb.sh:/docker-entrypoint-initdb.d/initdb.sh
       #- ./Data:/var/lib/postgresql/data  #linux 환경 docker에서는 마운트할 경우, 해당 디렉토리의 접근권한이 컨테이너 내 마운트폴더의 설정을 따라가므로, docker 디렉토리 외 다른 곳의 디렉토리로 설정해야 서비스 올릴 때 에러가 발생하지 않음.
+    #ports:
+    #  - "5432:5432"
   session:
     container_name: session
     image: redis
+    #ports:
+    #  - "6379:6379"

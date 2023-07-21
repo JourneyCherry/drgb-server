@@ -209,8 +209,8 @@ int main(int argc, char *argv[])
 			(*iter)->Shutdown();	//TODO : Close하기 전, 결과 출력하기.
 	}
 
-	ioc.stop();
 	threads.join();
+	ioc.stop();
 	clients.clear();
 
 	return 0;

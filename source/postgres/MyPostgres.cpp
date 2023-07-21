@@ -145,7 +145,7 @@ bool MyPostgres::SetNickName(Account_ID_t account_id, Achievement_ID_t achieve_i
 bool MyPostgres::Achieve(Account_ID_t id, Achievement_ID_t achieve)
 {
 	auto [count, require] = GetAchieve(id, achieve);
-	if(count < require)
+	if(count < require)	//미달성 조건
 	{
 		work->exec_params0("INSERT INTO user_achievement (user_id, achievement_id, count) VALUES ($1, $2, 1) ON CONFLICT (user_id, achievement_id) DO UPDATE SET count = user_achievement.count + 1 WHERE user_achievement.user_id = $1 AND user_achievement.achievement_id = $2", id, achieve);	//ON CONFLICT는 PostgreSQL에서만 사용가능하다. MySQL은 ON DUPLICATE KEY이다.
 		work->commit();

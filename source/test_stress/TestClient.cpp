@@ -152,7 +152,7 @@ void TestClient::Shutdown()
 	{
 		now_state = STATE_CLOSING;
 	}
-	if(socket != nullptr)
+	else
 	{
 		socket->SetCleanUp([this](std::shared_ptr<MyClientSocket> client)
 		{

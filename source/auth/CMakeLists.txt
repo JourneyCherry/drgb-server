@@ -15,10 +15,7 @@ ADD_EXECUTABLE ( ${TARGET} main.cpp )
 SET_TARGET_PROPERTIES ( ${TARGET} PROPERTIES OUTPUT_NAME ${PROJECT_NAME}-${TARGET} )
 
 TARGET_LINK_LIBRARIES ( MyAuth PUBLIC
-	ConfigParser
 	MyServer
-	MyPostgresPool
-	MyRedis
 	Encoder
 	MyCodes
 	Hasher

@@ -77,3 +77,16 @@ TEST_F(BasicTimerTestFixture, IOContextTestWithWork)
 	Show("Timer Expired");
 	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }
+
+TEST_F(BasicTimerTestFixture, InitTimerTest)
+{
+	boost::asio::steady_timer timer(ioc);
+	timer.expires_after(std::chrono::milliseconds(0));	//이부분이 없어도 같은 효과를 낸다.
+	timer.async_wait([](boost::system::error_code ec)
+	{
+		if(ec.failed())
+			std::cout << ec.message() << std::endl;
+		std::cout << "Timer Finished" << std::endl;
+	});
+	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+}
