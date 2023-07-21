@@ -1,92 +1,133 @@
 #include <gtest/gtest.h>
 #include <thread>
+#include <random>
 #include "TimerPool.hpp"
 
 using mylib::threads::TimerPool;
 
-class BasicTimerTestFixture : public ::testing::Test
+class stopwatch
 {
-	protected:
-		void SetUp() override
+	private:
+		std::chrono::system_clock::time_point start;
+		std::mutex mtx;
+		std::condition_variable cv;
+		bool isRunning;
+	
+	public:
+		stopwatch() : isRunning(true)
 		{
-			for(int i = 0;i<thread_count;i++)
-			{
-				boost::asio::post(tp, [&]()
-				{
-					while(isRunning)
-					{
-						if(ioc.stopped())
-							ioc.restart();
-						ioc.run();
-
-						if(isRunning)
-						{
-							std::string result = (ioc.stopped()?"true":"false");
-							Show("ioc.run() out. stopped : " + result);
-							std::this_thread::sleep_for(std::chrono::milliseconds(100));
-						}
-					}
-				});
-			}
+			start = std::chrono::system_clock::now();
 		}
 
-		void TearDown() override
+		~stopwatch()
+		{
+			Close();
+		}
+
+		int Lap()
+		{
+			auto end = std::chrono::system_clock::now();
+			auto duration = end - start;
+			return duration.count() / 1000000;	//nano -> ms
+		}
+
+		void Close()
 		{
 			isRunning = false;
-			work_guard.reset();
-			ioc.stop();
-			tp.join();
+			cv.notify_all();
 		}
 
-	public:
-		BasicTimerTestFixture() : thread_count(10), ioc(thread_count), work_guard(boost::asio::make_work_guard(ioc)), tp(thread_count), isRunning(true) {}
-		int thread_count;
-		boost::asio::io_context ioc;
-		boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard;
-		boost::asio::thread_pool tp;
-		bool isRunning;
-		std::mutex mtx;
-
-		void Show(std::string str)
+		void Wait(std::chrono::system_clock::duration timeout)
 		{
-			std::unique_lock<std::mutex> lk(mtx);
-			std::cout << str << std::endl;
+			std::unique_lock lk(mtx);
+			cv.wait_for(lk, timeout, [&](){return !isRunning; });
 		}
 };
 
-TEST_F(BasicTimerTestFixture, IOContextTestWithoutWork)
+TEST(TimerPoolTest, BasicTest)
 {
-	std::this_thread::sleep_for(std::chrono::milliseconds(500));
-}
-
-TEST_F(BasicTimerTestFixture, IOContextTestWithWork)
-{
-	boost::asio::steady_timer timer(ioc);
-	timer.expires_after(std::chrono::milliseconds(500));
-	bool isDone = false;
-	timer.async_wait([&isDone](boost::system::error_code ec)
+	TimerPool pool(1, nullptr);
+	auto timer = pool.GetTimer();
+	stopwatch watch;
+	timer->expires_after(std::chrono::milliseconds(100));
+	timer->async_wait([&](boost::system::error_code ec)
 	{
-		isDone = true;
+		ASSERT_EQ(std::abs(100 - watch.Lap()), 0);
+		watch.Close();
 	});
-	//Show("Work Guard Free");
-	//work_guard.reset();	//여기서 work_guard를 해제하면 일을 잡은 thread만 대기하고 나머진 죄다 return한다.
-	while(!isDone)
-	{
-		//std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
-	Show("Timer Expired");
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+	watch.Wait(std::chrono::milliseconds(500));
+	pool.ReleaseTimer(timer);
 }
 
-TEST_F(BasicTimerTestFixture, InitTimerTest)
+void RepeatHandle(std::shared_ptr<boost::asio::steady_timer> timer, stopwatch *watch, int count)
 {
-	boost::asio::steady_timer timer(ioc);
-	timer.expires_after(std::chrono::milliseconds(0));	//이부분이 없어도 같은 효과를 낸다.
-	timer.async_wait([](boost::system::error_code ec)
+	if(timer == nullptr)
+		return;
+	timer->async_wait([timer, watch, count](boost::system::error_code ec)
 	{
 		if(ec.failed())
-			std::cout << ec.message() << std::endl;
-		std::cout << "Timer Finished" << std::endl;
+			return;
+		ASSERT_EQ(std::abs((10 - count)*100 - watch->Lap()), 0) << count;
+		if(count > 0)
+		{
+			timer->expires_after(std::chrono::milliseconds(100));
+			RepeatHandle(timer, watch, count - 1);
+		}
+		else
+			watch->Close();
 	});
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+}
+
+TEST(TimerPoolTest, RepeatTest)
+{
+	TimerPool pool(1, nullptr);
+	auto timer = pool.GetTimer();
+	stopwatch watch;
+	RepeatHandle(timer, &watch, 10);
+	watch.Wait(std::chrono::milliseconds(1000));
+	pool.ReleaseTimer(timer);
+}
+
+TEST(TimerPoolTest, SizeTest)
+{
+	TimerPool pool(1, nullptr);
+	std::random_device rd;
+	std::mt19937_64 gen(rd());
+	std::uniform_int_distribution<> dist(100, 500);
+
+	for(int i = 0;i<100;i++)
+	{
+		auto timer = pool.GetTimer();
+
+		timer->expires_after(std::chrono::milliseconds(dist(gen)));
+		timer->async_wait([&pool, timer](boost::system::error_code error_code)
+		{
+			pool.ReleaseTimer(timer);
+		});
+	}
+	EXPECT_EQ(pool.Size(), 100);
+	while(pool.Size() > 0)
+	{}
+}
+
+TEST(TimerPoolTest, CorpseTest)
+{
+	TimerPool pool(1, nullptr);
+	auto timer = pool.GetTimer();
+	timer->expires_after(std::chrono::milliseconds(100));
+	timer->async_wait([&](boost::system::error_code ec){
+		ASSERT_TRUE(ec.failed());
+	});
+	ASSERT_TRUE(pool.is_open());
+	ASSERT_EQ(pool.Size(), 1);
+	pool.Stop();
+	ASSERT_FALSE(pool.is_open());
+	ASSERT_EQ(pool.Size(), 0);
+	ASSERT_EQ(pool.GetTimer(), nullptr);
+
+	//Released Timer. 해당 타이머는 ioc가 멈췄기 때문에 동작하지 않는다.
+	timer->expires_after(std::chrono::milliseconds(100));
+	timer->async_wait([&](boost::system::error_code ec){
+		ASSERT_FALSE(ec.failed());
+	});
 }

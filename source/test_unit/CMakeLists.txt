@@ -14,12 +14,12 @@ SET ( TESTS
 	PacketProcessor_Test
 	StackTraceExcept_Test
 	Socket_Test
-	BoostTimer_Test
 	Redis_Test
 	RPC_Test
 	TimerPool_Test
 	MatchMaker_Test
 	Game_Test
+	ThreadExceptHandler_Test
 )
 
 FIND_PACKAGE ( hiredis REQUIRED )
@@ -43,11 +43,11 @@ TARGET_LINK_LIBRARIES ( Hasher_Test PRIVATE Hasher )
 TARGET_LINK_LIBRARIES ( PacketProcessor_Test PRIVATE PacketProcessor )
 TARGET_LINK_LIBRARIES ( StackTraceExcept_Test PRIVATE StackTraceExcept )
 TARGET_LINK_LIBRARIES ( Socket_Test PRIVATE MyTCPClient MyTCPServer MyTCPTLSClient MyTCPTLSServer MyWebsocketClient MyWebsocketServer MyWebsocketTLSClient MyWebsocketTLSServer pthread )
-TARGET_LINK_LIBRARIES ( BoostTimer_Test PRIVATE pthread )
 TARGET_LINK_LIBRARIES ( Redis_Test PRIVATE MyRedis )
 TARGET_LINK_LIBRARIES ( RPC_Test PRIVATE BattleServiceClient MatchServiceServer ManagerServiceClient ManagerServiceServer )
 TARGET_LINK_LIBRARIES ( TimerPool_Test PRIVATE TimerPool )
 TARGET_LINK_LIBRARIES ( MatchMaker_Test PRIVATE MyMatchMaker )
 TARGET_LINK_LIBRARIES ( Game_Test PRIVATE MyGame )
+TARGET_LINK_LIBRARIES ( ThreadExceptHandler_Test PRIVATE ThreadExceptHandler pthread)
 
 UNSET ( TESTS )
