@@ -5,7 +5,7 @@ const std::string MyMatch::self_keyword = "match";
 MyMatch::MyMatch() : 
 	rematch_delay(ConfigParser::GetInt("Match_Delay", 1000)),
 	matchmaker(ConfigParser::GetDouble("Match_Interpolate", 0.1)),
-	MyServer(ConfigParser::GetInt("Match_ClientPort", 54323))
+	MyServer(ConfigParser::GetInt("Client_Port", 54321))
 {
 	ServiceBuilder.RegisterService(&MatchService);
 }
@@ -16,14 +16,12 @@ MyMatch::~MyMatch()
 
 void MyMatch::Open()
 {
-	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
 	t_matchmaker = std::thread(std::bind(&MyMatch::MatchMake, this));
 	Logger::log("Match Server Start", Logger::LogType::info);
 }
 
 void MyMatch::Close()
 {
-	redis.Close();
 	matchmaker_cv.notify_all();	//isRunning은 MyServer::Stop()에서 false로 변경되며, MyMatch::Close()보다 먼저 수행됨.
 	if(t_matchmaker.joinable())
 		t_matchmaker.join();

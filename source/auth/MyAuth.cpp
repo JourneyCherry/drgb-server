@@ -1,7 +1,7 @@
 #include "MyAuth.hpp"
 
 MyAuth::MyAuth() : 
-	MyServer(ConfigParser::GetInt("Auth_ClientPort", 54322))
+	MyServer(ConfigParser::GetInt("Client_Port", 54321))
 {
 }
 

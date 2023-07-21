@@ -45,11 +45,11 @@ MyBattle::MyBattle() :
 	self_keyword("battle" + std::to_string(machine_id)),
 	keyword_match("match"),
 	BattleService(ConfigParser::GetString("Match_Addr", "localhost"), ConfigParser::GetInt("Service_Port", 52431), machine_id, this),
-	gamepool(1, this),
+	gamepool(ConfigParser::GetInt("GameThread", 2), this),
 	Round_Time(ConfigParser::GetInt("Round_Time", 2000)),
 	Dis_Time(ConfigParser::GetInt("Disconnect_Time", 15000)),
 	StartAnim_Time(std::chrono::milliseconds(ConfigParser::GetInt("StartAnimation_Time", 2000)) + Round_Time),
-	MyServer(ConfigParser::GetInt("Battle_ClientPort", 54324))
+	MyServer(ConfigParser::GetInt("Client_Port", 54321))
 {
 	BattleService.SetCallback(std::bind(&MyBattle::MatchTransfer, this, std::placeholders::_1, std::placeholders::_2));
 }
@@ -60,7 +60,6 @@ MyBattle::~MyBattle()
 
 void MyBattle::Open()
 {
-	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
 	Logger::log("Battle Server Start as " + self_keyword, Logger::LogType::info);
 }
 
@@ -68,7 +67,6 @@ void MyBattle::Close()
 {
 	gamepool.Stop();
 	BattleService.Close();
-	redis.Close();
 	Logger::log("Battle Server Stop", Logger::LogType::info);
 }
 
@@ -261,9 +259,7 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 		if(now_allin)	//정상 플레이
 		{
 			bool isGameOver = game->process();
-			
-			//if(!isGameOver)	//TODO : 게임오버가 됬어도 라운드 결과 보내주는지 확인 필요.
-				SendRoundResult(GAME_ROUND_RESULT, gameinfo);
+			SendRoundResult(GAME_ROUND_RESULT, gameinfo);
 
 			auto achievement = game->GetAchievement();
 			while(achievement)

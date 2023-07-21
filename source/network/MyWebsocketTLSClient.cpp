@@ -98,10 +98,10 @@ void MyWebsocketTLSClient::Connect_Handle(std::function<void(std::shared_ptr<MyC
 
 		/*
 		//sslctx에 인증서, 비밀키 로드
-		sslctx.use_certificate_file(ConfigParser::GetString("CERT_FILE"), boost::asio::ssl::context::pem, ec);
+		sslctx.use_certificate_file(ConfigParser::GetString("CERT_FILE", "/etc/ssl/drgb.crt"), boost::asio::ssl::context::pem, ec);
 		if(ec)
 			return {ec, __STACKINFO__};
-		sslctx.use_private_key_file(ConfigParser::GetString("KEY_FILE"), boost::asio::ssl::context::pem, ec);
+		sslctx.use_private_key_file(ConfigParser::GetString("KEY_FILE", "/etc/ssl/drgb.key"), boost::asio::ssl::context::pem, ec);
 		if(ec)
 			return {ec, __STACKINFO__};
 		*/

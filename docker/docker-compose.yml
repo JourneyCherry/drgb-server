@@ -29,7 +29,7 @@ services:
     privileged: true
     ports:
       - "52432:52431" #server-server port include mgr
-      - "54322:54322" #client port
+      - "54322:54321" #client port
     cpus: 1         #no effect on wsl2
     mem_limit: 512m #no effect on wsl2
   match:
@@ -48,7 +48,7 @@ services:
     privileged: true
     ports:
       - "52433:52431" #server-server port include mgr
-      - "54323:54323" #client port
+      - "54323:54321" #client port
     cpus: 1         #no effect on wsl2
     mem_limit: 512m #no effect on wsl2
   battle1:
@@ -68,7 +68,7 @@ services:
     privileged: true
     ports:
       - "52434:52431" #server-server port include mgr
-      - "54324:54324" #client port
+      - "54324:54321" #client port
     cpus: 1         #no effect on wsl2
     mem_limit: 512m #no effect on wsl2
   db:

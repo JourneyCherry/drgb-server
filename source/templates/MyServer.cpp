@@ -1,7 +1,7 @@
 #include "MyServer.hpp"
 
 MyServer::MyServer(int port)
- : web_server(port, ConfigParser::GetInt("ClientThread", std::thread::hardware_concurrency())),
+ : web_server(port, ConfigParser::GetInt("ClientThread", 2)),
 	isRunning(false),
 	redis(SESSION_TIMEOUT),
 	dbpool(
@@ -10,7 +10,7 @@ MyServer::MyServer(int port)
 		ConfigParser::GetString("DBName", "drgb_db"),
 		ConfigParser::GetString("DBUser", "drgb_user"),
 		ConfigParser::GetString("DBPwd", "drgbpassword"),
-		ConfigParser::GetInt("DBPoolSize", 1)
+		ConfigParser::GetInt("DBPoolSize", 10)
 	),
 	MgrService(
 		std::bind(&MyServer::GetUsage, this),
@@ -42,7 +42,7 @@ void MyServer::Start()
 	ServiceServer = ServiceBuilder.BuildAndStart();
 	ServiceThread = std::thread([this]()
 	{
-		this->ServiceServer->Wait();
+		ServiceServer->Wait();
 	});
 	
 	auto accept_handle = [this](std::shared_ptr<MyClientSocket> socket, ErrorCode ec) -> void
@@ -53,7 +53,7 @@ void MyServer::Start()
 		socket->KeyExchange(std::bind(&MyServer::AcceptProcess, this, std::placeholders::_1, std::placeholders::_2));
 	};
 
-	redis.Connect(ConfigParser::GetString("SessionAddr"), ConfigParser::GetInt("SessionPort", 6379));
+	redis.Connect(ConfigParser::GetString("SessionAddr", "localhost"), ConfigParser::GetInt("SessionPort", 6379));
 	web_server.StartAccept(accept_handle);
 	Open();
 }
