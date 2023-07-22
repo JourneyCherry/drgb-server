@@ -6,6 +6,7 @@
 
 //Inquiry among Servers
 static constexpr byte INQ_QUIT = 0;				//프로그램 종료
+static constexpr byte INQ_EXIT = 1;				//프로그램 종료
 static constexpr byte INQ_ACCOUNT_CHECK = 131;	//계정 접속/만료 여부 확인.
 static constexpr byte INQ_USAGE = 134;			//사용량(서버 내 자원) 확인.
 static constexpr byte INQ_CLIENTUSAGE = 135;	//사용량(클라이언트 접속량) 확인. 동시접속자 수와 동일
@@ -19,7 +20,8 @@ std::map<std::string, byte> cmdtable = {
 	{"usage", INQ_USAGE},
 	{"account", INQ_ACCOUNT_CHECK},
 	{"help", ERR_DB_FAILED},
-	{"quit", INQ_QUIT}
+	{"quit", INQ_QUIT},
+	{"exit", INQ_EXIT}
 };
 MgrOpt opt;
 std::queue<std::string> commands;
@@ -129,7 +131,8 @@ void Process(ManagerServiceClient* client, std::queue<std::string> &commands)
 			std::cout << "[Mgr] : ";
 			ShowCommands();
 			break;
-		case 0:
+		case INQ_QUIT:
+		case INQ_EXIT:
 			opt.shell_mode = false;
 			break;
 		default:

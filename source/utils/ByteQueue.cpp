@@ -142,7 +142,7 @@ std::string ByteQueue::popstr(size_t len, bool peek)
 	for(int i = 0;i<len;i++)
 		bstream.push_back(bytes[i + ptr]);
 
-	std::string result((const char*)bstream.data(), bstream.size());	//TODO : UTF-8 encoded Byte Array를 string으로 변환과정 필요.
+	std::string result((const char*)bstream.data(), bstream.size());
 	
 	if(!peek)
 		ptr += len;

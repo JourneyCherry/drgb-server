@@ -3,6 +3,7 @@
 #include <future>
 #include <vector>
 #include <utility>
+#include <chrono>
 #include <random>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/strand.hpp>
@@ -84,6 +85,15 @@ class TestClient
 		std::string last_error;
 		void RecordError(std::string, std::string, int, std::string);
 
+		std::mutex delay_mtx;
+		double delay_auth;
+		double delay_match;
+		double delay_battle;
+		double delay_reserved;
+		std::chrono::system_clock::time_point delay_start;
+		void StartRecord(double=0.0);
+		void GetDelay(int, double=0.0);
+
 	public:
 		TestClient(int);
 		~TestClient() = default;
@@ -99,6 +109,7 @@ class TestClient
 		bool isConnected();
 		std::string GetLastError() const;
 		void ClearLastError();
+		std::tuple<double, double, double> GetDelays() const;
 	
 	protected:
 		void LoginProcess();

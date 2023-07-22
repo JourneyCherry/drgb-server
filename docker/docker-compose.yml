@@ -30,8 +30,6 @@ services:
     ports:
       - "52432:52431" #server-server port include mgr
       - "54322:54321" #client port
-    cpus: 1         #no effect on wsl2
-    mem_limit: 512m #no effect on wsl2
   match:
     container_name: match
     image: drgb-match
@@ -49,11 +47,9 @@ services:
     ports:
       - "52433:52431" #server-server port include mgr
       - "54323:54321" #client port
-    cpus: 1         #no effect on wsl2
-    mem_limit: 512m #no effect on wsl2
   battle1:
     container_name: battle1
-    image: drgb-battle
+    image: drgb-battle1
     depends_on:
       - db
       - session
@@ -69,8 +65,26 @@ services:
     ports:
       - "52434:52431" #server-server port include mgr
       - "54324:54321" #client port
-    cpus: 1         #no effect on wsl2
-    mem_limit: 512m #no effect on wsl2
+  #battle2:
+  #  container_name: battle2
+  #  image: drgb-battle2  #image가 battle1과 이름이 겹치면 나중에 생성된 service의 이미지로 따라간다. 즉, MACHINE_ID가 같아진다.
+  #  depends_on:
+  #    - db
+  #    - session
+  #  build:
+  #    context: ../
+  #    dockerfile: ./docker/Dockerfile
+  #    args:
+  #      TARGET: "battle"
+  #      MACHINE_ID: 2
+  #  tty: true
+  #  stdin_open: true
+  #  privileged: true
+  #  ports:
+  #    - "52435:52431" #server-server port include mgr
+  #    - "54325:54321" #client port
+  #  cpus: 1         #no effect on wsl2
+  #  mem_limit: 512m #no effect on wsl2
   db:
     container_name: db
     image: postgres

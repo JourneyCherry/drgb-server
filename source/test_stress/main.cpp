@@ -2,11 +2,93 @@
 #include <iostream>
 #include <boost/asio/thread_pool.hpp>
 #include <thread>
+#include <map>
 #include "TestOpt.hpp"
 #include "TestClient.hpp"
 #include "ThreadExceptHandler.hpp"
 
+static constexpr byte INQ_QUIT = 0;
+static constexpr byte INQ_INSERT_CLIENT = 1;
+static constexpr byte INQ_SHOW_CLIENT = 2;
+static constexpr byte INQ_BRIEF_CLIENTS = 3;
+static constexpr byte INQ_ERROR = 4;
+static constexpr byte INQ_RESTART = 5;
+static constexpr byte INQ_DELAY = 6;
+static constexpr byte INQ_SCORE = 7;
+static constexpr byte INQ_HELP = 8;
+static constexpr byte INQ_EXIT = 9;
+
 using mylib::threads::ThreadExceptHandler;
+
+std::map<std::string, byte> cmdtable = {
+	{"insert", INQ_INSERT_CLIENT},
+	{"show", INQ_SHOW_CLIENT},
+	{"brief", INQ_BRIEF_CLIENTS},
+	{"error", INQ_ERROR},
+	{"restart", INQ_RESTART},
+	{"delay", INQ_DELAY},
+	{"help", INQ_HELP},
+	{"quit", INQ_QUIT},
+	{"exit", INQ_EXIT}
+};
+
+void ShowCommands();
+void ShowHowToUse(std::string);
+
+size_t str_cmp(const std::string exp, const std::string ctr)
+{
+	size_t length = std::min(exp.size(), ctr.size());
+	size_t fitCount = 0;
+	for(size_t i = 0;i < length; i++)
+	{
+		if(exp[i] != ctr[i])
+			break;
+		fitCount++;
+	}
+	return fitCount;
+}
+
+byte GetRequest(std::string command)
+{
+	auto header = cmdtable.find(command);
+	if(header == cmdtable.end())
+	{
+		std::map<byte, size_t> compare;
+		for(auto &pair : cmdtable)
+			compare.insert({pair.second, str_cmp(command, pair.first)});
+		static const auto compare_cmp = [](std::pair<byte, size_t> lhs, std::pair<byte, size_t> rhs) -> bool
+		{ return lhs.second < rhs.second; };
+		auto answer = std::max_element(compare.begin(), compare.end(), compare_cmp);
+		size_t count = 0;
+		for(auto &pair : compare)
+		{
+			if(pair.second == answer->second)
+				count++;
+		}
+		if(count > 1)
+			return ERR_PROTOCOL_VIOLATION;
+		return answer->first;
+	}
+	return header->second;
+}
+
+std::queue<std::string> ParseLine(std::string line)
+{
+	static std::string trimmer = " \t\n\r\f\v";
+	std::queue<std::string> result;
+
+	for(int split_pos = line.find_first_of(trimmer);split_pos != std::string::npos;split_pos = line.find_first_of(trimmer))
+	{
+		std::string split = line.substr(0, split_pos);
+		if(split.length() > 0)
+			result.push(split);
+		line.erase(0, split_pos + 1);
+	}
+	if(line.length() > 0)
+		result.push(line);
+
+	return result;
+}
 
 class ExceptQueue : public ThreadExceptHandler
 {
@@ -51,9 +133,10 @@ int main(int argc, char *argv[])
 	{
 		opt.GetArgs(argc, argv);
 		
-		TestClient::AddAddr(opt.addr, 54322);
-		TestClient::AddAddr(opt.addr, 54323);
-		TestClient::AddAddr(opt.addr, 54324);
+		TestClient::AddAddr(opt.addr, 54322);	//auth
+		TestClient::AddAddr(opt.addr, 54323);	//match
+		TestClient::AddAddr(opt.addr, 54324);	//battle1
+		//TestClient::AddAddr(opt.addr, 54325);	//battle2
 	}
 	catch(const std::exception &e)
 	{
@@ -97,33 +180,48 @@ int main(int argc, char *argv[])
 		clients.push_back(client);
 	}
 
-	std::string input;
-	int key_input = 0;
-	int recent_success = 'b';
-	while(key_input >= 0 && !kill_signal)
+	std::queue<std::string> command;
+	std::queue<std::string> recent_command;
+	while(!kill_signal)
 	{
+		std::string input;
 		std::getline(std::cin, input);
-		if(input.length() <= 0)
-			key_input = recent_success;
-		else
-			key_input = input[0];	//TODO : manager처럼 arg를 받아서 i에 넣을 클라이언트 수도 받을 수 있게 변경 필요
-		if(key_input <= 0)
-			key_input = 0;
-		switch(key_input)
+
+		command = ParseLine(input);
+		if(command.empty())
+			command = recent_command;
+		recent_command = command;
+		
+		std::string cmdstr = command.front();
+		command.pop();
+		byte request = GetRequest(cmdstr);
+		switch(request)
 		{
-			case 'i':
-			case 'I':
-				recent_success = 'i';
+			case INQ_INSERT_CLIENT:
 				{
-					auto client = std::make_shared<TestClient>(id++);
-					client->DoLogin();
-					clients.push_back(client);
+					int count = 1;
+					if(!command.empty())
+					{
+						try
+						{
+							count = std::stoi(command.front());
+							command.pop();
+						}
+						catch(...)
+						{
+							count = 1;
+						}
+					}
+					for(int i = 0;i<count;i++)
+					{
+						auto client = std::make_shared<TestClient>(id++);
+						client->DoLogin();
+						clients.push_back(client);
+					}
+					g_Show("Insert " + std::to_string(count) + " Clients.");
 				}
 				break;
-			case 's':
-			case 'S':
-				recent_success = 's';
-				//Show all client's state
+			case INQ_SHOW_CLIENT:	//Show all client's state
 				for(auto &client : clients)
 				{
 					std::string txt_id = std::to_string(client->GetId());
@@ -140,10 +238,7 @@ int main(int argc, char *argv[])
 					g_Show(txt_id + " : " + state + connected);
 				}
 				break;
-			case 'e':
-			case 'E':
-				recent_success = 'e';
-				//Show All client's last error
+			case INQ_ERROR:	//Show All client's last error
 				{
 					unsigned int count = 0;
 					for(auto &client : clients)
@@ -160,10 +255,7 @@ int main(int argc, char *argv[])
 						g_Show("There is no Error");
 				}
 				break;
-			case 'b':
-			case 'B':
-				recent_success = 'b';
-				//Brief all client's state
+			case INQ_BRIEF_CLIENTS:	//Brief all client's state
 				{
 					std::array<int, 5> counters = {0, 0, 0, 0, 0};
 					std::array<int, 5> discounters = {0, 0, 0, 0, 0};
@@ -180,22 +272,82 @@ int main(int argc, char *argv[])
 					g_Show("Battle : " + std::to_string(counters[4]) + " (" + std::to_string(discounters[4]) + ")");
 				}
 				break;
-			case 'r':
-			case 'R':
-				recent_success = 'r';
+			case INQ_RESTART:	//Restart Clients
 				for(auto &client : clients)
 				{
 					if(client->GetState() != 0 && !client->isConnected())
 						client->DoRestart();
 				}
 				break;
-			case 'q':
-			case 'Q':
-				recent_success = 'q';
-				key_input = -1;
+			case INQ_DELAY:
+				{
+					int mode = 0;
+					if(!command.empty())
+					{
+						if(str_cmp(command.front(), "max") > 0)
+							mode = 1;	//max mode
+					}
+					double delay_auth = 0.0;
+					double delay_match = 0.0;
+					double delay_battle = 0.0;
+
+					std::function<void(double, double, double)> calcfunc;
+					switch(mode)
+					{
+						case 0:
+							calcfunc = [&](double auth, double match, double battle)
+							{
+								delay_auth += auth;
+								delay_match += match;
+								delay_battle += battle;
+							};
+							break;
+						case 1:
+							calcfunc = [&](double auth, double match, double battle)
+							{
+								delay_auth = std::max(delay_auth, auth);
+								delay_match = std::max(delay_match, match);
+								delay_battle = std::max(delay_battle, battle);
+							};
+							break;
+					}
+					for(auto &client : clients)
+					{
+						auto [auth, match, battle] = client->GetDelays();
+						calcfunc(auth, match, battle);
+					}
+
+					std::string mode_str;
+					if(clients.size() > 0)
+					{
+						switch(mode)
+						{
+							case 0:
+								mode_str = "Average";
+								delay_auth /= clients.size();
+								delay_match /= clients.size();
+								delay_battle /= clients.size();
+								break;
+							case 1:
+								mode_str = "Max";
+								break;
+						}
+					}
+					g_Show("Delay Result : " + mode_str);
+					g_Show("Auth Delay : " + std::to_string(delay_auth) + "sec");
+					g_Show("Match Delay : " + std::to_string(delay_match) + "sec");
+					g_Show("Battle Delay : " + std::to_string(delay_battle) + "sec");
+				}
+				break;
+			case INQ_HELP:
+				ShowCommands();
+				break;
+			case INQ_QUIT:
+			case INQ_EXIT:
+				kill_signal = true;
 				break;
 			default:
-				g_Show("Unknown Input : " + std::to_string(key_input));
+				g_Show("Unknown Input : " + cmdstr);
 				break;
 		}
 	}
@@ -214,4 +366,17 @@ int main(int argc, char *argv[])
 	clients.clear();
 
 	return 0;
+}
+
+void ShowCommands()
+{
+	std::cout << "<Commands>" << std::endl;
+	std::cout << "	insert <num>	Insert a New Client." << std::endl;
+	std::cout << "	show			Show Every Client with its status." << std::endl;
+	std::cout << "	brief			Show brief clients' status." << std::endl;
+	std::cout << "	error			Show Recent Error Message for every error-occured clients." << std::endl;
+	std::cout << "	restart			Restart all stopped clients." << std::endl;
+	std::cout << "	delay			Show Average Delay for each server." << std::endl;
+	std::cout << "	help			Show Command Instructions." << std::endl;
+	std::cout << "	quit			Exit Program" << std::endl;
 }

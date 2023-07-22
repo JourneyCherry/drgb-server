@@ -32,11 +32,44 @@ int TestClient::GetRandomAction()
 	return (1 << dis(gen));
 }
 
+void TestClient::StartRecord(double reserved)
+{
+	std::unique_lock lk(delay_mtx);
+	delay_start = std::chrono::system_clock::now();
+	delay_reserved = reserved;
+}
+
+void TestClient::GetDelay(int pos, double reserved)
+{
+	std::unique_lock lk(delay_mtx);
+	auto delay_end = std::chrono::system_clock::now();
+	auto duration = delay_end - delay_start;
+	delay_start = delay_end;
+	double delay = ((double)(duration.count()) / (double)(std::nano::den));
+	delay = std::max(0.0, delay - delay_reserved);	//예정된 delay보다 적게 나오면 즉시 온것과 동일.
+	delay_reserved = reserved;
+	switch(pos)
+	{
+		case STATE_LOGIN:
+			delay_auth = delay;
+			break;
+		case STATE_MATCH:
+			delay_match = delay;
+			break;
+		case STATE_BATTLE:
+			delay_battle = delay;
+			break;
+	}
+}
+
 TestClient::TestClient(int num)
  : number(num), 
  id("testbot" + std::to_string(num)), pwd("testpwd" + std::to_string(num)),
  battle_seed(-1),
- now_state(STATE_CLOSED)
+ now_state(STATE_CLOSED),
+ last_error(""),
+ delay_auth(0.0), delay_match(0.0), delay_battle(0.0), delay_reserved(0.0),
+ delay_start(std::chrono::system_clock::now())
 {
 }
 
@@ -207,6 +240,7 @@ void TestClient::LoginProcess()
 				socket->Close();
 			});
 			AuthProcess(ke_socket);
+			StartRecord();
 			auto send_ec = ke_socket->Send(loginReq);
 			if(!send_ec)
 			{
@@ -245,6 +279,7 @@ void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<My
 			}
 
 			handler(ke_socket);
+			StartRecord();
 			auto send_ec = ke_socket->Send(ByteQueue::Create<Hash_t>(cookie));
 			if(!send_ec)
 			{
@@ -286,6 +321,7 @@ void TestClient::AuthProcess(std::shared_ptr<MyClientSocket> target_socket)
 			case SUCCESS:
 			case ERR_EXIST_ACCOUNT_MATCH:
 			case ERR_EXIST_ACCOUNT_BATTLE:
+				GetDelay(now_state);
 				cookie = packet.pop<Hash_t>();
 				if(header == ERR_EXIST_ACCOUNT_BATTLE)
 					battle_seed = packet.pop<Seed_t>();
@@ -299,6 +335,7 @@ void TestClient::AuthProcess(std::shared_ptr<MyClientSocket> target_socket)
 				return;
 			case ERR_NO_MATCH_ACCOUNT:
 				{	//Try Register
+					GetDelay(now_state);
 					ByteQueue regReq = ByteQueue::Create<byte>(REQ_REGISTER);
 					regReq.push<Hash_t>(Hasher::sha256((const unsigned char*)(this->pwd.c_str()), this->pwd.length()));
 					regReq.push<std::string>(id);
@@ -307,6 +344,7 @@ void TestClient::AuthProcess(std::shared_ptr<MyClientSocket> target_socket)
 						RecordError(__STACKINFO__, "Timeout at Login");
 						client->Close();
 					});
+					StartRecord();
 					auto send_ec = client->Send(regReq);
 					if(!send_ec)
 					{
@@ -318,6 +356,7 @@ void TestClient::AuthProcess(std::shared_ptr<MyClientSocket> target_socket)
 				}
 				break;
 			default:
+				GetDelay(now_state);
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
 				RecordError(__STACKINFO__, "Failed from Server " + std::to_string(header));
 				DoRestart();
@@ -353,12 +392,14 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 			case ANS_HEARTBEAT:		//연결 확인
 				break;
 			case GAME_PLAYER_INFO:
+				GetDelay(now_state);
 				nickname = packet.pop<Achievement_ID_t>();
 				win = packet.pop<int>();
 				draw = packet.pop<int>();
 				loose = packet.pop<int>();
 
 				{
+					StartRecord(1.0);	//Match_Delay
 					auto send_ec = client->Send(ByteQueue::Create<byte>(REQ_STARTMATCH));
 					if(!send_ec)
 					{
@@ -370,6 +411,7 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 				}
 				break;
 			case ANS_MATCHMADE:
+				GetDelay(now_state);
 				battle_seed = packet.pop<int>();
 				DoBattle();
 				return;
@@ -378,6 +420,7 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 			case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
 			case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
 			default:
+				GetDelay(now_state);
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
 				RecordError(__STACKINFO__, "Failed from Server " + std::to_string(header));
 				DoRestart();
@@ -413,6 +456,7 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 			case ANS_HEARTBEAT:		//연결 확인
 				break;
 			case GAME_PLAYER_INFO_NAME:
+				GetDelay(now_state, 15.0);	//Dis_Time
 				//TODO : Check if information is correct
 				nickname = packet.pop<Achievement_ID_t>();
 				win = packet.pop<int>();
@@ -425,9 +469,11 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 				enemy_loose = packet.pop<int>();
 				break;
 			case GAME_PLAYER_DISCONNEDTED:	//상대 연결 끊어짐
+				GetDelay(now_state, 15.0);	//Dis_Time
 				break;
 			case GAME_PLAYER_ALL_CONNECTED:	//상대 접속
 			case GAME_ROUND_RESULT:
+				GetDelay(now_state, (header==GAME_ROUND_RESULT)?2.0:4.0);	//All Connected면 StartAnim_Time 포함.
 				round = packet.pop<int>();
 				if(round >= 0)
 				{
@@ -457,6 +503,7 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 			case GAME_FINISHED_DRAW:
 			case GAME_FINISHED_LOOSE:
 			case GAME_CRASHED:
+				GetDelay(now_state);
 				if(header == GAME_CRASHED)
 					RecordError(__STACKINFO__, "Game Crashed");
 				DoMatch();
@@ -470,6 +517,7 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 			case ERR_NO_MATCH_ACCOUNT:		//cookie 유실
 			case ERR_DUPLICATED_ACCESS:		//타 host에서 접속
 			default:
+				GetDelay(now_state);
 				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(header, __STACKINFO__)));
 				RecordError(__STACKINFO__, "Failed from Server " + std::to_string(header));
 				DoRestart();
@@ -510,6 +558,11 @@ void TestClient::RecordError(std::string file, std::string func, int line, std::
 std::string TestClient::GetLastError() const
 {
 	return last_error;
+}
+
+std::tuple<double, double, double> TestClient::GetDelays() const
+{
+	return {delay_auth, delay_match, delay_battle};
 }
 
 void TestClient::ClearLastError()

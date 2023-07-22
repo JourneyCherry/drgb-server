@@ -23,9 +23,7 @@ class MyGame
 		using ulock = std::unique_lock<std::mutex>;
 
 		std::mutex mtx;
-		std::string logtitlestr;
-
-		int state_level;
+		
 		int now_round;
 
 		static const std::map<int, int> required_energy;

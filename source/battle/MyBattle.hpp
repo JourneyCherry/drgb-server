@@ -19,7 +19,7 @@ class GameInfo
 		std::shared_ptr<MyGame> game;
 		std::shared_ptr<boost::asio::steady_timer> timer;
 		DeMap<Account_ID_t, int, std::weak_ptr<MyClientSocket>> session;
-		std::array<ByteQueue, 2> PlayerInfos;
+		std::array<ByteQueue, MyGame::MAX_PLAYER> PlayerInfos;
 		bool Previous_AllIn;
 		GameInfo(std::shared_ptr<MyGame> game_, std::shared_ptr<boost::asio::steady_timer> timer_) : game(game_), timer(timer_), Previous_AllIn(false) {}
 		bool isAllIn();
@@ -30,8 +30,6 @@ class GameInfo
 class MyBattle : public MyServer
 {
 	private:
-		static constexpr int MAX_GAME = MAX_CLIENTS / 2;	//std::floor는 C++23에서 constexpr이며, 이전엔 일반 함수이다.
-
 		std::chrono::milliseconds Round_Time;
 		std::chrono::milliseconds Dis_Time;	//디스 시간.
 		std::chrono::milliseconds StartAnim_Time;	//경기 시작/재개 시, 애니메이션 시간. Start Animation이 그려진 뒤, 자동으로 한 라운드를 진행하므로 사용자 입력을 기다리는 Round_Time이 추가되어야 한다.

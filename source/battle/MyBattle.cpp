@@ -332,7 +332,7 @@ void MyBattle::GameProcess(std::shared_ptr<boost::asio::steady_timer> timer, std
 			catch(const std::exception &e)
 			{
 				Logger::log("Error : " + std::string(e.what()), Logger::LogType::error);
-				for(int i = 0;i<2;i++)
+				for(int i = 0;i<MyGame::MAX_PLAYER;i++)
 					sockets[i]->Send(ByteQueue::Create<byte>(ERR_DB_FAILED));
 				std::rethrow_exception(std::current_exception());
 			}
@@ -398,7 +398,7 @@ void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 		return;
 	}
 
-	std::array<Account_ID_t, 2> ids({lpid, rpid});
+	std::array<Account_ID_t, MyGame::MAX_PLAYER> ids({lpid, rpid});
 	auto timer = gamepool.GetTimer();
 	if(timer)
 	{
@@ -406,7 +406,7 @@ void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 		auto rpresult = redis.GetInfoFromID(rpid);
 		if(lpresult && rpresult)
 		{
-			std::array<Hash_t, 2> cookies({lpresult->first, rpresult->first});
+			std::array<Hash_t, MyGame::MAX_PLAYER> cookies({lpresult->first, rpresult->first});
 			std::shared_ptr<MyGame> new_game = std::make_shared<MyGame>();
 
 			std::shared_ptr<GameInfo> gameinfo = std::make_shared<GameInfo>(new_game, timer);
@@ -456,14 +456,14 @@ void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 
 void MyBattle::SendRoundResult(const byte& msg, std::shared_ptr<GameInfo> gameinfo)
 {
-	std::array<ByteQueue, 2> results;
+	std::array<ByteQueue, MyGame::MAX_PLAYER> results;
 	ByteQueue header = ByteQueue::Create<byte>(msg);
 	int round = gameinfo->game->GetRound();
 	header.push<int>(round);
 
 	if(round >= 0)
 	{
-		for(int i = 0;i<2;i++)
+		for(int i = 0;i<MyGame::MAX_PLAYER;i++)
 		{
 			auto [action, health, energy] = gameinfo->game->GetPlayerInfo(i);
 			results[i].push<byte>(action);

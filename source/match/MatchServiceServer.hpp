@@ -23,9 +23,9 @@ using ServerService::MatchToBattle;
 
 class MatchServiceServer final : public MatchToBattle::Service
 {
-	public:
-		static constexpr int RESPONSE_TIME = 500;	//ms
 	private:
+		static constexpr int RESPONSE_TIME = 500;	//ms
+
 		Status SessionStream(ServerContext*, ServerReaderWriter<MatchTransfer, Usage>*) override;
 		DeMap<Seed_t, ServerReaderWriter<MatchTransfer, Usage>*, size_t> streams;
 

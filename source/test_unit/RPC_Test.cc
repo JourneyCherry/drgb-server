@@ -84,11 +84,12 @@ TEST_F(RPCTestFixture, DuplicateTest)
 	std::vector<std::shared_ptr<BattleServiceClient>> vec;
 	for(int i = 1;i<=5;i++)
 	{
-		auto client = std::make_shared<BattleServiceClient>("0.0.0.0", port, i, nullptr);
-		client->SetCallback([lp, rp](Account_ID_t l, Account_ID_t r)
+		auto client = std::make_shared<BattleServiceClient>("localhost", port, i, nullptr);
+		client->SetCallback([lp, rp, client](Account_ID_t l, Account_ID_t r)
 		{
 			EXPECT_EQ(l, lp);
 			EXPECT_EQ(r, rp);
+			client->SetUsage(1);
 		});
 		vec.push_back(client);
 	}
@@ -108,6 +109,10 @@ TEST_F(RPCTestFixture, DuplicateTest)
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));	//Wait for Connection
 	ASSERT_FALSE(dup.is_open());
 	ASSERT_EQ(match.GetUsage(), 5);
+
+	dup.Close();
+	for(auto &client : vec)
+		client->Close();
 }
 
 class ManagerTestFixture : public RPCTestFixture

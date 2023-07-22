@@ -9,7 +9,7 @@ const std::map<int, int> MyGame::required_energy =
 	{FIRE, 2}
 };
 
-MyGame::MyGame() : state_level(0), now_round(-1)
+MyGame::MyGame() : now_round(-1)
 {
 	for(int i = 0;i<MAX_PLAYER;i++)
 	{
