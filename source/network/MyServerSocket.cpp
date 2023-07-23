@@ -63,10 +63,10 @@ void MyServerSocket::Close()
 {
 	if(!is_open())
 		return;
-	work_guard.reset();
 	CloseSocket();
-	ioc.stop();
+	work_guard.reset();
 	threadpool.join();
+	ioc.stop();
 	//std::unique_lock<std::mutex> lk(mtx_client);
 	//clients.clear();
 }

@@ -38,15 +38,10 @@ void MyTCPTLSClient::GetRecv(size_t bytes_written)
 	recvbuffer.Recv(buffer.data(), bytes_written);
 }
 
-ErrorCode MyTCPTLSClient::DoSend(const byte* bytes, const size_t &len)
+void MyTCPTLSClient::DoSend(const byte* bytes, const size_t &len, std::function<void(boost::system::error_code, size_t)> handler)
 {
 	boost::asio::const_buffer send_buffer(bytes, len);
-
-	boost::system::error_code ec;
-	ws.write_some(send_buffer, ec);
-	return ErrorCode(ec);
-
-	//ws.async_write_some(send_buffer, std::bind(&MyTCPTLSClient::Send_Handle, this, std::placeholders::_1, std::placeholders::_2));
+	ws.async_write_some(send_buffer, handler);
 }
 
 void MyTCPTLSClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler, const boost::system::error_code& error_code)

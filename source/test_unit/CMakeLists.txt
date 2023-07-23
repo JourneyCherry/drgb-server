@@ -48,6 +48,6 @@ TARGET_LINK_LIBRARIES ( RPC_Test PRIVATE BattleServiceClient MatchServiceServer 
 TARGET_LINK_LIBRARIES ( TimerPool_Test PRIVATE TimerPool )
 TARGET_LINK_LIBRARIES ( MatchMaker_Test PRIVATE MyMatchMaker )
 TARGET_LINK_LIBRARIES ( Game_Test PRIVATE MyGame )
-TARGET_LINK_LIBRARIES ( ThreadExceptHandler_Test PRIVATE ThreadExceptHandler pthread)
+TARGET_LINK_LIBRARIES ( ThreadExceptHandler_Test PRIVATE ThreadExceptHandler pthread )
 
 UNSET ( TESTS )

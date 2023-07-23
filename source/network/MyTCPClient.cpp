@@ -22,9 +22,14 @@ MyTCPClient::MyTCPClient(boost::asio::ip::tcp::socket _socket) : socket(std::mov
 void MyTCPClient::Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> callback)
 {
 	auto self_ptr = shared_from_this();
-	boost::asio::post(socket.get_executor(), [this, self_ptr, callback]()
+	socket.async_wait(boost::asio::ip::tcp::socket::wait_read, [this, self_ptr, callback](boost::system::error_code error_code)
 	{
-		callback(self_ptr, ErrorCode(SUCCESS));
+		if(error_code.failed())
+		{
+			callback(self_ptr, ErrorCode(error_code));
+		}
+		else
+			callback(self_ptr, ErrorCode(SUCCESS));
 	});
 }
 
@@ -39,15 +44,10 @@ void MyTCPClient::GetRecv(size_t bytes_written)
 	recvbuffer.Recv(buffer.data(), bytes_written);
 }
 
-ErrorCode MyTCPClient::DoSend(const byte* bytes, const size_t &len)
+void MyTCPClient::DoSend(const byte* bytes, const size_t &len, std::function<void(boost::system::error_code, size_t)> handler)
 {
 	boost::asio::const_buffer send_buffer(bytes, len);
-	
-	boost::system::error_code ec;
-	socket.send(send_buffer, 0, ec);
-	return ErrorCode{ec};
-
-	//socket.async_send(send_buffer, std::bind(&MyTCPClient::Send_Handle, this, std::placeholders::_1, std::placeholders::_2));
+	socket.async_send(send_buffer, handler);
 }
 
 void MyTCPClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler, const boost::system::error_code& error_code)
@@ -78,10 +78,12 @@ void MyTCPClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientSock
 
 void MyTCPClient::DoClose()
 {
-	boost::system::error_code error_code;
-	socket.close(error_code);
-	if(cleanHandler != nullptr)
-		cleanHandler(shared_from_this());
+	socket.async_wait(boost::asio::ip::tcp::socket::wait_write, [this](boost::system::error_code error_code)
+	{
+		socket.close(error_code);
+		if(cleanHandler != nullptr)
+			cleanHandler(shared_from_this());
+	});
 }
 
 boost::asio::any_io_executor MyTCPClient::GetContext()

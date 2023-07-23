@@ -241,14 +241,7 @@ void TestClient::LoginProcess()
 			});
 			AuthProcess(ke_socket);
 			StartRecord();
-			auto send_ec = ke_socket->Send(loginReq);
-			if(!send_ec)
-			{
-				parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
-				RecordError(__STACKINFO__, "Failed Send Login : " + send_ec.message_code());
-				DoRestart();
-				return;
-			}
+			ke_socket->Send(loginReq);
 		});
 	});
 }
@@ -280,14 +273,7 @@ void TestClient::AccessProcess(int server, std::function<void(std::shared_ptr<My
 
 			handler(ke_socket);
 			StartRecord();
-			auto send_ec = ke_socket->Send(ByteQueue::Create<Hash_t>(cookie));
-			if(!send_ec)
-			{
-				this->parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(ke_ec, __STACKINFO__)));
-				RecordError(__STACKINFO__, "Failed Access : " + send_ec.message_code());
-				this->DoRestart();
-				return;
-			}
+			ke_socket->Send(ByteQueue::Create<Hash_t>(cookie));
 		});
 	});
 }
@@ -345,14 +331,7 @@ void TestClient::AuthProcess(std::shared_ptr<MyClientSocket> target_socket)
 						client->Close();
 					});
 					StartRecord();
-					auto send_ec = client->Send(regReq);
-					if(!send_ec)
-					{
-						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
-						RecordError(__STACKINFO__, "Failed Register : " + send_ec.message_code());
-						DoRestart();
-						return;
-					}
+					client->Send(regReq);
 				}
 				break;
 			default:
@@ -400,14 +379,7 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 
 				{
 					StartRecord(1.0);	//Match_Delay
-					auto send_ec = client->Send(ByteQueue::Create<byte>(REQ_STARTMATCH));
-					if(!send_ec)
-					{
-						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
-						RecordError(__STACKINFO__, "Failed Enqueue : " + send_ec.message_code());
-						DoRestart();
-						return;
-					}
+					client->Send(ByteQueue::Create<byte>(REQ_STARTMATCH));
 				}
 				break;
 			case ANS_MATCHMADE:
@@ -489,14 +461,7 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 					int next_action = GetRandomAction();
 					ByteQueue actionreq = ByteQueue::Create<byte>(REQ_GAME_ACTION);
 					actionreq.push<int>(next_action);
-					auto send_ec = client->Send(actionreq);
-					if(!send_ec)
-					{
-						parent->ThrowThreadException(std::make_exception_ptr(ErrorCodeExcept(send_ec, __STACKINFO__)));
-						RecordError(__STACKINFO__, "Failed Action : " + send_ec.message_code());
-						DoRestart();
-						return;
-					}
+					client->Send(actionreq);
 				}
 				break;
 			case GAME_FINISHED_WIN:

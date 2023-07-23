@@ -75,15 +75,10 @@ void MyWebsocketTLSClient::GetRecv(size_t bytes_written)
 	}
 }
 
-ErrorCode MyWebsocketTLSClient::DoSend(const byte* bytes, const size_t &len)
+void MyWebsocketTLSClient::DoSend(const byte* bytes, const size_t &len, std::function<void(boost::system::error_code, size_t)> handler)
 {
 	boost::asio::const_buffer send_buffer(bytes, len);
-
-	boost::system::error_code ec;
-	ws.write(send_buffer, ec);
-	return ErrorCode(ec);
-
-	//ws.async_write(send_buffer, std::bind(&MyWebsocketTLSClient::Send_Handle, this, std::placeholders::_1, std::placeholders::_2));
+	ws.async_write(send_buffer, handler);
 }
 
 void MyWebsocketTLSClient::Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler, const boost::system::error_code &error_code)

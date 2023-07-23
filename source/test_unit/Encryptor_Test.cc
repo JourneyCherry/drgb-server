@@ -93,3 +93,17 @@ TEST_F(EncryptorTestFixture, CryptionTest)
 		ASSERT_STREQ(plain.c_str(), VecToStr(receive).c_str());
 	}
 }
+
+TEST_F(EncryptorTestFixture, BigdataTest)
+{
+	constexpr int data_count = 65536;
+	std::vector<byte> bigdata;
+	for(int i = 0;i<data_count;i++)
+		bigdata.push_back(i%256);
+
+	auto cipher = en.Crypt(bigdata);
+	ASSERT_NE(cipher, bigdata);
+	auto plain = de.Crypt(cipher);
+
+	ASSERT_EQ(bigdata, plain);
+}

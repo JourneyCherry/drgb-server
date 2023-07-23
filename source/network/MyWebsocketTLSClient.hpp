@@ -27,7 +27,7 @@ class MyWebsocketTLSClient : public MyClientSocket
 	protected:
 		void DoRecv(std::function<void(boost::system::error_code, size_t)>) override;
 		void GetRecv(size_t) override;
-		ErrorCode DoSend(const byte*, const size_t&) override;
+		void DoSend(const byte*, const size_t&, std::function<void(boost::system::error_code, size_t)>) override;
 		void Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>, const boost::system::error_code&) override;
 		boost::asio::any_io_executor GetContext() override;
 		bool isReadable() const override;

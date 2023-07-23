@@ -213,11 +213,13 @@ void MyBattle::SessionProcess(std::shared_ptr<MyClientSocket> target_client, Acc
 		if(!client->is_open())
 			return;
 
-		if(!client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT)) ||
-			!redis.RefreshInfo(account_id, cookie, self_keyword))
+		if(!redis.RefreshInfo(account_id, cookie, self_keyword))
 			client->Close();
 		else
+		{
+			client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
 			SessionProcess(client, account_id, cookie);
+		}
 	});
 }
 

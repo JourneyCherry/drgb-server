@@ -30,6 +30,9 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		PacketProcessor recvbuffer;
 		bool initiateClose;
 		std::mutex mtx;
+
+		std::mutex send_mtx;
+		std::queue<std::vector<byte>> send_queue;
 		
 		std::queue<boost::asio::ip::basic_resolver_entry<boost::asio::ip::tcp>> endpoints;
 
@@ -41,9 +44,10 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 
 		virtual void DoRecv(std::function<void(boost::system::error_code, size_t)>) = 0;
 		virtual void GetRecv(size_t) = 0;
-		virtual ErrorCode DoSend(const byte*, const size_t&) = 0;
+		virtual void DoSend(const byte*, const size_t&, std::function<void(boost::system::error_code, size_t)>) = 0;
 		virtual void Connect_Handle(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>, const boost::system::error_code&) = 0;
 		void Recv_Handle(std::shared_ptr<MyClientSocket>, boost::system::error_code, size_t, std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)>);
+		void Send_Handle(std::shared_ptr<MyClientSocket>, boost::system::error_code, size_t, std::vector<byte>);
 		virtual boost::asio::any_io_executor GetContext() = 0;
 		virtual bool isReadable() const = 0;
 		virtual void DoClose() = 0;
@@ -64,8 +68,8 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		MyClientSocket& operator=(const MyClientSocket&) = delete;
 		MyClientSocket& operator=(MyClientSocket&&) = delete;
 
-		ErrorCode Send(ByteQueue);
-		ErrorCode Send(std::vector<byte>);
+		void Send(ByteQueue);
+		void Send(std::vector<byte>);
 		void SetTimeout(const int&, std::function<void(std::shared_ptr<MyClientSocket>)>);
 		void SetCleanUp(std::function<void(std::shared_ptr<MyClientSocket>)>);
 		void CancelTimeout();

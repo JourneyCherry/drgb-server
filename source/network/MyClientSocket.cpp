@@ -12,12 +12,7 @@ void MyClientSocket::KeyExchange(std::function<void(std::shared_ptr<MyClientSock
 		handler(shared_from_this(), pkey.error());
 		return;
 	}
-	ErrorCode ec = Send(*pkey);
-	if(!ec)
-	{
-		handler(shared_from_this(), ec);
-		return;
-	}
+	Send(*pkey);
 
 	if(!isReadable())
 	{
@@ -108,25 +103,55 @@ void MyClientSocket::Recv_Handle(std::shared_ptr<MyClientSocket> self_ptr, boost
 		StartRecv(handler);
 }
 
-ErrorCode MyClientSocket::Send(ByteQueue bytes)
+void MyClientSocket::Send(ByteQueue bytes)
 {
 	return Send(bytes.vector());
 }
 
-ErrorCode MyClientSocket::Send(std::vector<byte> bytes)
+void MyClientSocket::Send(std::vector<byte> bytes)
 {
 	std::unique_lock<std::mutex> lk(mtx);
-	if(!is_open() || initiateClose)
-		return ErrorCode(ERR_CONNECTION_CLOSED);
+	if(!isReadable() || initiateClose)
+		return;
+	lk.unlock();
 
 	if(isSecure)
 		bytes = PacketProcessor::encapsulate(encryptor.Crypt(bytes));
 	else
 		bytes = PacketProcessor::encapsulate(bytes);
 
-	auto result = DoSend(bytes.data(), bytes.size());
+	std::unique_lock<std::mutex> send_lk(send_mtx);
+	send_queue.push(bytes);
+	if(send_queue.size() > 1)	//첫번째 element는 send 중인 element이다.
+		return;
+	DoSend(bytes.data(), bytes.size(), std::bind(&MyClientSocket::Send_Handle, this, shared_from_this(), std::placeholders::_1, std::placeholders::_2, bytes));
+}
 
-	return result;
+void MyClientSocket::Send_Handle(std::shared_ptr<MyClientSocket> client, boost::system::error_code error_code, size_t bytes_sent, std::vector<byte> bytes)
+{
+	if(error_code.failed() || bytes_sent <= 0)
+	{
+		client->Close();
+		return;
+	}
+
+	if(!isReadable())
+		return;
+	else if(bytes_sent < bytes.size())
+	{
+		bytes.erase(bytes.begin(), bytes.begin() + bytes_sent);
+		client->DoSend(bytes.data(), bytes.size(), std::bind(&MyClientSocket::Send_Handle, this, client, std::placeholders::_1, std::placeholders::_2, bytes));
+	}
+	else
+	{
+		std::unique_lock<std::mutex> lk(send_mtx);
+		send_queue.pop();
+		if(!send_queue.empty())
+		{
+			auto next_bytes = send_queue.front();
+			client->DoSend(next_bytes.data(), next_bytes.size(), std::bind(&MyClientSocket::Send_Handle, this, client, std::placeholders::_1, std::placeholders::_2, next_bytes));
+		}
+	}
 }
 
 void MyClientSocket::Connect(std::string addr, int port, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler)

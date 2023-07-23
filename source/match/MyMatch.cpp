@@ -239,11 +239,13 @@ void MyMatch::SessionProcess(std::shared_ptr<MyClientSocket> target_client, Acco
 		if(!client->is_open())
 			return;
 
-		if(!client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT)) || 
-			!redis.RefreshInfo(account_id, cookie, self_keyword))
+		if(!redis.RefreshInfo(account_id, cookie, self_keyword))
 			client->Close();
 		else
+		{
+			client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
 			SessionProcess(client, account_id, cookie);
+		}
 	});
 }
 
@@ -266,72 +268,50 @@ void MyMatch::MatchMake()
 			while(matchmaker.isThereMatch())
 			{
 				auto [lp, rp] = matchmaker.GetMatch();
-				Account_ID_t lpid = lp.whoami();
-				Account_ID_t rpid = rp.whoami();
-				auto lpresult = sessions.FindLKey(lpid);
-				auto rpresult = sessions.FindLKey(rpid);
-				Hash_t lpcookie;
-				Hash_t rpcookie;
-				std::shared_ptr<MyClientSocket> lpsocket;
-				std::shared_ptr<MyClientSocket> rpsocket;
-				if(lpresult)
+				std::array<Account_ID_t, 2> ids = {lp.whoami(), rp.whoami()};
+				std::array<Hash_t, 2> cookies;
+				std::array<std::shared_ptr<MyClientSocket>, 2> sockets = {nullptr, nullptr};
+				for(int i = 0;i<2;i++)
 				{
-					lpcookie = lpresult->first;
-					lpsocket = lpresult->second.lock();
-					if(!lpsocket->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT)))
+					auto result = sessions.FindLKey(ids[i]);
+					if(result)
 					{
-						lpsocket->Close();
-						lpsocket = nullptr;
-					}
-					else if(!redis.RefreshInfo(lpid, lpcookie, self_keyword))
-					{
-						lpsocket->Close();
-						lpsocket = nullptr;
-					}
-				}
-				if(rpresult)
-				{
-					rpcookie = rpresult->first;
-					rpsocket = rpresult->second.lock();
-					if(!rpsocket->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT)))
-					{
-						rpsocket->Close();
-						rpsocket = nullptr;
-					}
-					else if(!redis.RefreshInfo(rpid, rpcookie, self_keyword))
-					{
-						rpsocket->Close();
-						rpsocket = nullptr;
+						cookies[i] = result->first;
+						sockets[i] = result->second.lock();
+						sockets[i]->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
+						if(!redis.RefreshInfo(ids[i], cookies[i], self_keyword) || !sockets[i]->is_open())
+						{
+							sockets[i]->Close();
+							sockets[i] = nullptr;
+						}
 					}
 				}
 				
-				if(lpsocket && rpsocket)	//둘다 정상접속 상태이면
+				if(sockets[0] && sockets[1])	//둘다 정상접속 상태이면
 				{
 					try
 					{
 						//모든 Battle 서버에 허용량 확인하고 가장 capacity가 많은 서버를 찾아 Match 전달하기.
-						Seed_t battle_server = MatchService.TransferMatch(lpid, rpid);
+						Seed_t battle_server = MatchService.TransferMatch(ids[0], ids[1]);
 						if(battle_server <= 0)
 							throw ErrorCodeExcept(ERR_OUT_OF_CAPACITY, __STACKINFO__);
 
 						std::string battle_server_name = "battle" + std::to_string(battle_server);
 
 						//Session 서버 등록.
-						redis.SetInfo(lpid, lpcookie, battle_server_name);
-						redis.SetInfo(rpid, rpcookie, battle_server_name);
+						for(int i = 0;i<2;i++)
+							redis.SetInfo(ids[i], cookies[i], battle_server_name);
 
-						Logger::log("Match made : " + std::to_string(lpid) + " vs " + std::to_string(rpid) + " onto " + std::to_string(battle_server), Logger::LogType::info);
+						Logger::log("Match made : " + std::to_string(ids[0]) + " vs " + std::to_string(ids[1]) + " onto " + std::to_string(battle_server), Logger::LogType::info);
 						ByteQueue msg_to_client = ByteQueue::Create<byte>(ANS_MATCHMADE);
 						msg_to_client.push<int>(battle_server);
-						lpsocket->Send(msg_to_client);
-						rpsocket->Send(msg_to_client);
+						for(int i = 0;i<2;i++)
+						{
+							sockets[i]->Send(msg_to_client);
+							sessions.EraseLKey(ids[i]);
+							sockets[i]->Close();
+						}
 						matchmaker.PopMatch();
-
-						sessions.EraseLKey(lpid);
-						sessions.EraseLKey(rpid);
-
-						lpsocket->Close();
-						rpsocket->Close();
 					}
 					catch(const std::exception &e)
 					{
@@ -341,10 +321,12 @@ void MyMatch::MatchMake()
 				}
 				else	//매칭된 둘 중에 한명이라도 이미 접속을 종료했다면 남은 한명을 다시 큐에 집어넣는다.
 				{
-					if(lpsocket) matchmaker.Enter(lp);
-					else		sessions.EraseLKey(lpid);	//연결된 소켓이 없으면 세션을 비운다.
-					if(rpsocket) matchmaker.Enter(rp);
-					else		sessions.EraseLKey(rpid);	//연결된 소켓이 없으면 세션을 비운다.
+					std::array<queue_element, 2> qe{lp, rp};
+					for(int i = 0;i<2;i++)
+					{
+						if(sockets[i]) matchmaker.Enter(qe[i]);
+						else		sessions.EraseLKey(ids[i]);	//연결된 소켓이 없으면 세션을 비운다.
+					}
 					matchmaker.PopMatch();
 				}
 			}

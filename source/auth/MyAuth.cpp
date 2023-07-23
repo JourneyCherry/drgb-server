@@ -185,11 +185,7 @@ void MyAuth::SessionProcess(std::shared_ptr<MyClientSocket> target_client)
 		if(!client->is_open())
 			return;
 		
-		if(!client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT)))
-		{
-			client->Close();
-			return;
-		}
+		client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
 		SessionProcess(client);
 	});
 }

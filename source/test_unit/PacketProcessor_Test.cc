@@ -4,7 +4,6 @@
 
 using mylib::utils::PacketProcessor;
 
-
 TEST(PacketProcessorTest, CapsulationTest)
 {
 	std::vector<byte> plain = {0x01, 0x02, 0x03, 0x04};
@@ -53,4 +52,24 @@ TEST(PacketProcessorTest, FragmentTest)
 		}
 	}
 	EXPECT_EQ(plains.size(), count);
+}
+
+TEST(PacketProcessorTest, BigdataTest)
+{
+	constexpr int data_count = 65536;
+	std::vector<byte> bigdata;
+	for(int i = 0;i<data_count;i++)
+		bigdata.push_back(i%256);
+
+	std::vector<byte> cipher = PacketProcessor::encapsulate(bigdata);
+
+	PacketProcessor buffer;
+
+	buffer.Recv(cipher.data(), cipher.size());
+	ASSERT_TRUE(buffer.isMsgIn());
+	if(buffer.isMsgIn())
+	{
+		auto plain = buffer.GetMsg();
+		ASSERT_EQ(plain, bigdata);
+	}
 }

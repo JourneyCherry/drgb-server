@@ -17,6 +17,8 @@
 #define TIMEOUT 300
 #define THREAD_NUM 16
 #define CLIENT_NUM 100
+//#define THREAD_NUM 1
+//#define CLIENT_NUM 1
 
 class SocketArgument
 {
@@ -99,20 +101,19 @@ class SocketTestFixture : public ::testing::TestWithParam<SocketArgument>
 
 			std::unique_lock lk(mtx);
 			client_cv.wait(lk, [this](){return client_num.load() <= 0; });
-			Clients.clear();
 
-			for(auto &client : Clients)
-				client->Close();
-			
 			EXPECT_EQ(server_count, CLIENT_NUM);
 			EXPECT_EQ(client_count, CLIENT_NUM);
 		}
 
 		void TearDown() override
 		{
+			for(auto &client : Clients)
+				client->Close();
 			client_work_guard.reset();
-			Server->Close();
 			client_thread.join();
+			Server->Close();
+			Clients.clear();
 		}
 
 		void ClientLoop()
@@ -147,22 +148,22 @@ class SocketTestFixture : public ::testing::TestWithParam<SocketArgument>
 				return;
 			if(ec.code() == boost::asio::error::bad_descriptor)
 			{
-				//EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
+				EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
 				return;
 			}
 			if(ec.code() == boost::asio::error::broken_pipe)
 			{
-				//EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
+				EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
 				return;
 			}
 			if(ec.code() == boost::asio::error::not_connected)
 			{
-				//EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
+				EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
 				return;
 			}
 			if(ec.code() == boost::asio::error::connection_reset)
 			{
-				//EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
+				EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
 				return;
 			}
 			EXPECT_TRUE(ec.isSuccessed()) << ec.message_code();
@@ -501,14 +502,7 @@ class CongestionTestFixture : public BasicTestFixture
 		void ClientAccept(std::shared_ptr<MyClientSocket> socket) override
 		{
 			for(int i = 1;i<=data_count;i++)
-			{
-				ErrorCode ec = socket->Send(ByteQueue::Create<int>(i));
-				if(!ec)
-				{
-					EXPECT_TRUE(ec.isSuccessed()) << "Client : " << ec.message_code();
-					break;
-				}
-			}
+				socket->Send(ByteQueue::Create<int>(i));
 			ClientRecv(socket);
 		}
 
