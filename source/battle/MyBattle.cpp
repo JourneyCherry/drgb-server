@@ -499,10 +499,10 @@ void MyBattle::AchieveProgress(Account_ID_t id, Achievement_ID_t achieve, int co
 			case ACHIEVE_GUARD_ADDICTION:
 			case ACHIEVE_EVADE_ADDICTION:
 			case ACHIEVE_PUNCH_ADDICTION:
-			case ACHIEVE_FIRE_ADDICTION:
 				isAchieved = db->AchieveProgress(id, achieve, count);
 				break;
 			//매 회마다 횟수가 1씩 증가하는 업적
+			case ACHIEVE_FIRE_ADDICTION:
 			case ACHIEVE_NEWBIE:
 			case ACHIEVE_NOIVE:
 			case ACHIEVE_CHALLENGER:
