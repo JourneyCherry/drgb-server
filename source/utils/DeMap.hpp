@@ -7,6 +7,18 @@
 namespace mylib{
 namespace utils{
 
+/**
+ * @brief dual-key map. it's identical with std::map<std::pair<LKey, RKey>, Value>.
+ * LKey and RKey can be same but same key for each is not acceptable.
+ * ---
+ * For example, {a, a} can be accepted.
+ * In addition, if there is a key {a, b}, {b, a} is acceptable, but {a, c} or {c, b} is not acceptable.
+ * ---
+ * 
+ * @tparam LKey First Key Type
+ * @tparam RKey Second Key Type
+ * @tparam Value Value Type
+ */
 template <typename LKey, typename RKey, typename Value>
 class DeMap
 {
@@ -20,6 +32,15 @@ class DeMap
 	public:
 		DeMap() = default;
 		~DeMap() = default;
+		/**
+		 * @brief Insert data.(Thread-Safe)
+		 * 
+		 * @param lkey First Key
+		 * @param rkey Second Key
+		 * @param value Value
+		 * @return true if successed.
+		 * @return false if failed with duplication.
+		 */
 		bool Insert(LKey lkey, RKey rkey, Value value)
 		{
 			ulock lk(mtx);
@@ -33,6 +54,12 @@ class DeMap
 
 			return true;
 		}
+		/**
+		 * @brief Find value with First Key.(Thread-Safe)
+		 * 
+		 * @param key First Key
+		 * @return Expected<std::pair<RKey, Value>> Expected result with Second key and value.
+		 */
 		Expected<std::pair<RKey, Value>> FindLKey(LKey key)
 		{
 			ulock lk(mtx);
@@ -42,6 +69,12 @@ class DeMap
 			
 			return {{lrm[key], kvm[key]}};
 		}
+		/**
+		 * @brief Find value with Second Key.(Thread-Safe)
+		 * 
+		 * @param key First Key
+		 * @return Expected<std::pair<LKey, Value>> Expected result with First key and value.
+		 */
 		Expected<std::pair<LKey, Value>> FindRKey(RKey key)
 		{
 			ulock lk(mtx);
@@ -51,6 +84,14 @@ class DeMap
 
 			return {{rlm[key], kvm[rlm[key]]}};
 		}
+		/**
+		 * @brief Change Value with First Key.(Thread-Safe)
+		 * 
+		 * @param lkey First Key
+		 * @param value Value to Change
+		 * @return true if there is the key.
+		 * @return false if there is no key.
+		 */
 		bool InsertLKeyValue(LKey lkey, Value value)
 		{
 			ulock lk(mtx);
@@ -62,6 +103,14 @@ class DeMap
 
 			return true;
 		}
+		/**
+		 * @brief Change Value with Second Key.(Thread-Safe)
+		 * 
+		 * @param rkey Second Key
+		 * @param value Value to Change
+		 * @return true if there is the key.
+		 * @return false if there is no key.
+		 */
 		bool InsertRKeyValue(RKey rkey, Value value)
 		{
 			ulock lk(mtx);
@@ -73,6 +122,12 @@ class DeMap
 
 			return true;
 		}
+		/**
+		 * @brief Erase data with First Key.(Thread-Safe)
+		 * 
+		 * @param lkey First Key
+		 * @return Expected<std::tuple<LKey, RKey, Value>> Expected result of the data.
+		 */
 		Expected<std::tuple<LKey, RKey, Value>> EraseLKey(LKey lkey)
 		{
 			ulock lk(mtx);
@@ -89,7 +144,12 @@ class DeMap
 
 			return {{lkey, rkey, value}, true};
 		}
-
+		/**
+		 * @brief Erase data with Second Key.(Thread-Safe)
+		 * 
+		 * @param rkey Second Key
+		 * @return Expected<std::tuple<LKey, RKey, Value>> Expected result of the data.
+		 */
 		Expected<std::tuple<LKey, RKey, Value>> EraseRKey(RKey rkey)
 		{
 			ulock lk(mtx);
@@ -106,7 +166,10 @@ class DeMap
 
 			return {{lkey, rkey, value}, true};
 		}
-
+		/**
+		 * @brief Remove all data.(Thread-Safe)
+		 * 
+		 */
 		void Clear()
 		{
 			ulock lk(mtx);
@@ -115,12 +178,20 @@ class DeMap
 			rlm.clear();
 			kvm.clear();
 		}
-
+		/**
+		 * @brief Get size of all data.
+		 * 
+		 * @return size_t 
+		 */
 		size_t Size() const
 		{
 			return lrm.size();
 		}
-
+		/**
+		 * @brief Get all data in STL Vector Container.(Thread-Safe)
+		 * 
+		 * @return std::vector<std::tuple<LKey, RKey, Value>> all data at called time.
+		 */
 		std::vector<std::tuple<LKey, RKey, Value>> GetAll()
 		{
 			ulock lk(mtx);

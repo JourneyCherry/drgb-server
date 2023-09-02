@@ -10,6 +10,10 @@
 namespace mylib{
 namespace utils{
 
+/**
+ * @brief Integration of Error Code and Message types.
+ * 
+ */
 class ErrorCode
 {
 	private:
@@ -27,20 +31,85 @@ class ErrorCode
 		static constexpr int TYPE_OPENSSL = 2;
 		static constexpr int TYPE_CUSTOM = 3;
 
+		/**
+		 * @brief Create new ErrorCode object with default code(SUCCESS, CustomCode).
+		 * 
+		 */
 		ErrorCode();
-		ErrorCode(boost::system::error_code);
-		ErrorCode(int);
-		ErrorCode(errorcode_t);
-		ErrorCode(unsigned long);
+		/**
+		 * @brief Create new ErrorCode object with Boost's system error code.
+		 * 
+		 * @param ec Error Code
+		 */
+		ErrorCode(boost::system::error_code ec);
+		/**
+		 * @brief Create new ErrorCode object with POSIX-Compatible system error code(errno).
+		 * 
+		 * @param _errno errno.
+		 */
+		ErrorCode(int _errno);
+		/**
+		 * @brief Create new ErrorCode object with Custom error code.
+		 * @see MyCodes.hpp
+		 * 
+		 * @param ec Custom Error Code
+		 */
+		ErrorCode(errorcode_t ec);
+		/**
+		 * @brief Create new ErrorCode object with OpenSSL error code.
+		 * 
+		 * @param ec Error Code
+		 */
+		ErrorCode(unsigned long ec);
 		ErrorCode(const ErrorCode&);
-		void SetMessage(std::string);
+		/**
+		 * @brief Set new error message.
+		 * 
+		 * @param new_message new error message
+		 */
+		void SetMessage(std::string new_message);
+		/**
+		 * @brief Get Error Code Number.
+		 * 
+		 * @return int Error Code
+		 */
 		int code() const;
+		/**
+		 * @brief Get Error Message
+		 * 
+		 * @return std::string Error Message
+		 */
 		std::string message() const;
+		/**
+		 * @brief Get Error Message with Error Code
+		 * 
+		 * @return std::string Error Message
+		 */
 		std::string message_code() const;
+		/**
+		 * @brief Get Type of ErrorCode in string
+		 * 
+		 * @return std::string type
+		 */
 		std::string typestr() const;
+		/**
+		 * @brief Get Type of ErrorCode.
+		 * 
+		 * @return int type.
+		 * @param 0 for posix
+		 * @param 1 for boost
+		 * @param 2 for openssl
+		 * @param 3 for custom
+		 */
 		int typecode() const;
 		ErrorCode &operator=(const ErrorCode&);
 		operator bool() const;
+		/**
+		 * @brief Get Success or not.
+		 * 
+		 * @return true if successed.
+		 * @return false if failed.
+		 */
 		bool isSuccessed() const;
 };
 

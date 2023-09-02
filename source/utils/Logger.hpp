@@ -11,6 +11,10 @@
 namespace mylib{
 namespace utils{
 
+/**
+ * @brief Logging Class using syslog-ng.(Singleton Pattern). Every log will be through Local 0~7 facilities, So, each local facilities must be set in syslog-ng's configuration files first.
+ * 
+ */
 class Logger
 {
 	public:
@@ -34,11 +38,40 @@ class Logger
 	public:
 		Logger();
 		~Logger();
-		static void OpenLog(bool = false);
-		static void ConfigPort(LogType, int);
-		static void log(std::string, LogType=LogType::info);
-		static std::string strerrno(int);
-		static LogType GetType(std::string);
+		/**
+		 * @brief Start logging. 'ConfigPort()' must be done before open.
+		 * 
+		 * @param _verbose whether logging through standard output or not(syslog-ng).
+		 */
+		static void OpenLog(bool _verbose = false);
+		/**
+		 * @brief Assign local facility to log type.
+		 * 
+		 * @param type type of log
+		 * @param port local facility number.(0 ~ 7)
+		 */
+		static void ConfigPort(LogType type, int port);
+		/**
+		 * @brief Log message as 'type'
+		 * 
+		 * @param content string message to log
+		 * @param type log type.
+		 */
+		static void log(std::string content, LogType type = LogType::info);
+		/**
+		 * @brief Get error message according to errno.
+		 * 
+		 * @param num 
+		 * @return std::string 
+		 */
+		static std::string strerrno(int num);
+		/**
+		 * @brief Get Log type by string name.
+		 * 
+		 * @param name type name
+		 * @return LogType type enum.
+		 */
+		static LogType GetType(std::string name);
 	
 	private:
 		void OpenLog_(bool);

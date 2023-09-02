@@ -13,6 +13,10 @@ namespace security{
 using utils::ErrorCode;
 using utils::ErrorCodeExcept;
 
+/**
+ * @brief En/Decryption class using AES-256-CBC algorithm.
+ * 
+ */
 class Encryptor
 {
 	public:

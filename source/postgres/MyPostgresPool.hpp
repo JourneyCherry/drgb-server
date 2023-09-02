@@ -7,6 +7,10 @@
 #include <vector>
 #include "MyPostgres.hpp"
 
+/**
+ * @brief PostgreSQL Connection Pool.
+ * 
+ */
 class MyPostgresPool
 {
 	private:
@@ -43,7 +47,16 @@ class MyPostgresPool
 		 * @return std::shared_ptr<MyPostgres> Connection Object. It will be nullptr if failed.
 		 */
 		std::shared_ptr<MyPostgres> GetConnection(int timeout=-1);
-
+		/**
+		 * @brief Get the number of connected object to the server.
+		 * 
+		 * @return size_t the number of connected object
+		 */
 		size_t GetConnectUsage() const;
+		/**
+		 * @brief Get the number of being used object by other threads.
+		 * 
+		 * @return size_t the number of being used object.
+		 */
 		size_t GetPoolUsage() const;
 };

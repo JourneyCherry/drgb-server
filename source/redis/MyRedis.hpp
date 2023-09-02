@@ -11,7 +11,7 @@ using mylib::utils::Expected;
 using mylib::utils::Encoder;
 
 /**
- * @brief Cusomized Redis Client Library.
+ * @brief Cusomized Redis Client Library using "hiredis"
  * 
  */
 class MyRedis

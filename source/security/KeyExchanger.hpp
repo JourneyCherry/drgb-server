@@ -17,6 +17,12 @@ using utils::StackErrorCode;
 using utils::ErrorCodeExcept;
 using utils::Expected;
 
+/**
+ * @brief Key Exchanger using ECDH(Elliptic Curve Diffie-Hellman) algorithm.
+ * EC type : P-256
+ * KDF : X963
+ * 
+ */
 class KeyExchanger
 {
 	private:
