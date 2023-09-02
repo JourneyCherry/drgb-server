@@ -1,6 +1,6 @@
 #!/sbin/openrc-run
 : ${project="drgb"}
-: ${cfgfile="/etc/$project/$project.conf"}
+: ${cfgfile="/etc/$project/$RC_SVCNAME.conf"}
 
 pidfile="/var/run/$RC_SVCNAME.pid"
 command="/usr/local/$project/$RC_SVCNAME"

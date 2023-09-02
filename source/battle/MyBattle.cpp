@@ -44,7 +44,7 @@ MyBattle::MyBattle() :
 	machine_id(ConfigParser::GetInt("Machine_ID", 1)),
 	self_keyword("battle" + std::to_string(machine_id)),
 	keyword_match("match"),
-	BattleService(ConfigParser::GetString("Match_Addr", "localhost"), ConfigParser::GetInt("Service_Port", 52431), machine_id, this),
+	BattleService(ConfigParser::GetString("Match_Addr", "localhost"), ConfigParser::GetInt("Match_Service_Port", 52431), machine_id, this),
 	gamepool(ConfigParser::GetInt("GameThread", 2), this),
 	Round_Time(ConfigParser::GetInt("Round_Time", 2000)),
 	Dis_Time(ConfigParser::GetInt("Disconnect_Time", 15000)),

@@ -6,6 +6,34 @@ drgb server program
 
 ## Build with Linux
 
+0. Install Required Libraries
+
+	**Required Libraries for Build**
+	|Library name|Minimum Version|
+	|-|-|
+	|cmake|3.18|
+	|make|4.3-4.1|
+	|g++|4:10.2.1-1|
+	|libssl-dev|3.0.2|
+	|libcrypto++-dev|8.4.0|
+	|libboost-dev|1.74.0|
+	|libpqxx-dev|6.4.5|
+	|hiredis|1.1.0|
+	|protobuf-compiler-grpc|1.30.2|
+	|libprotobuf-dev|3.12.4|
+
+
+	**Required Libraries for Package Installation**
+	|Library name|Minimum Version|
+	|-|-|
+	|hiredis|1.1.0|
+	|libgrpc++-dev|1.30.2|
+	|libprotobuf-dev|3.12.4|
+	|libpqxx-dev|6.4.5|
+
+	**Required Libraries for Execution**
+	- syslog-ng
+
 1. Make package file
 
 	``` bash
@@ -18,8 +46,7 @@ drgb server program
 
 	``` bash
 	#In Target Machine
-	dpkg -i hiredis-1.1.0-Linux.deb
-	sudo apt-get install -y libgrpc++-dev libpqxx-dev libprotobuf-dev libboost-dev syslog-ng
+	dpkg -i hiredis-1.1.0-Linux.deb	#debian package of hiredis will be made by './build.sh' on previous part.
 	#If you need 'System Daemon' such as 'openrc' or 'init', install it too.
 	```
 

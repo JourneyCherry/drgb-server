@@ -21,7 +21,7 @@ RUN sed -i \
 	-e "0,/^\(DBAddr\)[[:blank:]]*=[[:blank:]]*\w*\$/s//\1 = ${DBADDR} #Changed by Dockerfile/" \
 	-e "0,/^\(SessionAddr\)[[:blank:]]*=[[:blank:]]*\w*\$/s//\1 = ${SESSIONADDR} #Changed by Dockerfile/" \
 	-e "0,/^\(Match_Addr\)[[:blank:]]*=[[:blank:]]*\w*\$/s//\1 = ${MATCHADDR} #Changed by Dockerfile/" \
-	/etc/drgb/drgb.conf
+	/etc/drgb/drgb-${TARGET}.conf
 
 #Set Entrypoint for Docker
 COPY ../source/resources/docker-entrypoint.sh /drgb-server/

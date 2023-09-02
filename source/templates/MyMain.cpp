@@ -12,7 +12,7 @@ void MyMain::signal_handler(int signal_code)
 	}
 }
 
-MyMain::MyMain(std::function<void()> p, std::function<void()> s)
+MyMain::MyMain(std::string name, std::function<void()> p, std::function<void()> s) : service_name(name)
 {
 	process = p;
 	stop = s;
@@ -29,7 +29,7 @@ int MyMain::main(int argc, char *argv[])
 	try
 	{
 		MyServerOpt opts(argc, argv);
-		Logger::OpenLog(opts.verbose_flag);
+		Logger::OpenLog(service_name, opts.verbose_flag);
 		if(opts.daemon_flag)
 		{
 			if(!Daemonizer())

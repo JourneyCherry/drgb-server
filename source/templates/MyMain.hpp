@@ -17,7 +17,8 @@ class MyMain
 		static void signal_handler(int);
 		static std::function<void()> process;
 		static std::function<void()> stop;
+		std::string service_name;
 	public:
-		MyMain(std::function<void()>, std::function<void()>);
+		MyMain(std::string, std::function<void()>, std::function<void()>);
 		int main(int, char*[]);
 };

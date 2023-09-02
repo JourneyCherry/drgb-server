@@ -5,7 +5,6 @@ namespace utils{
 
 std::unique_ptr<Logger> Logger::instance_ = nullptr;
 std::map<Logger::LogType, int> Logger::ports;
-const std::string Logger::service_name = "drgb";
 Logger* Logger::instance()
 {
 	if(instance_ == nullptr)
@@ -34,7 +33,7 @@ Logger::~Logger()
 		closelog();
 }
 
-void Logger::OpenLog(bool _verbose){instance()->OpenLog_(_verbose);}
+void Logger::OpenLog(std::string name, bool _verbose){instance()->OpenLog_(name, _verbose);}
 void Logger::ConfigPort(LogType type, int port){instance()->ConfigPort_(type, port);}
 void Logger::log(std::string content, LogType type){instance()->log_(content, type);}
 Logger::LogType Logger::GetType(std::string name)
@@ -47,8 +46,9 @@ Logger::LogType Logger::GetType(std::string name)
 	return default_type;
 }
 
-void Logger::OpenLog_(bool _verbose)
+void Logger::OpenLog_(std::string name, bool _verbose)
 {
+	service_name = name;
 	isVerbose = _verbose;
 
 	if(ports[auth] < 0)
@@ -108,7 +108,7 @@ void Logger::log_(std::string content, LogType type)
 			{LogType::default_type, "DEFAULT"}
 		};
 		std::unique_lock<std::mutex> lk(verbose_mtx);
-		std::cout << "[" << type2str[type] << "] " << content << std::endl;
+		std::cout << service_name << "[" << type2str[type] << "] " << content << std::endl;
 	}
 	if(isOpened)
 		syslog(ports[type], "%s", content.c_str());

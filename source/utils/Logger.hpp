@@ -30,7 +30,7 @@ class Logger
 		static std::unique_ptr<Logger> instance_;
 		static Logger* instance();
 		static std::map<LogType, int> ports;
-		const static std::string service_name;
+		std::string service_name;
 		bool isOpened;
 		bool isVerbose;
 		std::mutex verbose_mtx;
@@ -41,9 +41,10 @@ class Logger
 		/**
 		 * @brief Start logging. 'ConfigPort()' must be done before open.
 		 * 
+		 * @param name Name of the Service to log.
 		 * @param _verbose whether logging through standard output or not(syslog-ng).
 		 */
-		static void OpenLog(bool _verbose = false);
+		static void OpenLog(std::string name, bool _verbose = false);
 		/**
 		 * @brief Assign local facility to log type.
 		 * 
@@ -74,7 +75,7 @@ class Logger
 		static LogType GetType(std::string name);
 	
 	private:
-		void OpenLog_(bool);
+		void OpenLog_(std::string, bool);
 		void ConfigPort_(LogType, int);
 		void log_(std::string, LogType);
 		int GetLogPort(int);

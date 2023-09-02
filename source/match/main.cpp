@@ -5,7 +5,7 @@
 int main(int argc, char *argv[])
 {
 	std::shared_ptr<MyServer> server;
-	MyMain starter(
+	MyMain starter("drgb-match",
 		[&]()
 		{
 			server = std::make_shared<MyMatch>();

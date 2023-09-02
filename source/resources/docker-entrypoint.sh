@@ -6,7 +6,7 @@ exec="/usr/local/drgb/$svcname"
 if [ $# -eq 0 ]; then
 	#docker log를 사용하려면 std::cout을 사용해야 하므로, --visual 옵션을 준다.
 	args="
-			--configfile	/etc/drgb/drgb.conf
+			--configfile	/etc/drgb/$svcname.conf
 			--pidfile		/var/run/$svcname.pid
 			-v
 		"

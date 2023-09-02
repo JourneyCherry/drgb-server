@@ -11,7 +11,7 @@
 
 project="drgb"
 svcname=`basename $0 .sh`
-cfgfile="/etc/$project/$project.conf"
+cfgfile="/etc/$project/$svcname.conf"
 pidfile="/var/run/$svcname.pid"
 cmd="/usr/local/$project/$svcname"
 cmd_args="
