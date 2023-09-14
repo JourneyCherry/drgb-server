@@ -220,6 +220,17 @@ void MyClientSocket::Close()
 	}
 }
 
+void MyClientSocket::FillTTL(const int& max_ttl)
+{
+	ttl = max_ttl;
+}
+
+bool MyClientSocket::CountTTL()
+{
+	ttl -= 1;
+	return ttl > 0;
+}
+
 bool MyClientSocket::isNormalClose(const ErrorCode &ec)
 {
 	if(ec)

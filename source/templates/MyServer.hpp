@@ -22,9 +22,9 @@ class MyServer : public ThreadExceptHandler
 {
 	protected:
 		bool isRunning;
-		static constexpr int MAX_CLIENTS = 5;		//최대 수용 가능 클라이언트 수. //TODO : 추후 확장 필요.
 		static constexpr int TIME_AUTHENTICATE = 2000;	//인증(쿠키) 대기 시간.(ms)
-		static constexpr int SESSION_TIMEOUT = 60000;	//세션 만료 시간.(ms)
+		static constexpr int SESSION_TIMEOUT = 60000;	//세션 만료 시간.(ms) 이 절반 시간 간격으로 HeartBeat패킷을 보내고, 체크한다.
+		static constexpr int SESSION_TTL = 4;			//세션 만료 횟수. HeartBeat패킷을 받았을 때, TTL 초기화 값. 매 HeartBeat체크마다 1씩 감소하고, 0이 되면 세션연결을 종료한다.
 
 	private:
 		static constexpr int MAX_SOCKET = 2;

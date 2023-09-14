@@ -36,6 +36,7 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		
 		std::queue<boost::asio::ip::basic_resolver_entry<boost::asio::ip::tcp>> endpoints;
 
+		int ttl;		//Time to live
 		std::unique_ptr<boost::asio::steady_timer> timer;
 
 		//For User of Client Socket
@@ -81,4 +82,7 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		void KeyExchange(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>);
 
 		static bool isNormalClose(const ErrorCode&);
+
+		void FillTTL(const int&);
+		bool CountTTL();
 };

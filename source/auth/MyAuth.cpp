@@ -29,6 +29,7 @@ void MyAuth::AcceptProcess(std::shared_ptr<MyClientSocket> client, ErrorCode ec)
 	else
 	{
 		Logger::log("Client " + client->ToString() + " Entered", Logger::LogType::auth);
+		client->FillTTL(SESSION_TTL);
 		ClientProcess(client);
 		SessionProcess(client);
 	}
@@ -59,6 +60,9 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> target_client)
 
 			switch(header)
 			{
+				case ANS_HEARTBEAT:
+					client->FillTTL(SESSION_TTL);
+					break;
 				case REQ_REGISTER:
 				case REQ_LOGIN:
 					pwd_hash = packet.pop<Pwd_Hash_t>();
@@ -69,6 +73,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> target_client)
 			}
 
 			//Chceck Account from DB
+			if(email.size() > 0)
 			{
 				auto db = dbpool.GetConnection();
 				if(header == REQ_REGISTER)
@@ -90,6 +95,7 @@ void MyAuth::ClientProcess(std::shared_ptr<MyClientSocket> target_client)
 			}
 
 			//session check
+			if(account_id > 0)
 			{
 				auto info = redis.GetInfoFromID(account_id);
 				if(!info)
@@ -185,7 +191,12 @@ void MyAuth::SessionProcess(std::shared_ptr<MyClientSocket> target_client)
 		if(!client->is_open())
 			return;
 		
-		client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
-		SessionProcess(client);
+		if(client->CountTTL())
+		{
+			client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
+			SessionProcess(client);
+		}
+		else
+			client->Close();
 	});
 }

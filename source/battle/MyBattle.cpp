@@ -160,6 +160,7 @@ void MyBattle::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQ
 	}
 
 	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
+	client->FillTTL(SESSION_TTL);
 	ClientProcess(client, account_id, side, gameinfo->game);
 	client->SetTimeout(SESSION_TIMEOUT / 2, std::bind(&MyBattle::SessionProcess, this, std::placeholders::_1, account_id, cookie));
 }
@@ -185,6 +186,7 @@ void MyBattle::ClientProcess(std::shared_ptr<MyClientSocket> target_client, Acco
 		switch(header)
 		{
 			case ANS_HEARTBEAT:
+				client->FillTTL(SESSION_TTL);
 				break;
 			case REQ_GAME_ACTION:
 				try
@@ -217,8 +219,13 @@ void MyBattle::SessionProcess(std::shared_ptr<MyClientSocket> target_client, Acc
 			client->Close();
 		else
 		{
-			client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
-			SessionProcess(client, account_id, cookie);
+			if(client->CountTTL())
+			{
+				client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
+				SessionProcess(client, account_id, cookie);
+			}
+			else
+				client->Close();
 		}
 	});
 }

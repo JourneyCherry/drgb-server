@@ -124,6 +124,7 @@ void MyMatch::AuthenticateProcess(std::shared_ptr<MyClientSocket> client, ByteQu
 	}
 
 	Logger::log("Account " + std::to_string(account_id) + " logged in from " + client->ToString(), Logger::LogType::auth);
+	client->FillTTL(SESSION_TTL);
 	ClientProcess(client, account_id);
 	SessionProcess(client, account_id, cookie);
 }
@@ -154,6 +155,7 @@ void MyMatch::ClientProcess(std::shared_ptr<MyClientSocket> target_client, Accou
 			switch(header)
 			{
 				case ANS_HEARTBEAT:
+					client->FillTTL(SESSION_TTL);
 					break;
 				case REQ_CHPWD:
 					try
@@ -243,8 +245,13 @@ void MyMatch::SessionProcess(std::shared_ptr<MyClientSocket> target_client, Acco
 			client->Close();
 		else
 		{
-			client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
-			SessionProcess(client, account_id, cookie);
+			if(client->CountTTL())
+			{
+				client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
+				SessionProcess(client, account_id, cookie);
+			}
+			else
+				client->Close();
 		}
 	});
 }
