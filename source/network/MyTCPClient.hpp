@@ -8,6 +8,10 @@ using mylib::utils::ErrorCode;
 using mylib::utils::StackErrorCode;
 using mylib::utils::ErrorCodeExcept;
 
+/**
+ * @brief TCP Socket for Client.
+ * 
+ */
 class MyTCPClient : public MyClientSocket
 {
 	private:
@@ -28,12 +32,23 @@ class MyTCPClient : public MyClientSocket
 		void DoClose() override;
 
 	public:
-		MyTCPClient(boost::asio::ip::tcp::socket);
+		/**
+		 * @brief Constructor of TCP Client Socket.
+		 * 
+		 * @param _socket TCP Socket from acceptor(Server) or io_context(Independent Client)
+		 */
+		MyTCPClient(boost::asio::ip::tcp::socket _socket);
 		MyTCPClient(const MyTCPClient&) = delete;
 		MyTCPClient(MyTCPClient&&) = delete;
 		~MyTCPClient() = default;
 
-		virtual void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
+		virtual void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;	//Do Nothing but wait one asynchronous tick.
+		/**
+		 * @brief Is the socket opened?
+		 * 
+		 * @return true 
+		 * @return false 
+		 */
 		bool is_open() const override;
 		
 		MyTCPClient& operator=(const MyTCPClient&) = delete;

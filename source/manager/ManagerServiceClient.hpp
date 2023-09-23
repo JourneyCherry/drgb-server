@@ -17,17 +17,27 @@ using ServerService::CheckResult;
 using ServerService::ConnectionUsage;
 using ServerService::MgrToServer;
 
+/**
+ * @brief gRPC Client for Manager. Each Method will send request and receive answer packet. If failed, return ErrorCode instead.
+ * 
+ */
 class ManagerServiceClient
 {
 	private:
 		std::unique_ptr<MgrToServer::Stub> stub_;
 
 	public:
-		ManagerServiceClient(const std::string&, const int&);
+		/**
+		 * @brief Constructor of Manager Service Client. It'll try to connect the server.
+		 * 
+		 * @param addr address of the server
+		 * @param port port of the server
+		 */
+		ManagerServiceClient(const std::string &addr, const int &port);
 		~ManagerServiceClient() = default;
 
 		Expected<size_t, ErrorCode> GetUsage();
-		Expected<bool, ErrorCode> CheckAccount(const Account_ID_t&);
+		Expected<bool, ErrorCode> CheckAccount(const Account_ID_t &id);
 		Expected<size_t, ErrorCode> GetClientUsage();
 		Expected<std::map<std::string, size_t>, ErrorCode> GetConnectUsage();
 };

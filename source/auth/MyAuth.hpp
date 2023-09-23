@@ -11,6 +11,14 @@ using mylib::utils::Encoder;
 using mylib::security::Hasher;
 using mylib::utils::ErrorCodeExcept;
 
+/**
+ * @brief Authentication Server.
+ * **Spec**
+ *  - Socket Type : Websocket
+ *  - Process
+ *   - Receive ID and PWD. If it is in DB, transfer client to 'Match Server' using 'Redis'
+ * 
+ */
 class MyAuth : public MyServer
 {
 	private:

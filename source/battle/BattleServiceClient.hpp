@@ -19,6 +19,10 @@ using ServerService::Usage;
 using ServerService::MatchTransfer;
 using ServerService::MatchToBattle;
 
+/**
+ * @brief gRPC Service Client for Battle Server to connect to Match Server.
+ * 
+ */
 class BattleServiceClient : public ThreadExceptHandler
 {
 	private:
@@ -36,10 +40,38 @@ class BattleServiceClient : public ThreadExceptHandler
 		void ReceiveLoop();
 	
 	public:
-		BattleServiceClient(const std::string&, const int&, const Seed_t&, ThreadExceptHandler* = nullptr);
+		/**
+		 * @brief Constructor of Battle Service Client.
+		 * 
+		 * @param addr address of Match Server
+		 * @param port port of Match Server's Match Service
+		 * @param mid Machine ID of itself
+		 * @param p parent Thread Except Handler
+		 */
+		BattleServiceClient(const std::string &addr, const int &port, const Seed_t &mid, ThreadExceptHandler *p = nullptr);
 		~BattleServiceClient();
+		/**
+		 * @brief is Stream still opened?
+		 * 
+		 * @return true 
+		 * @return false 
+		 */
 		bool is_open() const;
+		/**
+		 * @brief Close Stream to Match Service.
+		 * 
+		 */
 		void Close();
-		void SetCallback(const std::function<void(id_t, id_t)>&);
-		void SetUsage(const size_t&);
+		/**
+		 * @brief Set callback function for 'MatchTransfer()' from Match Service Server.
+		 * 
+		 * @param func 
+		 */
+		void SetCallback(const std::function<void(id_t, id_t)> &func);
+		/**
+		 * @brief let Match Server know it's usage.
+		 * 
+		 * @param usage the number of Game.
+		 */
+		void SetUsage(const size_t &usage);
 };

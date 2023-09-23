@@ -6,6 +6,10 @@ using mylib::utils::ErrorCode;
 using mylib::utils::StackErrorCode;
 using mylib::utils::ErrorCodeExcept;
 
+/**
+ * @brief TCP Socket for Client using TLS
+ * 
+ */
 class MyTCPTLSClient : public MyClientSocket
 {
 	private:
@@ -27,12 +31,24 @@ class MyTCPTLSClient : public MyClientSocket
 		void DoClose() override;
 
 	public:
-		MyTCPTLSClient(boost::asio::ssl::context&, boost::asio::ip::tcp::socket);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
+		/**
+		 * @brief Constructor of TCP Client Socket using TLS
+		 * 
+		 * @param sslctx_ SSL Context
+		 * @param socket TCP Socket from acceptor(Server) or io_context(Independent Client)
+		 */
+		MyTCPTLSClient(boost::asio::ssl::context &sslctx_, boost::asio::ip::tcp::socket socket);	//TCPServer에서 Accept한 socket으로 생성할 때의 생성자.
 		MyTCPTLSClient(const MyTCPTLSClient&) = delete;
 		MyTCPTLSClient(MyTCPTLSClient&&) = delete;
 		~MyTCPTLSClient() = default;
 
-		void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
+		void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;	//Do SSL Handshake
+		/**
+		 * @brief Is the socket opened?
+		 * 
+		 * @return true 
+		 * @return false 
+		 */
 		bool is_open() const override;
 
 		MyTCPTLSClient& operator=(const MyTCPTLSClient&) = delete;

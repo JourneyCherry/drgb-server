@@ -17,6 +17,36 @@ using mylib::utils::ErrorCodeExcept;
 using mylib::security::KeyExchanger;
 using mylib::security::Encryptor;
 
+/**
+ * @brief Client Socket Interface. 
+ * **Spec**
+ *   - Key Exchange : ECDH
+ *   - Encryption : AES-256-CBC
+ *   - Timer : Boost's steady timer
+ * 
+ * **Start Process**
+ *   1. (If it's from client) Connect()
+ *   2. Prepare() <- 'MyServerSocket::GetClient()' <- 'MyServerSocket::StartAccept()'
+ *   3. KeyExchange() <- 'accept_handle' of 'MyServer::Start()'
+ * 
+ * **Recv Process**
+ *   1. StartRecv() <- 'MyServer::AcceptProcess()' and 'MyServer::ClientProcess()'
+ *   2. DoRecv()
+ *   3. Recv_Handle()
+ *   4. GetRecv()
+ *   5. handler() -> return to '1.' until socket is closed
+ * 
+ * **Send Process**
+ *   1. Send() <- 'MyServer::ClientProcess()' or else
+ *   2. Encapsulate and DoSend()
+ *   3. Send_Handle()
+ *   4. if there are any bytes left, return to '2.'
+ * 
+ * **Close Process**
+ *   1. DoClose() <- everywhere
+ *   2. cleanHandler()
+ * 
+ */
 class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 {
 	private:
@@ -61,7 +91,7 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		MyClientSocket(MyClientSocket&&) = delete;
 		virtual ~MyClientSocket() = default;
 
-		virtual void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) = 0;
+		virtual void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) = 0;	//Preparation for each socket type such as handshake
 		void Connect(std::string, int, std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>);
 		virtual bool is_open() const = 0;
 		void Close();
@@ -69,17 +99,67 @@ class MyClientSocket : public std::enable_shared_from_this<MyClientSocket>
 		MyClientSocket& operator=(const MyClientSocket&) = delete;
 		MyClientSocket& operator=(MyClientSocket&&) = delete;
 
-		void Send(ByteQueue);
-		void Send(std::vector<byte>);
-		void SetTimeout(const int&, std::function<void(std::shared_ptr<MyClientSocket>)>);
-		void SetCleanUp(std::function<void(std::shared_ptr<MyClientSocket>)>);
+		/**
+		 * @brief Enqueue ByteQueue into Send Queue through 'DoSend()' and 'Send_Handle()'
+		 * 
+		 * @param bytes non-capsulated complete message
+		 */
+		void Send(ByteQueue bytes);
+		/**
+		 * @brief Enqueue bytes into Send Queue through 'DoSend()' and 'Send_Handle()'
+		 * 
+		 * @param bytes non-capsulated complete message
+		 */
+		void Send(std::vector<byte> bytes);
+		/**
+		 * @brief Set disposable Timer call 'callback' after 'ms' milliseconds. If you want to continuous timer, call this in 'callback'
+		 * 
+		 * @param ms millisecond
+		 * @param callback process called just right after time passed.
+		 */
+		void SetTimeout(const int& ms, std::function<void(std::shared_ptr<MyClientSocket>)> callback);
+		/**
+		 * @brief Set 'cleanHandler'. 'cleanHandler' will be called just after the socket is closed.
+		 * 
+		 * @param callback process when the socket is closed.
+		 */
+		void SetCleanUp(std::function<void(std::shared_ptr<MyClientSocket>)> callback);
+		/**
+		 * @brief Cancel Timer. timer callback will not be called after this method.
+		 * 
+		 */
 		void CancelTimeout();
 
+		/**
+		 * @brief Get Address string with port number like 'xxx.xxx.xxx.xxx:xxxxx'
+		 * 
+		 * @return std::string address string
+		 */
 		std::string ToString();
+		/**
+		 * @brief Get Address string only like 'xxx.xxx.xxx.xxx'
+		 * 
+		 * @return std::string address string
+		 */
 		std::string GetAddress();
+		/**
+		 * @brief Get port number
+		 * 
+		 * @return int port number
+		 */
 		int GetPort();
-		void StartRecv(std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)>);
-		void KeyExchange(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>);
+		/**
+		 * @brief Start Receive Process. If a complete message is received or there is any error, handler will be called.
+		 * 
+		 * @param handler callback for message.
+		 */
+		void StartRecv(std::function<void(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode)> handler);
+		/**
+		 * @brief Start Key Exchange Process. the result will be through 'handler'.
+		 * 
+		 * @param handler callback for result.
+		 */
+		void KeyExchange(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)> handler);
 
 		static bool isNormalClose(const ErrorCode&);
 

@@ -18,6 +18,10 @@ using mylib::utils::ConfigParser;
 using mylib::utils::Logger;
 using mylib::utils::StackTraceExcept;
 
+/**
+ * @brief Dedicated Server Template. It contains Common Process for every type of server.
+ * 
+ */
 class MyServer : public ThreadExceptHandler
 {
 	protected:
@@ -44,10 +48,28 @@ class MyServer : public ThreadExceptHandler
 		MyRedis redis;
 
 	public:
-		MyServer(int);
+		/**
+		 * @brief Constructor of Server Template.
+		 * 
+		 * @param port port number of Service to communicate with other servers.
+		 */
+		MyServer(int port);
 		virtual ~MyServer();
+		/**
+		 * @brief Start Server. The Server runs until 'Stop()' is called.
+		 * 
+		 */
 		void Start();
+		/**
+		 * @brief Stop Server. It wakes up every 'Join()'ed thread.
+		 * 
+		 */
 		void Stop();
+		/**
+		 * @brief Wait until the Server stops. 
+		 * @throw std::exception every exception that occurs on running.
+		 * 
+		 */
 		void Join();
 
 	protected:

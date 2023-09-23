@@ -403,6 +403,7 @@ void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 {
 	if(lpid <= 0 || rpid <= 0)
 	{
+		BattleService.SetUsage(0);
 		BattleService.SetUsage(sessions.Size());
 		return;
 	}
@@ -441,6 +442,7 @@ void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 			{
 				Logger::log("DB Failed : " + std::string(e.base().what()), Logger::LogType::error);
 				gamepool.ReleaseTimer(timer);
+				BattleService.SetUsage(0);
 				BattleService.SetUsage(sessions.Size());
 				return;
 			}
@@ -448,6 +450,7 @@ void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 			{
 				Logger::log("DB Failed : " + std::string(e.what()), Logger::LogType::error);
 				gamepool.ReleaseTimer(timer);
+				BattleService.SetUsage(0);
 				BattleService.SetUsage(sessions.Size());
 				return;
 			}
@@ -460,6 +463,7 @@ void MyBattle::MatchTransfer(const Account_ID_t& lpid, const Account_ID_t& rpid)
 			GameProcess(timer, gameinfo);	//최초 Timer 등록
 		}
 	}
+	BattleService.SetUsage(1);
 	BattleService.SetUsage(sessions.Size());
 }
 

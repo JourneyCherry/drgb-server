@@ -27,7 +27,7 @@ class GetArg
 
 	public:
 		virtual void ClearOpt() = 0;
-		virtual void GetArgs(int, char**) = 0;
+		virtual void GetArgs(int, char**) = 0;	//This method is for global variable of 'GetArg' that cannot parse arguments in constructor.
 };
 
 }

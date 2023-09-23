@@ -8,6 +8,10 @@
 using mylib::utils::ErrorCode;
 using mylib::utils::ErrorCodeExcept;
 
+/**
+ * @brief Websocket Socket for Client.
+ * 
+ */
 class MyWebsocketClient : public MyClientSocket
 {
 	private:
@@ -28,12 +32,23 @@ class MyWebsocketClient : public MyClientSocket
 		void DoClose() override;
 
 	public:
-		MyWebsocketClient(boost::asio::ip::tcp::socket);
+		/**
+		 * @brief Constructor of Websocket Client Socket.
+		 * 
+		 * @param socket_ TCP Socket from acceptor(Server) or io_context(Independent Client)
+		 */
+		MyWebsocketClient(boost::asio::ip::tcp::socket socket_);
 		MyWebsocketClient(const MyWebsocketClient&) = delete;
 		MyWebsocketClient(MyWebsocketClient&&) = delete;
 		~MyWebsocketClient() = default;
 
-		void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
+		void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;	//Do Websocket Handshake
+		/**
+		 * @brief Is the socket opened?
+		 * 
+		 * @return true 
+		 * @return false 
+		 */
 		bool is_open() const override;
 
 		MyWebsocketClient& operator=(const MyWebsocketClient&) = delete;

@@ -44,11 +44,6 @@ void MyServerSocket::StartThread()
 	}
 }
 
-bool MyServerSocket::isRunnable() const
-{
-	return !ioc.stopped();
-}
-
 int MyServerSocket::GetPort() const
 {
 	return port;

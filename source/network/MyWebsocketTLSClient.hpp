@@ -11,6 +11,10 @@ using mylib::utils::ErrorCode;
 using mylib::utils::StackErrorCode;
 using mylib::utils::ErrorCodeExcept;
 
+/**
+ * @brief Websocket for Client using TLS
+ * 
+ */
 class MyWebsocketTLSClient : public MyClientSocket
 {
 	private:
@@ -34,12 +38,24 @@ class MyWebsocketTLSClient : public MyClientSocket
 		void DoClose() override;
 
 	public:
-		MyWebsocketTLSClient(boost::asio::ssl::context&, boost::asio::ip::tcp::socket);
+		/**
+		 * @brief Constructor of Websocket Client Socket using TLS
+		 * 
+		 * @param sslctx_ SSL Context
+		 * @param socket TCP Socket from acceptor(Server) or io_context(Independent Client)
+		 */
+		MyWebsocketTLSClient(boost::asio::ssl::context &sslctx_, boost::asio::ip::tcp::socket socket);
 		MyWebsocketTLSClient(const MyWebsocketTLSClient&) = delete;
 		MyWebsocketTLSClient(MyWebsocketTLSClient&&) = delete;
 		~MyWebsocketTLSClient() = default;
 
-		void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;
+		void Prepare(std::function<void(std::shared_ptr<MyClientSocket>, ErrorCode)>) override;	//Do Websocket-TLS Handshake
+		/**
+		 * @brief Is the socket opened?
+		 * 
+		 * @return true 
+		 * @return false 
+		 */
 		bool is_open() const override;
 
 		MyWebsocketTLSClient& operator=(const MyWebsocketTLSClient&) = delete;

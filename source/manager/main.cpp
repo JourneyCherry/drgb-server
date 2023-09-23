@@ -26,9 +26,24 @@ std::map<std::string, byte> cmdtable = {
 MgrOpt opt;
 std::queue<std::string> commands;
 
+/**
+ * @brief Show All Commands available.
+ * 
+ */
 void ShowCommands();
-void ShowHowToUse(std::string);
+/**
+ * @brief Show How to use this program.
+ * 
+ * @param prog_name Executable file name.
+ */
+void ShowHowToUse(std::string prog_name);
 
+/**
+ * @brief Convert command string into command number. It finds most similar command unless there are more than one of them.
+ * 
+ * @param command string to convert
+ * @return byte converted command number. 'ERR_PROTOCOL_VIOLATION' will be returned if there are not only one suitable command.
+ */
 byte GetRequest(std::string command)
 {
 	auto header = cmdtable.find(command);
@@ -65,6 +80,12 @@ byte GetRequest(std::string command)
 	return header->second;
 }
 
+/**
+ * @brief Send requests and Wait for answers to the server.
+ * 
+ * @param client a socket connected to the server
+ * @param commands request strings. it will be interpreted by 'GetRequest()'
+ */
 void Process(ManagerServiceClient* client, std::queue<std::string> &commands)
 {
 	auto command = commands.front();

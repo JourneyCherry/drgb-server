@@ -303,6 +303,7 @@ void TestClient::AuthProcess(std::shared_ptr<MyClientSocket> target_socket)
 		switch(header)
 		{
 			case ANS_HEARTBEAT:		//연결 확인
+				client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
 				break;
 			case SUCCESS:
 			case ERR_EXIST_ACCOUNT_MATCH:
@@ -369,6 +370,7 @@ void TestClient::MatchProcess(std::shared_ptr<MyClientSocket> target_socket)
 		switch(header)
 		{
 			case ANS_HEARTBEAT:		//연결 확인
+				client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
 				break;
 			case GAME_PLAYER_INFO:
 				GetDelay(now_state);
@@ -426,6 +428,7 @@ void TestClient::BattleProcess(std::shared_ptr<MyClientSocket> target_socket)
 		switch(header)
 		{
 			case ANS_HEARTBEAT:		//연결 확인
+				client->Send(ByteQueue::Create<byte>(ANS_HEARTBEAT));
 				break;
 			case GAME_PLAYER_INFO_NAME:
 				GetDelay(now_state, 15.0);	//Dis_Time

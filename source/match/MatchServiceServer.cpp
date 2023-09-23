@@ -1,6 +1,6 @@
 #include "MatchServiceServer.hpp"
 
-MatchServiceServer::MatchServiceServer() : ReceiveCount(0)
+MatchServiceServer::MatchServiceServer() : Recent_Success(-1)
 {
 
 }
@@ -24,13 +24,24 @@ Status MatchServiceServer::SessionStream(ServerContext *context, ServerReaderWri
 	Usage msg;
 	while(stream->Read(&msg))
 	{
-		size_t usage = msg.usage();
-		//현재 stream이 저장된 데이터에 usage 저장
-		streams.InsertLKeyValue(stream_id, usage);
 		std::unique_lock lk(mtx);
-		ReceiveCount++;
+		size_t usage = msg.usage();
+		Recent_Success = usage;
+		bool connectivity = stream->Read(&msg);
+
+		if(connectivity)
+		{
+			usage = msg.usage();
+			//현재 stream이 저장된 데이터에 usage 저장
+			streams.InsertLKeyValue(stream_id, usage);
+		}
+		else
+			Recent_Success = 0;
 		lk.unlock();
 		cv.notify_all();
+
+		if(!connectivity)
+			break;
 	}
 
 	//저장된 현재 stream 제거
@@ -42,23 +53,31 @@ Seed_t MatchServiceServer::TransferMatch(const Account_ID_t& lpid, const Account
 {
 	//저장된 stream 찾아서 stream->Write(send)
 	auto vec = streams.GetAll();
-	auto result = std::min_element(vec.begin(), vec.end(), [](auto lhs, auto rhs){ return (std::get<2>(lhs) < std::get<2>(rhs)); });
-	if(result == vec.end())
-		return -1;
-		
+
+	//Transfer information
 	MatchTransfer send;
 	send.mutable_lpid()->set_id(lpid);
 	send.mutable_rpid()->set_id(rpid);
 
-	if(!std::get<1>(*result)->Write(send))
-		return -1;
+	auto result = std::min_element(vec.begin(), vec.end(), [](auto lhs, auto rhs){ return (std::get<2>(lhs) < std::get<2>(rhs)); });
+	while(result != vec.end())
+	{
+		Recent_Success = -1;
+		if(std::get<1>(*result)->Write(send))	//Transfer Success
+		{
+			std::unique_lock lk(mtx);
+			bool received = cv.wait_for(lk, std::chrono::milliseconds(RESPONSE_TIME), [this](){ return Recent_Success > 0; });	//Wait for Usage Response.
+			lk.unlock();
 
-	std::unique_lock lk(mtx);
-	cv.wait_for(lk, std::chrono::milliseconds(RESPONSE_TIME), [this](){ return ReceiveCount > 0; });
-	ReceiveCount = 0;
-	lk.unlock();
+			if(Recent_Success >= 1)			//Response Success
+				return std::get<0>(*result);
+		}
 
-	return std::get<0>(*result);
+		vec.erase(result);
+		result = std::min_element(vec.begin(), vec.end(), [](auto lhs, auto rhs){ return (std::get<2>(lhs) < std::get<2>(rhs)); });
+	}
+
+	return -1;
 }
 
 std::vector<Seed_t> MatchServiceServer::GetStreams()

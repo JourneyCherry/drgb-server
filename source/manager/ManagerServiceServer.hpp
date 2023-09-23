@@ -16,6 +16,10 @@ using ServerService::ConnectionUsage;
 using google::protobuf::Empty;
 using ServerService::MgrToServer;
 
+/**
+ * @brief gRPC Service Server for Manager
+ * 
+ */
 class ManagerServiceServer : public MgrToServer::Service
 {
 	private:
@@ -33,6 +37,11 @@ class ManagerServiceServer : public MgrToServer::Service
 		Status GetClientUsage(ServerContext*, const Empty*, Usage*) override;
 		Status GetConnectUsage(ServerContext*, const Empty*, ConnectionUsage*) override;
 	public:
+		/**
+		 * @brief Constructor of Manager Service.
+		 * @param functions for each requests.
+		 * 
+		 */
 		ManagerServiceServer(const GetUsage_t&, const CheckAccount_t&, const GetClientUsage_t&, const GetConnectUsage_t&);
 		~ManagerServiceServer() = default;
 };

@@ -39,7 +39,7 @@ int MyGame::GetWinner() const
 		if(players[i].health > 0)
 		{
 			if(winner >= 0)
-				return -1;	//1명 초과 생존의 경우, 무승부 처리.
+				return -1;	//1명 초과 생존의 경우, 무승부 처리.(게임이 아직 완료되지 않음)
 			winner = i;
 		}
 	}

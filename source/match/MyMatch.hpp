@@ -9,11 +9,21 @@
 using mylib::utils::DeMap;
 using mylib::utils::Expected;
 
+/**
+ * @brief Match Server.
+ * **Spec**
+ * 	- Socket Type : Websocket
+ *  - Process
+ *   - Receive Cookie and Check it with 'Redis'. If found, Send Player Information, or Reject Connection
+ *   - Receive Match Participation or not.
+ *   - Wait for Match Making. If found, Transfer match and player to Battle Server.(Least Connection Load-balancing)
+ * 
+ */
 class MyMatch : public MyServer
 {
 	private:
-		static const std::string self_keyword;
-		std::chrono::milliseconds rematch_delay;
+		static const std::string self_keyword;	//keyword for 'MatchService' of gRPC
+		std::chrono::milliseconds rematch_delay;	//Matching delay.(millisecond)
 		DeMap<Account_ID_t, Hash_t, std::weak_ptr<MyClientSocket>> sessions;	//Local Server Session
 
 		MatchServiceServer MatchService;
@@ -23,8 +33,16 @@ class MyMatch : public MyServer
 		std::condition_variable matchmaker_cv;
 
 	public:
-		MyMatch();	//TODO : Join에서 t_matchmaker가 exception으로 죽으면 다시 올려야 한다.
+		/**
+		 * @brief Constructor of Match Server. Automatically register 'MatchService'.
+		 * 
+		 */
+		MyMatch();
 		~MyMatch();
+		/**
+		 * @brief Open and Start Match Server. automatically start 'MatchMake()'.
+		 * 
+		 */
 		void Open() override;
 		void Close() override;
 
@@ -32,8 +50,20 @@ class MyMatch : public MyServer
 		void AcceptProcess(std::shared_ptr<MyClientSocket>, ErrorCode) override;
 		void AuthenticateProcess(std::shared_ptr<MyClientSocket>, ByteQueue, ErrorCode);
 		void ClientProcess(std::shared_ptr<MyClientSocket>, Account_ID_t);
-		void SessionProcess(std::shared_ptr<MyClientSocket>, Account_ID_t, Hash_t);
+		/**
+		 * @brief Session Process for HeartBeat and Redis.
+		 * 
+		 * @param target_client client socket
+		 * @param account_id account's id
+		 * @param cookie client's cookie value
+		 * 
+		 */
+		void SessionProcess(std::shared_ptr<MyClientSocket> target_client, Account_ID_t account_id, Hash_t cookie);
 
+		/**
+		 * @brief Match Making method. It runs on 't_matchmaker' thread and sleeps until there are two players or more waiting. After awake, make match at 'rematch_delay' time intervals.
+		 * 
+		 */
 		void MatchMake();
 
 	protected:
