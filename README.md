@@ -11,7 +11,7 @@ drgb server program
 	**Required Libraries for Build**
 	|Library name|Minimum Version|
 	|-|-|
-	|cmake|3.18|
+	|cmake|3.19|
 	|make|4.3-4.1|
 	|g++|4:10.2.1-1|
 	|libssl-dev|3.0.2|

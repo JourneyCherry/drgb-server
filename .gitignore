@@ -89,8 +89,6 @@ source/[Rr]esources/*.crt
 source/[Rr]esources/*.csr
 source/[Rr]esources/*.key
 source/[Pp]ackage/_CPack_Packages
-docker/[Dd]ata/
-docker/[Cc]lient[Bb]uild/
 [Ll]ibraries/*/[Bb]uild/
 *.pb.*
 *.deb
